@@ -950,6 +950,10 @@ html:not(.widget) button:focus-visible, html:not(.widget) input:focus-visible { 
 .text-action,.ghost-btn,.workspace-button { display:inline-flex;align-items:center;justify-content:center;flex:none;gap:6px;box-sizing:border-box;white-space:nowrap;text-decoration:none;line-height:18px; }
 .text-action { padding:4px 0;border:0;border-radius:3px;background:transparent;color:var(--muted);font-size:inherit;line-height:inherit;font-weight:400; }
 .text-action:hover:not(:disabled) { color:var(--ink); }
+/* Ole: small actions that must read as clickable (#146) */
+.ole-link { display:inline-flex;align-items:center;padding:2px 0;border:0;background:transparent;color:var(--accent);font-weight:500;cursor:pointer;text-underline-offset:2px; }
+.ole-link:hover:not(:disabled),.ole-link:focus-visible { text-decoration:underline; }
+.ole-link:focus-visible { outline:2px solid var(--focus);outline-offset:2px; }
 .ghost-btn,.workspace-button { height:30px;padding:0 11px;border:1px solid transparent;border-radius:6px;font-size:12px; }
 .ghost-btn { background:transparent;color:var(--muted);font-weight:400; }
 .workspace-button { border-color:var(--line);background:var(--float);color:var(--ink);font-weight:500;box-shadow:inset 0 1px 0 #FFFFFF0D,0 1px 2px #0000000A; }
