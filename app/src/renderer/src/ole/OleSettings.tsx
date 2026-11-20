@@ -158,14 +158,16 @@ function WarmupInstructions({ value, disabled, onSave }: { value: string; disabl
   return (
     <div className="settings-group">
       <div className="settings-row">
-        <div className="settings-row-copy">
-          <p className="settings-description">Sent to the model each time Ole prepares for a call.</p>
-          <p data-testid="ole-warmup-count" className="settings-description">{draft.length} / {MAX_WARMUP}</p>
+        <div className="settings-row-copy" style={{ flex: 1, minWidth: 0 }}>
+          <p className="settings-description">Sent to the model each time Ole prepares for a call. An MCP server's own prepare_for_meeting instructions come first; yours refine them.</p>
+          {/* not .settings-name-field: that is a one-line field with a fixed width and height */}
+          <textarea id="ole-warmup" data-testid="ole-warmup" aria-label="Warm-up instructions" rows={8} maxLength={MAX_WARMUP}
+            placeholder={WARMUP_PLACEHOLDER} value={draft} disabled={disabled} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+            style={{ display: 'block', width: '100%', minHeight: 150, marginTop: 10, padding: '8px 10px', boxSizing: 'border-box', resize: 'vertical',
+              border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg)', color: 'var(--ink)', fontSize: 13, lineHeight: '19px', fontFamily: 'inherit' }} />
+          <p data-testid="ole-warmup-count" className="settings-description" style={{ textAlign: 'right' }}>{draft.length} / {MAX_WARMUP}</p>
         </div>
       </div>
-      <textarea id="ole-warmup" data-testid="ole-warmup" aria-label="Warm-up instructions" rows={8} maxLength={MAX_WARMUP}
-        placeholder={WARMUP_PLACEHOLDER} value={draft} disabled={disabled} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
-        className="settings-name-field w-full" />
     </div>
   )
 }
