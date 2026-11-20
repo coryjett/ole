@@ -3,7 +3,7 @@
 import type { OleTool, PreparedContext } from './types'
 import type { ChatMessage, ToolCall } from './bullets'
 import { MEETING_CONTEXT_TOOL, MORE_TOOLS, MORE_TOOLS_DEF, narrowForPrepare, toOpenAiTools, type WarmupPrompt } from './tools'
-import { knownOrganisations, recordNames } from './anonymise'
+import { knownOrganisations, rankOrgs, recordNames } from './anonymise'
 import { hasMatchedRecord } from './bullets'
 import { createMeetingSource, cleanNote, failureKind as failureKindOf, noteLine, type MeetingContext, type MeetingSource } from './meetingSource'
 
@@ -107,9 +107,12 @@ export async function prepareContext(opts: {
     log(`ole prepare: ${total} tool calls${list ? ` (${list})` : ''}${nudged ? ', searched again once' : ''}${fastPath ? ', fast path' : ''}${matchedOn ? `, matched on ${matchedOn}` : ''}`)
     const briefing = cap(text.trim())
     // sources name only the matched record (#109): the organisations the tools named, and which of them it is
-    const orgs = knownOrganisations(toolResults()).slice(0, ORGS_KEPT)
-    const records = hasMatchedRecord({ meetingTitle, focus, text: briefing, preparedAt: now }) ? recordNames({ fastResult, briefing, known: orgs }) : []
-    return { meetingTitle, focus, text: briefing, preparedAt: now, ...(note ? { note } : {}), ...(orgs.length ? { orgs } : {}), ...(records.length ? { records } : {}) }
+    // more than are kept: the ones the briefing names first, and the call fails closed on the rest (#116)
+    const found = knownOrganisations(toolResults())
+    const orgsTruncated = found.length > ORGS_KEPT
+    const orgs = orgsTruncated ? rankOrgs(found, briefing, ORGS_KEPT) : found
+    const records = hasMatchedRecord({ meetingTitle, focus, text: briefing, preparedAt: now }) ? recordNames({ fastResult, briefing, known: orgs, meetingTitle, focus }) : []
+    return { meetingTitle, focus, text: briefing, preparedAt: now, ...(note ? { note } : {}), ...(orgs.length ? { orgs } : {}), ...(orgsTruncated ? { orgsTruncated } : {}), ...(records.length ? { records } : {}) }
   }
 
   if (!opts.tools.length) return done(NO_TOOLS_TEXT)
