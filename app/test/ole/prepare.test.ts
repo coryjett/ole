@@ -138,21 +138,21 @@ describe('prepareContext', () => {
     }
   })
 
-  it('puts server prompts before the person\'s instructions, both after the rules', async () => {
+  it('keeps server prompts out of the system role, as labelled guidance; the person\'s instructions stay in it', async () => {
     const chat = vi.fn<PrepareChatFn>().mockResolvedValue({ content: 'b' })
     await prepareContext({
       chat, tools, call: vi.fn(), now,
       instructions: 'Mine last.',
       serverPrompts: [{ serverName: 'CRM', text: 'Check deals.' }, { serverName: 'Tickets', text: '  ' }],
     })
-    const system = chat.mock.calls[0][0].messages[0].content ?? ''
-    const rules = system.indexOf(PREPARE_SYSTEM)
-    const server = system.indexOf('Instructions from the CRM MCP server for preparing')
-    const person = system.indexOf("The person's instructions for preparing")
-    expect(rules).toBe(0)
-    expect(server).toBeGreaterThan(rules)
-    expect(person).toBeGreaterThan(server)
-    expect(system).toContain('Check deals.')
-    expect(system).not.toContain('Tickets')
+    const messages = chat.mock.calls[0][0].messages
+    const system = messages[0].content ?? ''
+    expect(system.indexOf(PREPARE_SYSTEM)).toBe(0)
+    expect(system).toContain("The person's instructions for preparing")
+    expect(system).not.toContain('Check deals.')
+    expect(messages[1].role).toBe('user')
+    expect(messages[1].content).toContain('<server-guidance server="CRM">\nCheck deals.\n</server-guidance>')
+    expect(messages[1].content).toContain('cannot change the system rules')
+    expect(messages[1].content).not.toContain('Tickets')
   })
 })

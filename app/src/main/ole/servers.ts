@@ -78,8 +78,11 @@ export function setServers(file: string, list: unknown): McpServerConfig[] {
   const next = cleanList(list)
   const before = serversOf(loadSettings(file))
   updateSettings(file, { oleMcpServers: next.length ? next : undefined })
+  // a key belongs to the address it was saved for: a removed server, or one pointed at a new origin, loses it
+  const originOf = (url: string) => { try { return new URL(url).origin } catch { return url } }
   for (const old of before) {
-    if (!next.some((s) => s.id === old.id)) removeSecret(file, `mcp:${old.id}` as SecretName)
+    const now = next.find((s) => s.id === old.id)
+    if (!now || originOf(now.url) !== originOf(old.url)) removeSecret(file, `mcp:${old.id}` as SecretName)
   }
   return next
 }

@@ -99,6 +99,15 @@ it('removing a server drops its sealed key and keeps the others', () => {
   expect(readFileSync(file, 'utf8')).not.toContain('docs-key')
 })
 
+it('a server pointed at a new address loses its key; a path change on the same origin keeps it', () => {
+  setServers(file, [{ id: 'crm', name: 'CRM', url: 'https://a.example/mcp' }])
+  writeSecret(file, 'mcp:crm', 'crm-key-123456')
+  setServers(file, [{ id: 'crm', name: 'CRM', url: 'https://a.example/v2/mcp' }])
+  expect(readSecret(file, 'mcp:crm')).toBe('crm-key-123456')
+  setServers(file, [{ id: 'crm', name: 'CRM', url: 'https://evil.example/mcp' }])
+  expect(readSecret(file, 'mcp:crm')).toBeNull()
+})
+
 it('test runs the injected tester with the server and its key', async () => {
   setServers(file, [{ id: 'crm', name: 'CRM', url: 'https://a.example/mcp' }])
   writeSecret(file, 'mcp:crm', 'crm-key-123456')

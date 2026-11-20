@@ -15,6 +15,11 @@ const CALL_TIMEOUT_MS = 20_000
 
 const READ_PREFIXES = ['get_', 'list_', 'search_', 'find_', 'read_', 'query_', 'fetch_', 'lookup_', 'describe_']
 const READ_WORDS = new Set(['get', 'list', 'search'])
+/** a name with any of these words is never read-only by its name alone (get_and_delete_x, list_then_send) */
+const WRITE_WORDS = /(^|[_-])(create|update|delete|remove|add|set|send|share|write|reset|post|put|patch|close|reopen|complete|link|unlink|resolve|upload|move|archive|approve|assign|cancel|invite|merge|publish|submit|sync|run|execute|trigger)([_-]|$)/
+/** a tool's input schema larger than this (as JSON) or nested deeper is dropped with its tool */
+export const SCHEMA_MAX_CHARS = 8000
+export const SCHEMA_MAX_DEPTH = 8
 
 /** FNV-1a, 32 bit, as 8 hex chars: a short stable suffix */
 function hash(s: string): string {
@@ -37,10 +42,23 @@ export function toolName(serverId: string, tool: string): string {
 }
 
 /** a tool the model may call without asking: the server says read-only, or it is named like a read and not marked destructive */
+const depthOf = (v: unknown, d = 0): number =>
+  d > SCHEMA_MAX_DEPTH ? d : v && typeof v === 'object' ? Math.max(d, ...Object.values(v as object).map(x => depthOf(x, d + 1))) : d
+
+/** a schema small and shallow enough to hand the model; anything else drops the tool */
+export function boundedSchema(schema: unknown): Record<string, unknown> | null {
+  if (!isObject(schema)) return { type: 'object', properties: {} }
+  let json: string
+  try { json = JSON.stringify(schema) } catch { return null }
+  if (json.length > SCHEMA_MAX_CHARS || depthOf(schema) > SCHEMA_MAX_DEPTH) return null
+  return schema
+}
+
 export function isReadOnly(tool: Pick<McpTool, 'name' | 'annotations'>): boolean {
   if (tool.annotations?.readOnlyHint === true) return true
   if (tool.annotations?.destructiveHint === true) return false
   const name = tool.name.toLowerCase()
+  if (WRITE_WORDS.test(name)) return false
   return READ_WORDS.has(name) || READ_PREFIXES.some(p => name.startsWith(p))
 }
 
@@ -61,6 +79,8 @@ export async function collectTools(servers: ToolServer[]): Promise<OleTool[]> {
       if (taken.has(name)) name = `${name.slice(0, NAME_CAP - 9)}_${hash(`${s.config.id}\0${t.name}`)}`
       if (taken.has(name)) continue
       taken.add(name)
+      const parameters = boundedSchema(t.inputSchema)
+      if (!parameters) continue
       const description = `[${s.config.name}] ${t.description?.trim() ?? ''}`.trim().slice(0, DESCRIPTION_CAP)
       out.push({
         name,
@@ -68,7 +88,7 @@ export async function collectTools(servers: ToolServer[]): Promise<OleTool[]> {
         serverName: s.config.name,
         tool: t.name,
         description,
-        parameters: isObject(t.inputSchema) ? t.inputSchema : { type: 'object', properties: {} },
+        parameters,
       })
     }
   })
