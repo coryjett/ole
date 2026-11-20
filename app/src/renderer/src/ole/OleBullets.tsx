@@ -11,10 +11,17 @@ export const BULLETS_OPEN = 4
 export const NEW_MS = 8000
 
 /** the source, as a link when Ole has a verified one (#42); links open in the browser */
+/** a label built from an address is cut to this many characters (#107) */
+const LABEL_MAX = 80
+/** no Unicode control or format characters (bidi overrides, zero-width characters), at most LABEL_MAX (#107) */
+const cleanLabel = (s: string) => {
+  const chars = [...s.replace(/[\p{Cc}\p{Cf}]/gu, '').trim()]
+  return chars.length > LABEL_MAX ? `${chars.slice(0, LABEL_MAX - 1).join('').trimEnd()}…` : chars.join('')
+}
 /** a saved source that is a bare web address reads as "site › page" (#102) */
 const shortSource = (source: string) => {
   if (!/^https?:\/\/\S+$/i.test(source.trim())) return source
-  try { const u = new URL(source.trim()); const last = u.pathname.split('/').filter(Boolean).at(-1); return last ? `${u.host} › ${decodeURIComponent(last).replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[-_]+/g, ' ')}` : u.host } catch { return source }
+  try { const u = new URL(source.trim()); const last = u.pathname.split('/').filter(Boolean).at(-1); return cleanLabel(last ? `${u.host} › ${decodeURIComponent(last).replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[-_]+/g, ' ')}` : u.host) } catch { return cleanLabel(source.trim().slice(0, 60)) }
 }
 
 export function SourceName({ b }: { b: Pick<OleBullet, 'source' | 'url'> }) {

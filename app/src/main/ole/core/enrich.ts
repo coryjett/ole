@@ -6,6 +6,7 @@ import type { OleTool, PreparedContext } from './types'
 import { isLiveTool, toOpenAiTools } from './tools'
 import { callKey, EXCERPT_MATCH, isRecordTool, knownWords, MENTIONED_HEADING, nameTerms, onlyHeadings, overlap, readableSource, type CallToolFn, type ChatFn, type ChatMessage, type TranscriptLine } from './bullets'
 import { classifyFailure } from './replayFormat'
+import { keepLink, receivedUrls } from './links'
 
 /** names looked up per call */
 export const ENRICH_MAX_TERMS = 6
@@ -84,6 +85,7 @@ export function parseFacts(content: string | null, material: string): Array<{ te
   const list = (parsed as { facts?: unknown })?.facts
   if (!Array.isArray(list)) return []
   const out: Array<{ text: string; source: string; url?: string }> = []
+  const received = receivedUrls(material)
   for (const item of list) {
     const o = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
     const text = typeof o.text === 'string' ? o.text.trim() : ''
@@ -91,7 +93,9 @@ export function parseFacts(content: string | null, material: string): Array<{ te
     const quote = typeof o.quote === 'string' ? o.quote.trim() : ''
     // sourced: a real record name, and an excerpt Ole can find in the lookups' results (#37, #39)
     if (!text || !source || onlyHeadings(source, new Set()) || !quote || overlap(quote, material) < EXCERPT_MATCH) continue
-    const url = typeof o.url === 'string' && /^https:\/\/[^\s"<>()[\]]{3,500}$/.test(o.url.trim()) && material.includes(o.url.trim()) ? o.url.trim() : undefined
+    // a link is kept only if Ole received that exact address (#42, #107)
+    const given = typeof o.url === 'string' ? o.url.trim() : undefined
+    const url = keepLink(given, received) ? given : undefined
     out.push({ text, source, ...(url ? { url } : {}) })
     if (out.length === FACTS_MAX) break
   }
