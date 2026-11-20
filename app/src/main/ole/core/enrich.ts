@@ -4,9 +4,10 @@
 // the rest of the call. Never blocks a bullets turn: one lookup at a time, started only while no turn is running.
 import type { OleTool, PreparedContext } from './types'
 import { isLiveTool, toOpenAiTools } from './tools'
-import { callKey, EXCERPT_MATCH, isRecordTool, knownWords, MENTIONED_HEADING, nameTerms, onlyHeadings, overlap, readableSource, type CallToolFn, type ChatFn, type ChatMessage, type TranscriptLine } from './bullets'
+import { anonymityFor, callKey, EXCERPT_MATCH, isRecordTool, knownWords, MENTIONED_HEADING, nameTerms, onlyHeadings, overlap, readableSource, type CallToolFn, type ChatFn, type ChatMessage, type TranscriptLine } from './bullets'
 import { classifyFailure } from './replayFormat'
 import { keepLink, receivedUrls } from './links'
+import { anonymiseSourceLink } from './anonymise'
 
 /** names looked up per call */
 export const ENRICH_MAX_TERMS = 6
@@ -27,6 +28,7 @@ export const ENRICH_SYSTEM = [
   "Never put an organisation's or person's name in a search of public documentation.",
   'Reply with JSON only: {"facts":[{"text":"...","source":"...","quote":"...","url":"..."}]}.',
   `At most ${FACTS_MAX} facts, each one short line about this name, the fact first. "source": the record it came from, named the way the tool result names it. "quote": a short excerpt copied exactly from that tool result (under 25 words). "url": its web address exactly as the tool result gives it; leave it out when there is none.`,
+  'Sources follow the same anonymity rule as the bullet text: a "source" may name the organisation being looked up or one that is part of this meeting; any other organisation is described by kind and size, for example "call records: a large financial services company".',
   'Only facts the tool results state about this name. If the tools find nothing about it, or it is a product, a place or a common word rather than an organisation, person or project, reply {"facts":[]}. Never invent facts.',
 ].join('\n')
 
@@ -102,6 +104,37 @@ export function parseFacts(content: string | null, material: string): Array<{ te
   return out
 }
 
+/** words that, straight after a term, say it is a product or a feature: "Northwind gateway", "Contoso API" */
+const PRODUCT_WORD = String.raw`(?:apis?|sdks?|cli|plugins?|plug-ins?|clusters?|gateways?|servers?|operators?|integrations?|dashboards?|features?|modules?|services?|versions?|releases?|apps?|platforms?|connectors?|extensions?|librar(?:y|ies)|agents?|controllers?|proxy|proxies|instances?|licen[cs]es?|editions?|consoles?|pipelines?|deployments?|charts?|workflows?|configs?|configuration|endpoints?|upgrades?|nodes?|databases?|db|engine|runtime|framework|toolkit|add-?ons?|widgets?|modes?)`
+/** words that, straight before a term, say it is something used, not someone: "running Northwind", "upgraded to Contoso" */
+const PRODUCT_VERB = String.raw`(?:use|uses|using|used|run|runs|running|ran|deploy|deploys|deploying|deployed|install|installs|installing|installed|upgrade|upgrades|upgrading|upgraded|enable|enables|enabling|enabled|configure|configures|configuring|configured|migrate|migrating|migrated|integrate|integrating|integrated)(?:\s+(?:to|from|on|with|into))?(?:\s+(?:the|our|their|your|a|an))?`
+/** common products and tools a call names, lower case; never looked up as organisations */
+export const KNOWN_PRODUCTS = new Set(('kubernetes docker terraform ansible kafka postgres postgresql mysql redis mongodb elasticsearch linux windows macos ubuntu '
+  + 'jenkins grafana prometheus envoy nginx python java javascript typescript golang rust node react excel powerpoint jira confluence github gitlab '
+  + 'slack zoom teams okta vault consul helm argo openshift lambda bedrock copilot chatgpt').split(' '))
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Whether a name the call said is a product or feature rather than an organisation, person or project (#109): a known
+ * product; said straight before a product word ("Northwind gateway") or after a usage verb ("running Northwind"), in
+ * the line or in what Ole has read; or written in lower case or CamelCase in most of the places Ole's material
+ * (briefing, lookups) has it. Pure string work.
+ */
+export function productTerm(term: string, o: { said?: string; material?: string } = {}): boolean {
+  const t = term.trim()
+  if (!t) return false
+  if (KNOWN_PRODUCTS.has(t.toLowerCase())) return true
+  const name = t.split(/\s+/).map(escapeRe).join('\\s+')
+  const text = `${o.said ?? ''}\n${o.material ?? ''}`
+  if (new RegExp(`(?<![\\p{L}\\p{N}])${name}\\s+${PRODUCT_WORD}(?![\\p{L}\\p{N}])`, 'iu').test(text)) return true
+  if (new RegExp(`(?<![\\p{L}\\p{N}])${PRODUCT_VERB}\\s+${name}(?![\\p{L}\\p{N}])`, 'iu').test(text)) return true
+  const seen = [...(o.material ?? '').matchAll(new RegExp(`(?<![\\p{L}\\p{N}])${name}(?![\\p{L}\\p{N}])`, 'giu'))].map(m => m[0])
+  if (!seen.length) return false
+  const productish = seen.filter(w => w === w.toLowerCase() || /\p{Ll}\p{Lu}/u.test(w)).length
+  return productish * 2 > seen.length
+}
+
 export type Enricher = {
   /** a line of the call; own: the user's track */
   push(line: TranscriptLine, own?: boolean): void
@@ -116,6 +149,8 @@ export function createEnricher(o: {
   tools: () => OleTool[]
   callTool: CallToolFn
   context: () => PreparedContext | null
+  /** what Ole has read during the call besides the briefing (the bullets' lookups), for telling products apart (#109) */
+  material?: () => string
   /** adds a section to the briefing */
   onSection: (markdown: string) => void
   /** a bullets turn or a briefing is running: the next lookup waits for it */
@@ -138,6 +173,7 @@ export function createEnricher(o: {
   let stopped = false, running = false, lastStart = -Infinity
   let timer: unknown = null
 
+  const materialNow = () => { const c = o.context(); return `${c?.text ?? ''}\n${o.material?.() ?? ''}` }
   /** the briefing (with the meeting title and focus) already names every word of it */
   const covered = (term: string) => {
     const c = o.context()
@@ -160,6 +196,8 @@ export function createEnricher(o: {
     try {
       // the briefing may have been prepared, or another section added, since the name was heard
       if (covered(item.term)) return
+      // a product or feature, now that Ole may have read more about it (#109)
+      if (productTerm(item.term, { said: item.said, material: materialNow() })) { log(`ole enrich: name of ${item.term.length} chars, a product, not looked up`); return }
       const offered = enrichTools(o.tools())
       if (!offered.length) { log(`ole enrich: name of ${item.term.length} chars, no tools to look it up`); return }
       const allowed = new Set(offered.map(t => t.name))
@@ -193,7 +231,10 @@ export function createEnricher(o: {
       if (stopped) return
       // facts come only from what the servers returned: no useful lookup, no section
       const material = messages.filter(m => m.role === 'tool' && !EMPTY_RESULT.test((m.content ?? '').trim())).map(m => m.content ?? '').join('\n')
-      const section = material.trim() ? mentionedSection(item.term, parseFacts(reply.content, material)) : ''
+      // sources name no organisation but the meeting's own and the one looked up (#109)
+      const rules = anonymityFor(o.context(), [o.context()?.text ?? '', material], [item.term])
+      const facts = parseFacts(reply.content, material).map(f => ({ ...f, ...anonymiseSourceLink(f.source, f.url, rules) }))
+      const section = material.trim() ? mentionedSection(item.term, facts) : ''
       log(`ole enrich: name of ${item.term.length} chars, ${lookups} lookups, ${section ? `${section.split('\n').length - 1} facts added` : 'nothing found'}`)
       if (section && !stopped) o.onSection(section)
     } catch (e) {
@@ -214,6 +255,8 @@ export function createEnricher(o: {
       for (const term of nameTerms(line.text)) {
         const key = term.toLowerCase()
         if (taken.has(key) || covered(term)) continue
+        // products and features aren't organisations, people or projects (#109); they don't take a slot either
+        if (productTerm(term, { said: line.text, material: materialNow() })) continue
         if (taken.size >= maxTerms) break
         taken.add(key)
         queue.push({ term, said: line.text })

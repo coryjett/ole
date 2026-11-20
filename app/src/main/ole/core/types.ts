@@ -66,6 +66,10 @@ export type PreparedContext = {
   preparedAt: number;
   /** a server's one-line note on the meeting this was prepared for (#98), with the server's name */
   note?: { text: string; source?: string };
+  /** the organisations Prepare's tool results named, described when they gave an industry or size (#109) */
+  orgs?: Array<{ name: string; description?: string }>;
+  /** which of them is the meeting's own matched record (#109): the only organisation a source may name */
+  records?: string[];
 };
 
 /** what the host's UI sees of the live call companion (never a key) */

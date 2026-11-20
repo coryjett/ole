@@ -4,6 +4,7 @@ import { noteLine } from './meetingSource'
 import { toOpenAiTools } from './tools'
 import { createBulletStream } from './bulletStream'
 import { linkAndLabel, receivedUrls } from './links'
+import { anonymiseSourceLink, knownOrganisations, type KnownOrg } from './anonymise'
 
 export type TranscriptLine = { speaker: string; text: string; startMs: number }
 export type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
@@ -22,6 +23,8 @@ export type BulletsEngine = {
   recent(): TranscriptLine[]
   /** a bullets turn is running now (#86: background lookups wait for it) */
   busy(): boolean
+  /** what this call's lookups returned so far (#109: the enricher tells products from names with it) */
+  lookedUp(): string
 }
 /** what the person rated on earlier calls (#55) */
 export type BulletFeedback = { useful: string[]; notUseful: string[] }
@@ -45,6 +48,9 @@ const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+/** sources follow the bullet text's anonymity rule (#109); Ole also enforces it after the fact (anonymise.ts) */
+export const SOURCE_ANONYMITY = 'Sources follow the same rule: a "source" names an organisation only if it is part of this meeting; any other organisation is described by kind and size there too, for example "call records: a large financial services company".'
+
 export const BULLETS_SYSTEM = [
   'You help the user during a live call by surfacing short context bullets they can glance at.',
   'Reply with JSON only: {"bullets":[{"text":"...","source":"...","heard":"...","quote":"..."}]}.',
@@ -56,6 +62,7 @@ export const BULLETS_SYSTEM = [
   'Every bullet must cite the record its fact came from, the way the prepared context or the tool result names it, for example "ticket #4821", "call notes, 12 Nov", "issue #412" or "product docs". Copy the source the prepared context gives for that fact. A section heading of the prepared context (such as "Who" or "Open items"), "prepared context" and a bare tool name are never sources. With no real source, give no bullet. Never invent facts.',
   'Never repeat or rephrase an earlier bullet.',
   'Other organisations and people the tools mention stay anonymous unless they are part of this meeting: describe them by kind and size, for example "a large financial services company".',
+  SOURCE_ANONYMITY,
   'Answer from the prepared context first. You may call the provided tools for facts the prepared context lacks, such as how a similar case went elsewhere, or a product or topic with no notes. Lookups are limited, so call a tool only for a real gap.',
   "Never put an organisation's or person's name in a search of public documentation.",
   'When nothing useful applies, reply {"bullets":[]}.',
@@ -92,6 +99,17 @@ export function noRecordRule(mentioned = false): string {
 /** Prepare's output with any text posing as a mid-call section taken out of heading form, before it is stored (#86) */
 export function stripMentioned(text: string): string {
   return text.replace(/#+[ \t]*Mentioned during the call:/gi, 'Mentioned during the call:')
+}
+
+/**
+ * What a source may name during this call (#109): allowed are the matched record's name(s), the meeting title and the
+ * focus, and only when the call matched a record (plus `extra`, such as the name a mid-call section was looked up
+ * for); known are the organisations Prepare's results named and those in `material` (this turn's results).
+ */
+export function anonymityFor(context: PreparedContext | null, material: string | string[], extra: string[] = []): { allowed: string[]; known: KnownOrg[] } {
+  const matched = hasMatchedRecord(context)
+  const allowed = [...(matched ? [...(context?.records ?? []), context?.meetingTitle ?? '', context?.focus ?? ''] : []), ...extra].filter(s => s.trim())
+  return { allowed, known: [...(context?.orgs ?? []), ...knownOrganisations(material)] }
 }
 
 /** tools that fetch one organisation's or person's records (CRM-style names): left out of a call with no matching record (#57) */
@@ -512,8 +530,11 @@ export function createBulletsEngine(opts: {
         // a link is kept only if Ole received that exact address: models invent plausible URLs (#42, #107); a source
         // that is a bare web address becomes a short label taken from the link actually used (#102, #107)
         const linked = linkAndLabel(b.url, b.source, receivedUrls(sources))
-        const url = linked.url
-        const source = linked.source ?? b.source
+        // the source names no organisation but the meeting's own (#109)
+        const looked = messages.filter(m => m.role === 'tool').map(m => m.content ?? '')
+        const shown = anonymiseSourceLink(linked.source ?? b.source, linked.url, anonymityFor(opts.context(), [opts.context()?.text ?? '', ...looked]))
+        const url = shown.url
+        const source = shown.source
         fresh.push({ id: `b${++seq}`, text: b.text, source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
       }
       /** this turn's bullets on top, in the model's order; a pin or rating made meanwhile is kept */
@@ -609,5 +630,6 @@ export function createBulletsEngine(opts: {
     },
     recent: () => recentWindow(lines, windowMs),
     busy: () => running,
+    lookedUp: () => [...results.values()].join('\n'),
   }
 }
