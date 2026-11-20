@@ -29,7 +29,7 @@
 - **Prepared before you remember to.** Ole writes the briefing 5 to 15 minutes before each calendar meeting and tells you when it's ready. A call with a default title ("Meeting") is matched to the calendar event happening now, never a later one.
 - **Pin, rate and ask.** Pin a bullet and it lands in your notes and the summary. Thumbs up or down tunes what Ole surfaces on later calls. Type a question mid-call and Ole answers from the briefing, the call and your servers.
 - **Calls without a customer.** When a call has no customer account, bullets stay general: docs, known issues and anonymised patterns across customers, never one customer's records.
-- **Hidden while you share.** Ole's windows stay out of screen sharing and recordings (on by default; a few apps may still show them).
+- **Hidden while you share, if you like.** Turn it on and, while a call records, Ole's windows stay out of screen sharing (and screenshots; macOS can't tell them apart). A few apps may still show them.
 - **Any MCP server, several at once.** CRM, support, docs, internal tools: add each one in Settings. Ole only uses tools that read.
 - **Servers can teach Ole how to prepare.** A server that publishes an MCP prompt named `prepare_for_meeting` tells Ole which tools to call and how to write the briefing. Your own warm-up instructions in Settings refine it.
 - **Never caught out by a broken server.** Ole checks your MCP servers in the background and tells you (on Home and with a notification) when one can't be reached or rejects its key, before the call.

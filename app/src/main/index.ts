@@ -45,7 +45,7 @@ import { hookOle, testServer } from './ole/session'
 import type { OleAnswer } from './ole/types'
 import type { Llm } from './notes/enhance'
 import { hookOleServers } from './ole/servers'
-import { protectFromCapture } from './ole/capture'
+import { protectFromCapture, shouldProtect } from './ole/capture'
 import { loginItemOn, openedAtLogin, setLoginItem, syncLoginItem } from './loginItem'
 import { createMedia } from './media'
 import { createTray, linuxTrayHost } from './tray'
@@ -553,10 +553,14 @@ app.whenReady().then(() => {
   // Ole: keys, providers and the live call companion (ole/)
   hookOleSecrets({ file: settingsFile })
   // Ole's windows stay out of screen sharing unless turned off (#51): every window as it opens, and at once on a change
-  const protect = (on: boolean) => protectFromCapture(BrowserWindow.getAllWindows(), on)
-  hookOleProviders({ file: settingsFile, onChange: (p) => protect(p.hideWhileSharing) })
-  app.on('browser-window-created', (_e, w) => protectFromCapture([w], providersOf(loadSettings(settingsFile)).hideWhileSharing))
-  protect(providersOf(loadSettings(settingsFile)).hideWhileSharing)
+  // only while a call records (#61): a protected window can't be screenshotted either
+  const protectNow = () => shouldProtect(providersOf(loadSettings(settingsFile)).hideWhileSharing, !!activeMeeting())
+  const protect = () => protectFromCapture(BrowserWindow.getAllWindows(), protectNow())
+  hookOleProviders({ file: settingsFile, onChange: () => protect() })
+  app.on('browser-window-created', (_e, w) => protectFromCapture([w], protectNow()))
+  onMeetingStart(() => protect())
+  onMeetingStop(() => protectFromCapture(BrowserWindow.getAllWindows(), false))
+  protect()
   hookOleServers({ file: settingsFile, test: testServer })
   const oleProviders = () => providersOf(loadSettings(settingsFile))
   const ole = hookOle({

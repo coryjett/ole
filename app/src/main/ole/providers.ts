@@ -27,7 +27,7 @@ export const PROVIDER_DEFAULTS: OleProviders = {
   customModel: '',
   prepareOn: 'assistant',
   warmupInstructions: '',
-  hideWhileSharing: true,
+  hideWhileSharing: false,
   autoPrepare: true,
   autoPrepareLead: 10,
 }
@@ -81,7 +81,7 @@ export function providersOf(s: Settings): OleProviders {
 
   const prepareOn = settings.olePrepareOn === 'local' ? 'local' as const : 'assistant' as const
 
-  const hideWhileSharing = s.oleHideWhileSharing !== false
+  const hideWhileSharing = s.oleHideWhileSharing === true
   const autoPrepare = s.oleAutoPrepare !== false
   const autoPrepareLead = (AUTO_PREPARE_LEADS as readonly number[]).includes(s.oleAutoPrepareLead ?? -1) ? s.oleAutoPrepareLead! : PROVIDER_DEFAULTS.autoPrepareLead
 

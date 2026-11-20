@@ -232,7 +232,7 @@ export function CallRows({ hideWhileSharing, autoPrepare, autoPrepareLead, disab
 }) {
   return <>
     <SwitchRow id="ole-hide-sharing" label="Hide Ole while sharing your screen" on={hideWhileSharing} disabled={disabled} onChange={(v) => patch({ hideWhileSharing: v })}
-      description="Ole's windows stay out of screen sharing and recordings, so the people on the call never see your briefing. Most call apps honour this; a few may still show it." />
+      description="While a call records, Ole's windows stay out of screen sharing so the people on the call never see your briefing. macOS can't tell sharing from a screenshot, so Ole can't be screenshotted during calls either. Most call apps honour this; a few may still show it." />
     <SwitchRow id="ole-auto-prepare" label="Prepare before calendar meetings" on={autoPrepare} disabled={disabled} onChange={(v) => patch({ autoPrepare: v })}
       description="Ole writes the briefing shortly before a meeting on your calendar and tells you when it's ready." />
     {autoPrepare && <ChoiceRow id="ole-auto-prepare-lead" label="When" description="How long before the meeting starts."
@@ -444,7 +444,7 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
       </div>
       <h3 className="settings-section-heading">Calls</h3>
       <div data-testid="ole-call-settings" className="settings-group">
-        <CallRows hideWhileSharing={providers?.hideWhileSharing ?? true} autoPrepare={providers?.autoPrepare ?? true} autoPrepareLead={providers?.autoPrepareLead ?? 10} disabled={off} patch={patch} />
+        <CallRows hideWhileSharing={providers?.hideWhileSharing ?? false} autoPrepare={providers?.autoPrepare ?? true} autoPrepareLead={providers?.autoPrepareLead ?? 10} disabled={off} patch={patch} />
       </div>
       <h3 className="settings-section-heading">MCP servers</h3>
       <OleServers api={api} initialServers={initialServers} initialStatus={initialStatus}
