@@ -1,4 +1,4 @@
-// Ole: which engine transcribes and which writes notes and answers (Local or OpenAI), with the OpenAI model names.
+// Ole: which engine transcribes and which writes notes and answers (Local or OpenAI), with the OpenAI model names and the warm-up instructions.
 import { ipcMain } from 'electron'
 import { loadSettings, updateSettings, type Settings } from '../settings'
 import type { OleProviders, ProviderChoice } from './types'
@@ -8,7 +8,7 @@ type OleProviderSettings = Settings & {
   oleAssistant?: string
   oleTranscribeModel?: string
   oleChatModel?: string
-  oleMcpUrl?: string
+  oleWarmupInstructions?: string
 }
 
 export const PROVIDER_DEFAULTS: OleProviders = {
@@ -16,16 +16,15 @@ export const PROVIDER_DEFAULTS: OleProviders = {
   assistant: 'local',
   openaiTranscribeModel: 'gpt-4o-mini-transcribe',
   openaiChatModel: 'gpt-5.6-luna',
-  mcpUrl: ''
+  warmupInstructions: ''
 }
+
+export const MAX_WARMUP_INSTRUCTIONS = 8000
+
+/** trimmed, cut to 8000 characters; anything not a string is '' */
+const warmupOf = (v: unknown): string => (typeof v === 'string' ? v.trim().slice(0, MAX_WARMUP_INSTRUCTIONS).trim() : '')
 
 export const isProviderChoice = (v: unknown): v is ProviderChoice => v === 'local' || v === 'openai'
-
-/** an https URL with no spaces or credentials, at most 300 characters */
-export function isValidMcpUrl(v: string): boolean {
-  if (v.length > 300 || /\s/.test(v)) return false
-  try { const u = new URL(v); return u.protocol === 'https:' && !u.username && !u.password } catch { return false }
-}
 
 function isValidModelName(v: string): boolean {
   if (v.length === 0 || v.length > 100) return false
@@ -47,10 +46,9 @@ export function providersOf(s: Settings): OleProviders {
     openaiChatModel = PROVIDER_DEFAULTS.openaiChatModel
   }
 
-  const url = (settings.oleMcpUrl ?? '').trim()
-  const mcpUrl = isValidMcpUrl(url) ? url : PROVIDER_DEFAULTS.mcpUrl
+  const warmupInstructions = warmupOf(settings.oleWarmupInstructions)
 
-  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, mcpUrl }
+  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, warmupInstructions }
 }
 
 export function setProviders(file: string, patch: unknown): OleProviders {
@@ -78,9 +76,9 @@ export function setProviders(file: string, patch: unknown): OleProviders {
     }
   }
 
-  if ('mcpUrl' in p && typeof p.mcpUrl === 'string') {
-    const url = p.mcpUrl.trim()
-    if (url === '' || isValidMcpUrl(url)) settingsPatch.oleMcpUrl = url
+  if ('warmupInstructions' in p && typeof p.warmupInstructions === 'string') {
+    const text = warmupOf(p.warmupInstructions)
+    settingsPatch.oleWarmupInstructions = text === '' ? undefined : text
   }
 
   return providersOf(updateSettings(file, settingsPatch as Partial<Settings>))

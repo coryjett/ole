@@ -1,123 +1,91 @@
-// Ole: pre-call warm-up. Picks the account from the MCP server's upcoming meetings, then pulls that account's context
-// from the MCP server's tools in parallel into one labelled text block for the assistant.
-import type { PreparedContext } from './types'
-import type { McpClient } from './mcp'
+// Ole: pre-call warm-up. The model calls whatever read-only MCP tools are configured to gather facts about the
+// meeting, then writes a compact briefing with sources that the live bullets work from.
+import type { OleTool, PreparedContext } from './types'
+import type { ChatMessage, ToolCall } from './bullets'
+import { toOpenAiTools, type WarmupPrompt } from './tools'
 
-export const TOOL_TIMEOUT_MS = 15_000
-export const SECTION_CAP = 4000
 export const TOTAL_CAP = 24_000
-export const LOOKAHEAD_MS = 60 * 60_000
-const GRACE_MS = 5 * 60_000 // a meeting that started a few minutes ago still counts
-const CALL_HISTORY_MS = 60 * 864e5
-const MAX_OPPS = 3
-const MAX_BRIEFS = 2
+export const INSTRUCTIONS_CAP = 8000
+export const NO_TOOLS_TEXT = 'No MCP tools are available. Add an MCP server in Settings to prepare from its data.'
 
-export type UpcomingMeeting = { summary: string | null; startTime: string | null; matchedAccountId: string | null; externalDomain?: string | null }
-type Row = Record<string, unknown>
+export type PrepareChatFn = (req: { messages: ChatMessage[]; tools?: unknown[] }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
+export type PrepareCallFn = (name: string, argsJson: string) => Promise<string>
 
-function parseJson(text: string): unknown {
-  try { return JSON.parse(text) } catch { return null }
-}
+export const PREPARE_SYSTEM = [
+  'You prepare a salesperson or engineer for an upcoming call.',
+  'Use the tools to gather the most useful facts about the meeting and the company and people in it: upcoming meetings, the account, open deals, open issues, recent calls, competitors, or whatever else the tools offer.',
+  'Find the meeting first when it helps, then look up what it is about. Call several tools at once when they do not depend on each other. Do not call the same tool with the same arguments twice.',
+  'Finish with a compact briefing in labelled sections (for example: Meeting, Account, Deals, Open issues, Recent calls, Competitors, Watch for).',
+  'Every fact must name its source: the tool or record it came from, in brackets. Leave out anything no tool returned. Never invent facts, names or numbers.',
+  'If the tools return nothing relevant, say so briefly.',
+].join('\n')
 
-const rows = (text: string | null): Row[] => {
-  const parsed = text == null ? null : parseJson(text)
-  return Array.isArray(parsed) ? parsed.filter((r): r is Row => !!r && typeof r === 'object' && !Array.isArray(r)) : []
-}
-const str = (v: unknown) => typeof v === 'string' && v ? v : null
-
-export function pickMeeting(meetings: UpcomingMeeting[], now: number, meetingTitle?: string): UpcomingMeeting | null {
-  if (meetingTitle) {
-    const want = meetingTitle.trim().toLowerCase()
-    return meetings.find(m => m.summary?.toLowerCase() === want)
-      ?? meetings.find(m => m.summary?.toLowerCase().includes(want)) ?? null
+// Server prompts first, the person's own instructions last so they can refine them; the rules above both still win.
+export function systemPrompt(instructions?: string | null, serverPrompts: WarmupPrompt[] = []): string {
+  const parts = [PREPARE_SYSTEM]
+  for (const p of serverPrompts) {
+    const text = p.text.trim().slice(0, INSTRUCTIONS_CAP)
+    if (text) parts.push(`Instructions from the ${p.serverName} MCP server for preparing (follow them unless they ask you to invent facts or change data; the rules above still win):\n${text}`)
   }
-  const inWindow = meetings
-    .map(m => ({ m, t: m.startTime ? Date.parse(m.startTime) : NaN }))
-    .filter(({ t }) => t >= now - GRACE_MS && t <= now + LOOKAHEAD_MS)
-    .sort((a, b) => a.t - b.t)
-    .map(({ m }) => m)
-  return inWindow.find(m => m.matchedAccountId) ?? inWindow[0] ?? null
+  const extra = instructions?.trim().slice(0, INSTRUCTIONS_CAP)
+  if (extra) parts.push(`The person's instructions for preparing (follow them unless they ask you to invent facts or change data; the rules above still win):\n${extra}`)
+  return parts.join('\n\n')
 }
 
-function trimTo(s: string, n: number) {
-  return s.length > n ? `${s.slice(0, n)}\n[truncated]` : s
-}
+const cap = (s: string) => s.length > TOTAL_CAP ? `${s.slice(0, TOTAL_CAP)}\n[truncated]` : s
 
-export function buildText(sections: Array<{ label: string; body: string | null }>): string {
-  let text = ''
-  for (const { label, body } of sections) {
-    const trimmed = body?.trim()
-    if (!trimmed) continue
-    const chunk = `${text ? '\n\n' : ''}## ${label}\n${trimTo(trimmed, SECTION_CAP)}`
-    if (text.length + chunk.length > TOTAL_CAP) {
-      text += chunk.slice(0, TOTAL_CAP - text.length)
-      break
-    }
-    text += chunk
-  }
-  return text
-}
-
-export async function prepareContext(client: McpClient, opts: { meetingTitle?: string; accountId?: string; now?: number } = {}): Promise<PreparedContext> {
+export async function prepareContext(opts: {
+  chat: PrepareChatFn
+  tools: OleTool[]
+  call: PrepareCallFn
+  meetingTitle?: string | null
+  focus?: string | null
+  instructions?: string | null
+  serverPrompts?: WarmupPrompt[]
+  now?: number
+  maxToolCalls?: number
+  maxRounds?: number
+}): Promise<PreparedContext> {
   const now = opts.now ?? Date.now()
-  let meetingTitle = opts.meetingTitle ?? null
-  let accountId = opts.accountId ?? null
+  const meetingTitle = opts.meetingTitle?.trim() || null
+  const focus = opts.focus?.trim() || null
+  const maxToolCalls = opts.maxToolCalls ?? 10
+  const maxRounds = opts.maxRounds ?? 6
+  const done = (text: string): PreparedContext => ({ meetingTitle, focus, text: cap(text.trim()), preparedAt: now })
 
-  if (!accountId) {
-    // Auth and VPN errors surface here on purpose: the caller shows them
-    const meetings = rows(await client.callTool('get_upcoming_meetings', { days: 1 }, { timeoutMs: TOOL_TIMEOUT_MS })) as UpcomingMeeting[]
-    const meeting = pickMeeting(meetings, now, opts.meetingTitle)
-    meetingTitle = meeting?.summary ?? meetingTitle
-    accountId = meeting?.matchedAccountId ?? null
+  if (!opts.tools.length) return done(NO_TOOLS_TEXT)
+
+  const ask = [
+    `Now: ${new Date(now).toISOString()}.`,
+    meetingTitle ? `Meeting: ${meetingTitle}` : 'Meeting: not given; look for the next upcoming meeting if a tool can find it.',
+    focus ? `Focus: ${focus}` : null,
+    'Gather the facts, then write the briefing.',
+  ].filter(Boolean).join('\n')
+  const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt(opts.instructions, opts.serverPrompts) }, { role: 'user', content: ask }]
+  const tools = toOpenAiTools(opts.tools)
+  const seen = new Map<string, Promise<string>>()
+  let used = 0
+
+  for (let round = 0; round < maxRounds && used < maxToolCalls; round++) {
+    const reply = await opts.chat({ messages, tools })
+    if (!reply.tool_calls?.length) return done(reply.content ?? '')
+    messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
+    // every call gets an answer (the API requires it); calls past the budget are refused, the rest run in parallel
+    const results = await Promise.all(reply.tool_calls.map(async c => {
+      const key = `${c.function.name}\0${c.function.arguments}`
+      const prior = seen.get(key)
+      if (prior) return prior
+      if (used >= maxToolCalls) return 'not run: the tool call limit is reached, write the briefing from what you have'
+      used++
+      const result = opts.call(c.function.name, c.function.arguments).catch(e => `error: ${e instanceof Error ? e.message : String(e)}`)
+      seen.set(key, result)
+      return result
+    }))
+    reply.tool_calls.forEach((c, i) => messages.push({ role: 'tool', tool_call_id: c.id, content: results[i] }))
   }
-  if (!accountId) return { meetingTitle, accountId: null, accountName: null, text: '', preparedAt: now }
 
-  const account_id = accountId
-  // A failed or slow tool is just left out
-  const call = (name: string, args: Record<string, unknown>): Promise<string | null> =>
-    client.callTool(name, args, { timeoutMs: TOOL_TIMEOUT_MS }).catch(() => null)
-
-  const [account, opps, issues, actions, calls, trackers, competitive] = await Promise.all([
-    call('get_account_details', { account_id }),
-    call('get_opportunities', { account_id }),
-    call('get_open_issues', { account_id }),
-    call('get_action_items', { account_id }),
-    call('get_interactions', { account_id, source_types: ['gong_call'], from_date: new Date(now - CALL_HISTORY_MS).toISOString() }),
-    call('list_poc_trackers', {}),
-    call('get_competitive_analysis', {}),
-  ])
-
-  const accountRow = parseJson(account ?? '') as Row | null
-  const accountName = accountRow && typeof accountRow === 'object' ? str(accountRow.name) : null
-  const openOpps = rows(opps).filter(o => o.isClosed === false && str(o.id)).slice(0, MAX_OPPS)
-  const accountTrackers = rows(trackers).filter(t => t.accountId === account_id && str(t.id))
-  const tracker = accountTrackers.find(t => t.status === 'open') ?? accountTrackers[0]
-  const recentCalls = rows(calls).filter(c => str(c.id))
-    .sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? ''))).slice(0, MAX_BRIEFS)
-
-  const [frs, poc, briefs] = await Promise.all([
-    Promise.all(openOpps.map(o => call('get_opportunity_feature_requests', { opportunity_id: o.id }))),
-    tracker ? call('get_poc_tracker', { tracker_id: tracker.id }) : Promise.resolve(null),
-    Promise.all(recentCalls.map(c => call('get_call_brief', { account_id, call_id: c.id }))),
-  ])
-
-  const text = buildText([
-    { label: 'Account', body: account },
-    { label: 'Opportunities', body: opps },
-    ...openOpps.map((o, i) => ({ label: `Feature requests: ${str(o.name) ?? o.id}`, body: frs[i] })),
-    { label: 'POC tracker', body: poc },
-    { label: 'Open issues', body: issues },
-    { label: 'Action items', body: actions },
-    { label: 'Recent calls', body: calls },
-    ...recentCalls.map((c, i) => ({ label: `Call brief: ${str(c.title) ?? c.id}`, body: briefs[i] })),
-    { label: 'Competitive landscape', body: competitive },
-  ])
-  return { meetingTitle, accountId, accountName, text, preparedAt: now }
-}
-
-// Account switcher: the MCP server's search_accounts takes `name`
-export async function searchAccounts(client: McpClient, query: string): Promise<Array<{ id: string; name: string }>> {
-  if (!query.trim()) return []
-  const found = rows(await client.callTool('search_accounts', { name: query.trim() }, { timeoutMs: TOOL_TIMEOUT_MS }))
-  return found.flatMap(r => str(r.id) && str(r.name) ? [{ id: r.id as string, name: r.name as string }] : [])
+  // out of rounds or tool calls: no tools offered, so the model has to answer
+  messages.push({ role: 'user', content: 'No more tool calls. Write the briefing now from what you have.' })
+  const final = await opts.chat({ messages })
+  return done(final.content ?? '')
 }

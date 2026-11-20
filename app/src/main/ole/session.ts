@@ -1,180 +1,135 @@
+// Ole: the live call companion. Before the call, the model gathers a briefing from the MCP servers' read-only tools
+// (prepare.ts); during it, context bullets from the transcript, the briefing and throttled tool lookups (bullets.ts).
 import { ipcMain } from 'electron'
-import type { OleBullet, PreparedContext } from './types'
+import type { McpServerConfig, OleBullet, OleTool, PreparedContext } from './types'
 import type { OleLiveState } from '../../shared/types'
 import { loadSettings } from '../settings'
 import { readSecret } from './secrets'
 import { providersOf } from './providers'
+import { serversOf } from './servers'
 import { openaiChat } from './openaiModel'
-import { createMcpClient, type McpClient } from './mcp'
-import { prepareContext, searchAccounts } from './prepare'
+import { createMcpClient } from './mcp'
+import { collectTools, collectWarmupPrompts, createToolRunner } from './tools'
+import { prepareContext } from './prepare'
 import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
 
-// Ole: the live call companion. Warm-up from the MCP server before the call, context bullets during it (bullets.ts).
+/** a prepared briefing older than this is gathered again when a meeting starts */
+const STALE_MS = 2 * 60 * 60_000
 
-let prepared: PreparedContext | null = null
-let preparing = false
-let error: string | null = null
-let meetingId: string | null = null
-let engine: BulletsEngine | null = null
-let bullets: OleBullet[] = []
-const finished = new Map<string, OleBullet[]>()
-let prepareSeq = 0
+type Deps = { file: string; send: (s: OleLiveState) => void; save?: (meetingId: string, bullets: OleBullet[]) => void }
 
-function state(): OleLiveState {
-  return {
-    meetingId,
-    preparing,
-    prepared: prepared ? {
-      meetingTitle: prepared.meetingTitle,
-      accountId: prepared.accountId,
-      accountName: prepared.accountName,
-      preparedAt: prepared.preparedAt
-    } : null,
-    error,
-    bullets
-  }
-}
-
-function send(): void {
-  d.send(state())
-}
-
-let d!: { file: string; send: (s: OleLiveState) => void; save?: (meetingId: string, bullets: OleBullet[]) => void }
-
-function mcp(dFile: string): McpClient | null {
-  const key = readSecret(dFile, 'mcp')
-  if (!key) return null
-  const url = providersOf(loadSettings(dFile)).mcpUrl
-  if (!url) return null
-  return createMcpClient({ key, url })
-}
-
-async function prepare(
-  o: { accountId?: string | null; meetingTitle?: string | null; forMeeting?: string }
-): Promise<OleLiveState> {
-  const client = mcp(d.file)
-  if (!client) {
-    error = 'Add the MCP server URL and key in Settings'
-    preparing = false
-    send()
-    return state()
-  }
-
-  const seq = ++prepareSeq
-  preparing = true
-  error = null
-  send()
-
-  try {
-    const result = await prepareContext(client, {
-      accountId: o.accountId ?? undefined,
-      meetingTitle: o.meetingTitle ?? undefined
-    })
-    if (seq !== prepareSeq) return state()
-    // the meeting ended while this was loading: the next call prepares fresh
-    if (o.forMeeting !== undefined && o.forMeeting !== meetingId) { preparing = false; send(); return state() }
-    prepared = result
-    error = null
-  } catch (err) {
-    if (seq !== prepareSeq) return state()
-    error = err instanceof Error ? err.message : String(err)
-  }
-
-  preparing = false
-  send()
-  return state()
-}
-
-export function hookOle(
-  d0: { file: string; send: (s: OleLiveState) => void; save?: (meetingId: string, bullets: OleBullet[]) => void }
-): {
+export function hookOle(d: Deps): {
   meetingStarted(m: { id: string; title: string }): void
   meetingStopped(id: string): void
   segment(seg: { meetingId: string; track: 'me' | 'them'; speaker?: string | null; text: string; startMs: number }): void
   bulletsOf(id: string): OleBullet[]
 } {
-  d = d0
+  let prepared: PreparedContext | null = null
+  let preparing = false
+  let error: string | null = null
+  let meetingId: string | null = null
+  let engine: BulletsEngine | null = null
+  let bullets: OleBullet[] = []
+  let tools: OleTool[] = []
+  let call: (name: string, argsJson: string) => Promise<string> = async () => 'No MCP tools are available'
+  let prepareSeq = 0
+  const finished = new Map<string, OleBullet[]>()
 
+  const state = (): OleLiveState => ({
+    meetingId, preparing, error, bullets,
+    prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt } : null,
+  })
+  const send = () => d.send(state())
+
+  const openaiKey = () => readSecret(d.file, 'openai')
+  const chat: ChatFn = (req) => openaiChat({ key: openaiKey(), model: providersOf(loadSettings(d.file)).openaiChatModel, ...req })
+  const clientOf = (s: McpServerConfig) => createMcpClient({ key: readSecret(d.file, `mcp:${s.id}`) ?? undefined, url: s.url })
+
+  /** the enabled servers' read-only tools, gathered again on each prepare and meeting start */
+  const enabledServers = () => serversOf(loadSettings(d.file)).filter(s => s.enabled).map(config => ({ config, client: clientOf(config) }))
+  async function loadTools(): Promise<void> {
+    const servers = enabledServers()
+    tools = servers.length ? await collectTools(servers) : []
+    const runner = createToolRunner(servers, tools)
+    call = (name, argsJson) => runner.call(name, argsJson)
+  }
+
+  async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string }): Promise<OleLiveState> {
+    if (!openaiKey()) { error = 'Add an OpenAI key in Settings'; send(); return state() }
+    if (!serversOf(loadSettings(d.file)).some(s => s.enabled)) { error = 'Add an MCP server in Settings'; send(); return state() }
+    const seq = ++prepareSeq
+    preparing = true; error = null; send()
+    try {
+      await loadTools()
+      const instructions = providersOf(loadSettings(d.file)).warmupInstructions
+      const meetingTitle = o.meetingTitle ?? null, focus = o.focus ?? null
+      // each server's own warm-up prompt (MCP prompts, prepare_for_meeting) comes first; the person's instructions refine it
+      const serverPrompts = await collectWarmupPrompts(enabledServers(), { meetingTitle, focus })
+      const result = await prepareContext({ chat, tools, call, meetingTitle, focus, instructions, serverPrompts })
+      if (seq !== prepareSeq) return state()
+      // the meeting ended while this was loading: the next call prepares fresh
+      if (o.forMeeting !== undefined && o.forMeeting !== meetingId) { preparing = false; send(); return state() }
+      prepared = result
+    } catch (e) {
+      if (seq !== prepareSeq) return state()
+      error = e instanceof Error ? e.message : String(e)
+    }
+    preparing = false
+    send()
+    return state()
+  }
+
+  const text = (v: unknown, max: number) => typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null
   ipcMain.handle('ole:state', () => state())
-
   ipcMain.handle('ole:prepare', (_e, o: unknown) => {
-    const input = (o ?? {}) as Record<string, unknown>
-    const accountId = typeof input.accountId === 'string' ? input.accountId : null
-    const meetingTitle = typeof input.meetingTitle === 'string' ? input.meetingTitle : null
-    return prepare({ accountId, meetingTitle })
+    const input = (o && typeof o === 'object' ? o : {}) as Record<string, unknown>
+    return prepare({ focus: text(input.focus, 200), meetingTitle: text(input.meetingTitle, 300) })
   })
 
-  ipcMain.handle('ole:search-accounts', async (_e, q: unknown) => {
-    if (typeof q !== 'string' || q.length < 2 || q.length > 100) return []
-    const client = mcp(d.file)
-    if (!client) return []
-    return searchAccounts(client, q)
-  })
-
-  function meetingStarted(m: { id: string; title: string }): void {
-    meetingId = m.id
-    bullets = []
-
-    const stale = !prepared || Date.now() - prepared.preparedAt > 2 * 60 * 60 * 1000
-    if (stale) void prepare({ meetingTitle: m.title, forMeeting: m.id })
-
-    const openaiKey = readSecret(d.file, 'openai')
-    if (!openaiKey) {
-      engine = null
+  return {
+    meetingStarted(m) {
+      meetingId = m.id
+      bullets = []
+      if (!prepared || Date.now() - prepared.preparedAt > STALE_MS) void prepare({ meetingTitle: m.title, forMeeting: m.id })
+      else void loadTools().catch(e => console.warn('loading the MCP tools failed', e))
+      // bullets need the OpenAI key; without it the meeting records as Yogurt does
+      engine = openaiKey() ? createBulletsEngine({
+        chat,
+        tools: () => tools,
+        callTool: (name, argsJson) => call(name, argsJson),
+        context: () => prepared,
+        onBullets: all => { bullets = all; send() },
+      }) : null
       send()
-      return
+    },
+    segment(seg) {
+      if (seg.meetingId !== meetingId || !engine || !seg.text.trim()) return
+      engine.push({ speaker: seg.speaker || (seg.track === 'me' ? 'Me' : 'Them'), text: seg.text, startMs: seg.startMs })
+    },
+    meetingStopped(id) {
+      if (id !== meetingId) return
+      engine?.stop()
+      finished.set(id, bullets)
+      try { d.save?.(id, bullets) } catch (e) { console.warn('saving the context bullets failed', e) }
+      engine = null
+      meetingId = null
+      prepared = null
+      send()
+    },
+    bulletsOf: (id) => finished.get(id) ?? (id === meetingId ? bullets : []),
+  }
+}
+
+/** Settings' Test button: how many read-only tools the server offers Ole, or why it can't be reached. */
+export async function testServer(server: McpServerConfig, key: string | null): Promise<{ ok: boolean; tools: number; error?: string }> {
+  try {
+    const found = await collectTools([{ config: { ...server, enabled: true }, client: createMcpClient({ key: key ?? undefined, url: server.url }) }])
+    if (!found.length) {
+      // collectTools skips a failing server: ask it directly so the error shows
+      await createMcpClient({ key: key ?? undefined, url: server.url }).listTools()
     }
-
-    const model = providersOf(loadSettings(d.file)).openaiChatModel
-
-    const chat: ChatFn = req => openaiChat({
-      key: readSecret(d.file, 'openai'),
-      model,
-      ...req
-    })
-
-    const searchCalls = async (q: string): Promise<string> => {
-      const c = mcp(d.file)
-      if (!c) return 'The MCP server is not connected'
-      return c.callTool('search_calls', { query: q }, { timeoutMs: 15000 })
-    }
-
-    engine = createBulletsEngine({
-      chat,
-      searchCalls,
-      context: () => prepared,
-      onBullets: all => {
-        bullets = all
-        send()
-      }
-    })
-
-    send()
+    return { ok: true, tools: found.length }
+  } catch (e) {
+    return { ok: false, tools: 0, error: e instanceof Error ? e.message : String(e) }
   }
-
-  function segment(
-    seg: { meetingId: string; track: 'me' | 'them'; speaker?: string | null; text: string; startMs: number }
-  ): void {
-    if (seg.meetingId !== meetingId || !engine) return
-    if (!seg.text.trim()) return
-    const speaker = seg.speaker || (seg.track === 'me' ? 'Me' : 'Them')
-    engine.push({ speaker, text: seg.text, startMs: seg.startMs })
-  }
-
-  function meetingStopped(id: string): void {
-    if (id !== meetingId) return
-    engine?.stop()
-    finished.set(id, bullets)
-    try { d.save?.(id, bullets) } catch (e) { console.warn('saving the context bullets failed', e) }
-    engine = null
-    meetingId = null
-    prepared = null
-    send()
-  }
-
-  function bulletsOf(id: string): OleBullet[] {
-    return finished.get(id) ?? (id === meetingId ? bullets : [])
-  }
-
-  return { meetingStarted, meetingStopped, segment, bulletsOf }
 }

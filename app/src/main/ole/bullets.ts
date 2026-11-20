@@ -1,26 +1,18 @@
 // Ole: live context bullets. Throttled model calls over the recent transcript and the prepared context.
-import type { OleBullet, PreparedContext } from './types'
+import type { OleBullet, OleTool, PreparedContext } from './types'
+import { toOpenAiTools } from './tools'
 
 export type TranscriptLine = { speaker: string; text: string; startMs: number }
 export type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 export type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string }
 export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
-export type SearchCallsFn = (query: string) => Promise<string>
+export type CallToolFn = (name: string, argsJson: string) => Promise<string>
 export type BulletsEngine = { push(line: TranscriptLine): void; stop(): void; bullets(): OleBullet[] }
 
 const WINDOW_MS = 180_000
 const TOOL_ROUNDS = 2
 const PREVIOUS_IN_PROMPT = 30
 const MAX_LINES = 2000
-
-export const SEARCH_CALLS_TOOL = {
-  type: 'function',
-  function: {
-    name: 'search_calls',
-    description: 'Search call transcripts across all accounts for how other customers handled a topic.',
-    parameters: { type: 'object', properties: { query: { type: 'string', description: 'A short topic, such as a product, problem or competitor' } }, required: ['query'] },
-  },
-} as const
 
 /** Lines from the last `windowMs` before the newest line. */
 export function recentWindow(lines: TranscriptLine[], windowMs = WINDOW_MS): TranscriptLine[] {
@@ -37,10 +29,10 @@ export const BULLETS_SYSTEM = [
   'You help a sales engineer during a live customer call by surfacing short context bullets they can glance at.',
   'Reply with JSON only: {"bullets":[{"text":"...","source":"..."}]}.',
   'Give 0 to 3 NEW bullets, each under 20 words.',
-  'Every bullet must cite its source: the section of the prepared context it came from, or the search_calls result it came from. With no source, give no bullet. Never invent facts.',
+  'Every bullet must cite its source: the section of the prepared context it came from, or the tool whose result it came from. With no source, give no bullet. Never invent facts.',
   'Never repeat or rephrase an earlier bullet.',
   'Anonymise other customers by industry and size, for example "a large financial services customer". Never name another customer; only the current account may be named.',
-  'Answer from the prepared context first. Call search_calls only for gaps, such as another customer\'s experience or a competitor with no notes.',
+  'Answer from the prepared context first. You may call the provided tools for facts the prepared context lacks, such as another customer\'s experience or a competitor with no notes. Lookups are limited, so call a tool only for a real gap.',
   'When nothing useful applies, reply {"bullets":[]}.',
 ].join('\n')
 
@@ -48,8 +40,10 @@ export const BULLETS_SYSTEM = [
 export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[] }): ChatMessage[] {
   const { context, lines, previous } = args
   const parts: string[] = []
-  if (context?.accountName) parts.push(`Prepared context for ${context.accountName}${context.meetingTitle ? ` (meeting: ${context.meetingTitle})` : ''}:\n${context.text}`)
-  else parts.push(`No account prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.text ? `\n${context.text}` : ''}`)
+  if (context?.text) {
+    const about = [context.meetingTitle ? `meeting: ${context.meetingTitle}` : null, context.focus ? `focus: ${context.focus}` : null].filter(Boolean).join(', ')
+    parts.push(`Prepared context${about ? ` (${about})` : ''}:\n${context.text}`)
+  } else parts.push(`No context prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.focus ? ` Focus: ${context.focus}` : ''}`)
   const earlier = previous.slice(0, PREVIOUS_IN_PROMPT)
   parts.push(earlier.length ? `Earlier bullets (do not repeat):\n${earlier.map(b => `- ${b.text}`).join('\n')}` : 'Earlier bullets: none')
   parts.push(`Transcript (last few minutes):\n${lines.map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}`)
@@ -76,9 +70,21 @@ export function parseBullets(content: string | null): Array<{ text: string; sour
 
 const normalise = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 
+/** same tool, same arguments: key order, case and spacing in string values do not matter */
+function canonical(v: unknown): unknown {
+  if (typeof v === 'string') return normalise(v)
+  if (Array.isArray(v)) return v.map(canonical)
+  if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical((v as Record<string, unknown>)[k])]))
+  return v
+}
+export function callKey(name: string, args: unknown): string {
+  return `${name} ${JSON.stringify(canonical(args))}`
+}
+
 export function createBulletsEngine(opts: {
   chat: ChatFn
-  searchCalls: SearchCallsFn
+  tools: () => OleTool[]
+  callTool: CallToolFn
   context: () => PreparedContext | null
   onBullets: (all: OleBullet[]) => void
   now?: () => number
@@ -105,32 +111,36 @@ export function createBulletsEngine(opts: {
     timer = setTimeout(() => { timer = null; schedule() }, wait)
   }
 
-  const lookup = async (call: ToolCall): Promise<string> => {
-    if (call.function.name !== 'search_calls') return 'not allowed: unknown tool'
-    let query = ''
-    try { const args = JSON.parse(call.function.arguments || '{}'); if (typeof args?.query === 'string') query = args.query.trim() } catch { return 'not allowed: invalid arguments' }
-    const key = normalise(query)
-    if (!key) return 'not allowed: empty query'
-    if (searched.has(key)) return 'not allowed: this query was already searched during this call'
+  const lookup = async (call: ToolCall, allowed: Set<string>): Promise<string> => {
+    const name = call.function.name
+    if (!allowed.has(name)) return 'not allowed: unknown tool'
+    let args: unknown
+    try { args = call.function.arguments?.trim() ? JSON.parse(call.function.arguments) : {} } catch { return 'not allowed: invalid arguments' }
+    if (!args || typeof args !== 'object' || Array.isArray(args)) return 'not allowed: invalid arguments'
+    const key = callKey(name, args)
+    if (searched.has(key)) return 'not allowed: this lookup was already made during this call'
     const at = now()
     lookups = lookups.filter(t => at - t < 60_000)
     if (lookups.length >= maxLookups) return 'not allowed: lookup limit reached, answer from what you have'
     searched.add(key)
     lookups.push(at)
-    try { return await opts.searchCalls(query) } catch { return 'search failed' }
+    try { return await opts.callTool(name, JSON.stringify(args)) } catch { return 'lookup failed' }
   }
 
   const run = async () => {
     running = true; dirty = false; lastRun = now()
     try {
       const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list })
-      let reply = await opts.chat({ messages, tools: [SEARCH_CALLS_TOOL], response_format: { type: 'json_object' } })
+      const offered = opts.tools()
+      const allowed = new Set(offered.map(t => t.name))
+      const tools = offered.length ? { tools: toOpenAiTools(offered) } : {}
+      let reply = await opts.chat({ messages, ...tools, response_format: { type: 'json_object' } })
       for (let round = 1; reply.tool_calls?.length; round++) {
         if (stopped) return
         messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
-        for (const call of reply.tool_calls) messages.push({ role: 'tool', tool_call_id: call.id, content: await lookup(call) })
+        for (const call of reply.tool_calls) messages.push({ role: 'tool', tool_call_id: call.id, content: await lookup(call, allowed) })
         // The last round offers no tools, so the model has to answer.
-        reply = await opts.chat({ messages, ...(round < TOOL_ROUNDS ? { tools: [SEARCH_CALLS_TOOL] } : {}), response_format: { type: 'json_object' } })
+        reply = await opts.chat({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
         if (round >= TOOL_ROUNDS) break
       }
       if (stopped) return

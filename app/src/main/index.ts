@@ -41,7 +41,8 @@ import { hookPreferences, onboardingShowing } from './preferences'
 import { hookOleSecrets, readSecret } from './ole/secrets'
 import { hookOleProviders, providersOf } from './ole/providers'
 import { createOpenAIModel } from './ole/openaiModel'
-import { hookOle } from './ole/session'
+import { hookOle, testServer } from './ole/session'
+import { hookOleServers } from './ole/servers'
 import { loginItemOn, openedAtLogin, setLoginItem, syncLoginItem } from './loginItem'
 import { createMedia } from './media'
 import { createTray, linuxTrayHost } from './tray'
@@ -549,6 +550,7 @@ app.whenReady().then(() => {
   // Ole: keys, providers and the live call companion (ole/)
   hookOleSecrets({ file: settingsFile })
   hookOleProviders({ file: settingsFile })
+  hookOleServers({ file: settingsFile, test: testServer })
   const oleProviders = () => providersOf(loadSettings(settingsFile))
   const ole = hookOle({
     file: settingsFile,

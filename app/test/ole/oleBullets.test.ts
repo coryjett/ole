@@ -7,25 +7,19 @@ import { OleBullets } from '../../src/renderer/src/ole/OleBullets'
 const bullet = (id: string, text: string, source: string, at: number): OleBullet => ({ id, text, source, at })
 
 describe('OleBullets', () => {
-  it('renders prepared header with meeting and account', () => {
-    const html = renderToStaticMarkup(
-      createElement(OleBullets, { bullets: [], prepared: { meetingTitle: 'Kickoff', accountName: 'Acme' } })
-    )
-    expect(html).toContain('Prepared for: Kickoff, Acme')
+  it('renders the prepared header with meeting and focus', () => {
+    const html = renderToStaticMarkup(createElement(OleBullets, { bullets: [], prepared: { meetingTitle: 'Kickoff', focus: 'Acme' } }))
+    expect(html).toContain('Prepared for: Kickoff · Acme')
   })
 
-  it('renders No account header with meeting title', () => {
-    const html = renderToStaticMarkup(
-      createElement(OleBullets, { bullets: [], prepared: { meetingTitle: 'Kickoff', accountName: null } })
-    )
-    expect(html).toContain('No account: Kickoff')
+  it('renders the meeting alone when there is no focus', () => {
+    const html = renderToStaticMarkup(createElement(OleBullets, { bullets: [], prepared: { meetingTitle: 'Kickoff', focus: null } }))
+    expect(html).toContain('Prepared for: Kickoff<')
   })
 
-  it('renders No account header without meeting title', () => {
-    const html = renderToStaticMarkup(
-      createElement(OleBullets, { bullets: [], prepared: { meetingTitle: null, accountName: null } })
-    )
-    expect(html).toContain('>No account</p>')
+  it('says when nothing is prepared yet', () => {
+    const html = renderToStaticMarkup(createElement(OleBullets, { bullets: [], prepared: null }))
+    expect(html).toContain('>Not prepared yet</p>')
   })
 
   it('renders empty state when no bullets', () => {

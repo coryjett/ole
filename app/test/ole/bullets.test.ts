@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createBulletsEngine, buildBulletsPrompt } from '../../src/main/ole/bullets'
-import type { ChatFn, SearchCallsFn, TranscriptLine } from '../../src/main/ole/bullets'
+import { createBulletsEngine, buildBulletsPrompt, callKey } from '../../src/main/ole/bullets'
+import type { CallToolFn, ChatFn, TranscriptLine } from '../../src/main/ole/bullets'
+import type { OleTool } from '../../src/main/ole/types'
+
+const tool = (name: string): OleTool => ({ name, serverId: 's', serverName: 'S', tool: name, description: `[S] ${name}`, parameters: { type: 'object', properties: { query: { type: 'string' } } } })
+const TOOLS = [tool('s__search_calls'), tool('s__get_competitor')]
+const tools = () => TOOLS
 
 const line = (speaker: string, text: string, startMs: number): TranscriptLine => ({ speaker, text, startMs })
 
@@ -25,10 +30,10 @@ describe('bullets engine', () => {
   it('throttle: two pushes within minIntervalMs give one chat call; after advancing 20s a second call happens', async () => {
     const { now, advance } = makeEngine()
     const chat = vi.fn<ChatFn>().mockResolvedValue({ content: '{"bullets":[]}' })
-    const searchCalls = vi.fn<SearchCallsFn>()
     const engine = createBulletsEngine({
       chat,
-      searchCalls,
+      tools,
+      callTool: vi.fn<CallToolFn>(),
       context: () => null,
       onBullets: () => {},
       now,
@@ -55,7 +60,8 @@ describe('bullets engine', () => {
     const chat = vi.fn<ChatFn>().mockImplementation(() => new Promise(r => { resolveChat = r }))
     const engine = createBulletsEngine({
       chat,
-      searchCalls: vi.fn(),
+      tools,
+      callTool: vi.fn(),
       context: () => null,
       onBullets: () => {},
       now,
@@ -77,15 +83,17 @@ describe('bullets engine', () => {
     expect(chat).toHaveBeenCalledTimes(2)
   })
 
-  it('tool lookup throttle + dedupe', async () => {
+  it('tool lookup throttle across tools + dedupe on name and normalized args', async () => {
     const { now, advance } = makeEngine()
-    const searchCalls = vi.fn<SearchCallsFn>().mockResolvedValue('found')
+    const callTool = vi.fn<CallToolFn>().mockResolvedValue('found')
+    const tc = (id: string, name: string, args: unknown) => ({ id, type: 'function' as const, function: { name, arguments: JSON.stringify(args) } })
     const firstToolCalls = [
-      { id: 'a', type: 'function' as const, function: { name: 'search_calls', arguments: JSON.stringify({ query: 'Kafka latency' }) } },
-      { id: 'b', type: 'function' as const, function: { name: 'search_calls', arguments: JSON.stringify({ query: 'Kafka latency' }) } },
-      { id: 'c', type: 'function' as const, function: { name: 'search_calls', arguments: JSON.stringify({ query: 'mtls' }) } },
-      { id: 'd', type: 'function' as const, function: { name: 'search_calls', arguments: JSON.stringify({ query: 'ambient' }) } },
-      { id: 'e', type: 'function' as const, function: { name: 'search_calls', arguments: JSON.stringify({ query: 'x' }) } },
+      tc('a', 's__search_calls', { query: 'Kafka latency', limit: 5 }),
+      tc('b', 's__search_calls', { limit: 5, query: '  kafka   LATENCY ' }),
+      tc('c', 's__get_competitor', { query: 'Kafka latency', limit: 5 }),
+      tc('d', 's__delete_everything', {}),
+      tc('e', 's__search_calls', { query: 'mtls' }),
+      tc('f', 's__search_calls', { query: 'ambient' }),
     ]
     let chatCount = 0
     const chat = vi.fn<ChatFn>().mockImplementation(async () => {
@@ -94,44 +102,69 @@ describe('bullets engine', () => {
       return { content: '{"bullets":[]}' }
     })
 
-    const engine = createBulletsEngine({
-      chat,
-      searchCalls,
-      context: () => null,
-      onBullets: () => {},
-      now,
-      maxLookupsPerMinute: 3,
-    })
+    const engine = createBulletsEngine({ chat, tools, callTool, context: () => null, onBullets: () => {}, now, maxLookupsPerMinute: 3 })
 
     engine.push(line('A', 'hello', 10))
     await advance(0)
 
     expect(chat).toHaveBeenCalledTimes(2)
-    const secondCall = chat.mock.calls[1][0]
-    const toolMsgs = secondCall.messages.filter(m => m.role === 'tool')
-    expect(searchCalls).toHaveBeenCalledTimes(3)
-    expect(searchCalls.mock.calls.map(c => c[0])).toEqual(['Kafka latency', 'mtls', 'ambient'])
+    expect(chat.mock.calls[0][0].tools).toHaveLength(2)
+    expect(callTool.mock.calls.map(c => c[0])).toEqual(['s__search_calls', 's__get_competitor', 's__search_calls'])
+    expect(JSON.parse(callTool.mock.calls[0][1])).toEqual({ query: 'Kafka latency', limit: 5 })
 
-    const byId = new Map(toolMsgs.map(m => [m.tool_call_id, m.content]))
+    const byId = new Map(chat.mock.calls[1][0].messages.filter(m => m.role === 'tool').map(m => [m.tool_call_id, m.content]))
     expect(byId.get('a')).toBe('found')
-    expect(byId.get('b')).toContain('not allowed')
+    expect(byId.get('b')).toMatch(/already/)
     expect(byId.get('c')).toBe('found')
-    expect(byId.get('d')).toBe('found')
-    expect(byId.get('e')).toContain('not allowed')
+    expect(byId.get('d')).toMatch(/unknown tool/)
+    expect(byId.get('e')).toBe('found')
+    expect(byId.get('f')).toMatch(/limit/)
+  })
+
+  it('never makes the same lookup twice in one call, even a minute later', async () => {
+    const { now, advance } = makeEngine()
+    const callTool = vi.fn<CallToolFn>().mockResolvedValue('found')
+    const chat = vi.fn<ChatFn>().mockImplementation(async req => {
+      const last = req.messages.at(-1)
+      if (req.tools && last?.role !== 'tool') return { content: null, tool_calls: [{ id: `t${chat.mock.calls.length}`, type: 'function' as const, function: { name: 's__search_calls', arguments: '{"query":"mtls"}' } }] }
+      return { content: '{"bullets":[]}' }
+    })
+    const engine = createBulletsEngine({ chat, tools, callTool, context: () => null, onBullets: () => {}, now })
+    engine.push(line('A', 'one', 10))
+    await advance(0)
+    engine.push(line('A', 'two', 70_000))
+    await advance(70_000)
+    expect(chat).toHaveBeenCalledTimes(4)
+    expect(callTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no tools when there are none', async () => {
+    const { now, advance } = makeEngine()
+    const chat = vi.fn<ChatFn>().mockResolvedValue({ content: '{"bullets":[]}' })
+    const engine = createBulletsEngine({ chat, tools: () => [], callTool: vi.fn(), context: () => null, onBullets: () => {}, now })
+    engine.push(line('A', 'hello', 10))
+    await advance(0)
+    expect(chat.mock.calls[0][0].tools).toBeUndefined()
+  })
+
+  it('callKey ignores key order, case and spacing', () => {
+    expect(callKey('x', { b: 1, a: ' Hello  World ' })).toBe(callKey('x', { a: 'hello world', b: 1 }))
+    expect(callKey('x', { a: 1 })).not.toBe(callKey('y', { a: 1 }))
   })
 
   it('max 2 tool rounds: chat called 3 times and 3rd call has no tools', async () => {
     const { now, advance } = makeEngine()
     let round = 0
-    const searchCalls = vi.fn<SearchCallsFn>().mockResolvedValue('result')
+    const callTool = vi.fn<CallToolFn>().mockResolvedValue('result')
     const chat = vi.fn<ChatFn>().mockImplementation(async () => {
       round++
-      return { content: null, tool_calls: [{ id: `t${round}`, type: 'function' as const, function: { name: 'search_calls', arguments: JSON.stringify({ query: `q${round}` }) } }] }
+      return { content: null, tool_calls: [{ id: `t${round}`, type: 'function' as const, function: { name: 's__search_calls', arguments: JSON.stringify({ query: `q${round}` }) } }] }
     })
 
     const engine = createBulletsEngine({
       chat,
-      searchCalls,
+      tools,
+      callTool,
       context: () => null,
       onBullets: () => {},
       now,
@@ -141,7 +174,7 @@ describe('bullets engine', () => {
     await advance(0)
 
     expect(chat).toHaveBeenCalledTimes(3)
-    expect(searchCalls).toHaveBeenCalledTimes(2)
+    expect(callTool).toHaveBeenCalledTimes(2)
     expect(chat.mock.calls[0][0].tools).toBeDefined()
     expect(chat.mock.calls[1][0].tools).toBeDefined()
     expect(chat.mock.calls[2][0].tools).toBeUndefined()
@@ -154,7 +187,8 @@ describe('bullets engine', () => {
     })
     const engine = createBulletsEngine({
       chat,
-      searchCalls: vi.fn(),
+      tools,
+      callTool: vi.fn(),
       context: () => null,
       onBullets: () => {},
       now,
@@ -179,7 +213,8 @@ describe('bullets engine', () => {
     const onBullets = vi.fn()
     const engine = createBulletsEngine({
       chat,
-      searchCalls: vi.fn(),
+      tools,
+      callTool: vi.fn(),
       context: () => null,
       onBullets,
       now,
@@ -207,7 +242,8 @@ describe('bullets engine', () => {
 
     const engine = createBulletsEngine({
       chat,
-      searchCalls: vi.fn(),
+      tools,
+      callTool: vi.fn(),
       context: () => null,
       onBullets: () => {},
       now,
@@ -224,9 +260,9 @@ describe('bullets engine', () => {
     expect(engine.bullets()[0].text).toBe('ok')
   })
 
-  it('prompt includes anonymise, financial services, earlier bullets and transcript format', () => {
+  it('prompt includes anonymise, financial services, tools, earlier bullets and transcript format', () => {
     const messages = buildBulletsPrompt({
-      context: { accountId: '001', accountName: 'Acme', meetingTitle: 'Kickoff', text: 'notes', preparedAt: 1 },
+      context: { meetingTitle: 'Kickoff', focus: 'Acme', text: 'notes', preparedAt: 1 },
       lines: [line('Ana', 'hello', 65_000)],
       previous: [{ id: 'b1', text: 'earlier bullet', source: 's', at: 1 }],
     })
@@ -237,6 +273,8 @@ describe('bullets engine', () => {
     expect(system).toMatch(/source/i)
     expect(system).toContain('financial services')
     expect(user).toContain('earlier bullet')
+    expect(system).toMatch(/may call the provided tools/i)
+    expect(user).toContain('Prepared context (meeting: Kickoff, focus: Acme):\nnotes')
     expect(user).toContain('[1:05] Ana: hello')
   })
 })

@@ -13,7 +13,7 @@ let file = ''
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ole-providers-')); file = join(dir, 'settings.json'); hookOleProviders({ file }) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); handlers.clear() })
 
-const DEFAULTS = { transcription: 'local', assistant: 'local', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', mcpUrl: '' }
+const DEFAULTS = { transcription: 'local', assistant: 'local', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', warmupInstructions: '' }
 
 it('defaults to local for both and the documented OpenAI models', () => {
   expect(providersOf({})).toEqual(DEFAULTS)
@@ -39,4 +39,20 @@ it('rejects unknown provider values', () => {
 
 it('a hand-edited file with bad values falls back to the defaults', () => {
   expect(providersOf({ oleAssistant: 'claude', oleTranscription: 7, oleChatModel: '  ' } as unknown as Settings)).toEqual(DEFAULTS)
+})
+
+it('warm-up instructions are trimmed, cut at 8000 characters and stored under oleWarmupInstructions', () => {
+  expect(setProviders(file, { warmupInstructions: '  Lead with risks.\n' }).warmupInstructions).toBe('Lead with risks.')
+  expect((loadSettings(file) as Settings & Record<string, unknown>).oleWarmupInstructions).toBe('Lead with risks.')
+  expect(setProviders(file, { warmupInstructions: 'a'.repeat(9000) }).warmupInstructions).toHaveLength(8000)
+  expect(setProviders(file, { warmupInstructions: 42 }).warmupInstructions).toHaveLength(8000)
+  expect(setProviders(file, { warmupInstructions: '' }).warmupInstructions).toBe('')
+  expect('oleWarmupInstructions' in loadSettings(file)).toBe(false)
+  expect(providersOf({ oleWarmupInstructions: 7 } as unknown as Settings).warmupInstructions).toBe('')
+})
+
+it('no longer reads or writes an MCP URL', () => {
+  expect(providersOf({ oleMcpUrl: 'https://x.example/mcp' } as unknown as Settings)).toEqual(DEFAULTS)
+  setProviders(file, { mcpUrl: 'https://x.example/mcp' })
+  expect('oleMcpUrl' in loadSettings(file)).toBe(false)
 })

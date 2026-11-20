@@ -469,14 +469,13 @@ export type UpdateStatus = { version: string; available: boolean; on: boolean; s
 export type OleLiveState = {
   meetingId: string | null
   preparing: boolean
-  prepared: { meetingTitle: string | null; accountId: string | null; accountName: string | null; preparedAt: number } | null
+  prepared: { meetingTitle: string | null; focus: string | null; preparedAt: number } | null
   error: string | null
   bullets: import('../main/ole/types').OleBullet[]
 }
 export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & {
   state(): Promise<OleLiveState>
   onState(cb: (s: OleLiveState) => void): () => void
-  /** warm-up from the MCP server; no account given: the next matched meeting */
-  prepare(o?: { accountId?: string | null; meetingTitle?: string | null }): Promise<OleLiveState>
-  searchAccounts(q: string): Promise<Array<{ id: string; name: string }>>
+  /** the pre-call briefing from the MCP servers; focus: a company, person or topic to prepare for */
+  prepare(o?: { focus?: string | null; meetingTitle?: string | null }): Promise<OleLiveState>
 }
