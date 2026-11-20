@@ -1,6 +1,6 @@
 // #126 in the session: an unmatched call picks up who it is with from the conversation. Resolved names become choices;
-// choosing one prepares for it as the live meeting's briefing and makes it the call's record; Ole picks the first
-// itself a minute after it resolved, once, never on a matched call.
+// choosing one prepares for it as the live meeting's briefing, whose record comes only from Prepare's own match; Ole
+// picks the first itself a minute after it resolved, once, never on a matched call.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OleHost, OleSettings } from '../../src/main/ole/core/host'
 import type { SecretName } from '../../src/main/ole/core/types'
@@ -12,6 +12,8 @@ const callTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
     const hit = KNOWN.find(k => said.includes(k))
     return hit ? JSON.stringify({ matchedBy: 'name', account: { name: hit } }) : '{"matchedBy":null}'
   }
+  // an account search knows Umbrella, which no meeting matches
+  if (name === 'search_accounts') return args.query === 'Umbrella' ? '[{"id":"u1","name":"Umbrella Corp"}]' : `No account named ${String(args.query)} found`
   return '[]'
 })
 let openWorld: boolean | undefined = false
@@ -20,19 +22,21 @@ vi.mock('../../src/main/ole/core/mcp', async (orig) => {
   return { ...real, createMcpClient: () => ({
     listTools: async () => [
       { name: 'get_meeting_context', inputSchema: { type: 'object' }, annotations: openWorld === undefined ? {} : { openWorldHint: openWorld } },
-      { name: 'search_accounts', inputSchema: { type: 'object' }, annotations: openWorld === undefined ? {} : { openWorldHint: openWorld } },
+      { name: 'search_accounts', inputSchema: { type: 'object', properties: { query: { type: 'string' } } }, annotations: openWorld === undefined ? {} : { openWorldHint: openWorld } },
     ],
     listPrompts: async () => [], getPrompt: async () => '', callTool,
   }) }
 })
 type Req = { messages: Array<{ role: string; content: string | null }> }
+let askSource = 'account: Globex'
 const openaiChat = vi.fn(async (req: Req) => {
   const sys = req.messages[0].content ?? ''
   if (sys.includes('surfacing short context bullets')) return { role: 'assistant', content: '{"bullets":[]}' }
-  if (sys.includes('question the user typed')) return { role: 'assistant', content: JSON.stringify({ answer: 'In March.', source: 'account: Globex' }) }
+  if (sys.includes('question the user typed')) return { role: 'assistant', content: JSON.stringify({ answer: 'In March.', source: askSource }) }
   if (sys.includes('named an organization, person or project')) return { role: 'assistant', content: '{"facts":[]}' }
   if (sys.includes('running record')) return { role: 'assistant', content: '{}' }
   const ask = req.messages.find(m => m.role === 'user' && (m.content ?? '').startsWith('Now:'))?.content ?? ''
+  if (ask.includes('Focus: Umbrella')) return { role: 'assistant', content: '## Before you join\n- Umbrella asked about pricing (call notes)\n- Umbrella wants a demo (call notes)' }
   const name = KNOWN.find(k => ask.includes(k))
   return { role: 'assistant', content: name ? `## Before you join\n- ${name} renewal in March (account: ${name})\n- ${name} wants pricing (account: ${name})` : 'No matching record for this call.\n## Topic\n- General sync' }
 })
@@ -65,7 +69,7 @@ function fakeHost() {
   return { host, advance, pending }
 }
 
-beforeEach(() => { callTool.mockClear(); openaiChat.mockClear(); openWorld = false })
+beforeEach(() => { callTool.mockClear(); openaiChat.mockClear(); openWorld = false; askSource = 'account: Globex' })
 
 async function unmatchedCall() {
   const { createOleSession } = await import('../../src/main/ole/core/session')
@@ -81,10 +85,13 @@ describe('picking up the subject from the call (#126)', () => {
   it('offers names the other side said that resolve, never the user\'s own', async () => {
     const { s } = await unmatchedCall()
     s.segment({ meetingId: ID, track: 'me', text: 'I spoke with Initech last week', startMs: 0 })
-    s.segment({ meetingId: ID, track: 'them', text: 'We also talked to Globex and to Umbrella about this', startMs: 1 })
-    await vi.waitFor(() => expect(s.handlers.state().subjectCandidates).toEqual([{ name: 'Globex', resolved: true }]), { timeout: 3000 })
+    s.segment({ meetingId: ID, track: 'them', text: 'We also talked to Globex and to Hooli about this', startMs: 1 })
+    await vi.waitFor(() => expect(callTool.mock.calls.some(c => c[0] === 'search_accounts' && c[1].query === 'Hooli')).toBe(true), { timeout: 3000 })
+    await new Promise(r => setTimeout(r, 20))
+    // "No account named Hooli found" names it, but is not a match
+    expect(s.handlers.state().subjectCandidates).toEqual([{ name: 'Globex', resolved: true }])
     const focuses = callTool.mock.calls.filter(c => c[0] === 'get_meeting_context').map(c => c[1].focus).filter(Boolean)
-    expect(focuses).toEqual(['Globex', 'Umbrella'])
+    expect(focuses).toEqual(['Globex', 'Hooli'])
     s.meetingStopped(ID)
   })
 
@@ -98,7 +105,7 @@ describe('picking up the subject from the call (#126)', () => {
     s.meetingStopped(ID)
   })
 
-  it('choosing one prepares for it as the live meeting\'s briefing, and it becomes the call\'s record', async () => {
+  it('choosing one prepares for it as the live meeting\'s briefing; the record is the one Prepare matched', async () => {
     const { s } = await unmatchedCall()
     // before: the call matched nothing, so a source naming an organization is anonymized (#109)
     s.segment({ meetingId: ID, track: 'them', text: 'We also talked to Globex about this', startMs: 1 })
@@ -112,7 +119,7 @@ describe('picking up the subject from the call (#126)', () => {
     expect(st.prepared?.meetingTitle).toBe('Weekly sync')
     expect(st.matched).toBe(true)
     expect(st.subject).toEqual({ name: 'Globex', auto: false })
-    // after: Globex is the call's record, so a source may name it
+    // after: Prepare's own match (the server's meeting-context record) is Globex, so a source may name it
     const after = await s.handlers.ask('When is the renewal again?')
     expect(after.answers[0].source).toBe('account: Globex')
     s.meetingStopped(ID)
@@ -137,12 +144,42 @@ describe('picking up the subject from the call (#126)', () => {
     expect(prepares('Globex')).toBe(1)
     advance(120_000)
     expect(prepares('Globex')).toBe(1)
-    // chips stay after Ole's own pick, and more names are still checked
-    s.segment({ meetingId: ID, track: 'them', text: 'And then Initech joined us', startMs: 3 })
-    await vi.waitFor(() => expect(s.handlers.state().subjectCandidates?.map(c => c.name)).toEqual(['Globex', 'Initech']), { timeout: 3000 })
+    s.meetingStopped(ID)
+  })
+
+  it('once matched, no new names are looked up; switching stays possible among the resolved ones', async () => {
+    const { s, advance } = await unmatchedCall()
+    s.segment({ meetingId: ID, track: 'them', text: 'We also talked to Globex and Initech about this', startMs: 1 })
+    await vi.waitFor(() => expect(s.handlers.state().subjectCandidates).toHaveLength(2), { timeout: 3000 })
+    advance(60_000)
+    await vi.waitFor(() => expect(s.handlers.state().subject).toEqual({ name: 'Globex', auto: true }), { timeout: 3000 })
+    expect(s.handlers.state().matched).toBe(true)
+    const before = callTool.mock.calls.length
+    s.segment({ meetingId: ID, track: 'them', text: 'And then Umbrella joined us', startMs: 3 })
+    await new Promise(r => setTimeout(r, 50))
+    expect(callTool.mock.calls.slice(before).some(c => c[1].focus === 'Umbrella' || c[1].query === 'Umbrella')).toBe(false)
+    expect(s.handlers.state().subjectCandidates?.map(c => c.name)).toEqual(['Globex', 'Initech'])
     const st = await s.handlers.chooseSubject('Initech')
     expect(st.subject).toEqual({ name: 'Initech', auto: false })
     expect(st.prepared?.focus).toBe('Initech')
+    s.meetingStopped(ID)
+  })
+
+  it('a wrong auto-pick never makes the heard name the call\'s record: other organizations stay anonymized', async () => {
+    const { s, advance } = await unmatchedCall()
+    s.segment({ meetingId: ID, track: 'them', text: 'We also talked to Umbrella about this', startMs: 1 })
+    await vi.waitFor(() => expect(s.handlers.state().subjectCandidates).toEqual([{ name: 'Umbrella', resolved: true }]), { timeout: 3000 })
+    advance(60_000)
+    await vi.waitFor(() => expect(s.handlers.state().subject).toEqual({ name: 'Umbrella', auto: true }), { timeout: 3000 })
+    // the briefing names Umbrella, but Prepare matched no record for it: nothing may be named in a source
+    expect(s.handlers.state().prepared?.text).toContain('Umbrella')
+    askSource = 'account: Umbrella'
+    const a = await s.handlers.ask('Who is this?')
+    expect(a.answers[0].source).toBeTruthy()
+    expect(a.answers[0].source).not.toContain('Umbrella')
+    askSource = 'account: Globex'
+    const b = await s.handlers.ask('And the other one?')
+    expect(b.answers[0].source).not.toContain('Globex')
     s.meetingStopped(ID)
   })
 

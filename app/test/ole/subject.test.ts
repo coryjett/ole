@@ -58,14 +58,27 @@ describe('lookups for a heard name (#126, #91)', () => {
   })
   it('the name goes in the argument the schema declares', () => {
     expect(searchArgs(tool('search_accounts', { parameters: { properties: { name: {}, limit: {} } } }), 'Globex')).toEqual({ name: 'Globex' })
-    expect(searchArgs(tool('search_accounts'), 'Globex')).toEqual({ query: 'Globex' })
-    expect(searchArgs(tool('search_accounts', { parameters: { properties: { limit: {} } } }), 'Globex')).toEqual({})
+    expect(searchArgs(tool('search_accounts', { parameters: { properties: { query: {} } } }), 'Globex')).toEqual({ query: 'Globex' })
+    // no declared query argument: no search at all, never one with empty arguments
+    expect(searchArgs(tool('search_accounts'), 'Globex')).toBeNull()
+    expect(searchArgs(tool('search_accounts', { parameters: { properties: { limit: {} } } }), 'Globex')).toBeNull()
   })
-  it('a result counts only when it names the heard name', () => {
+  it('a result counts only with a structured record named like the heard name', () => {
     expect(resultNames('[{"name":"Globex Inc."}]', 'Globex')).toBe(true)
+    expect(resultNames('{"results":[{"id":"1","account_name":"Globex"}]}', 'Globex')).toBe(true)
+    expect(resultNames('{"matchedBy":"name","account":{"name":"Globex"}}', 'Globex')).toBe(true)
     expect(resultNames('[{"name":"Initech"}]', 'Globex')).toBe(false)
     expect(resultNames('[]', 'Globex')).toBe(false)
     expect(resultNames('error: Globex not found', 'Globex')).toBe(false)
+  })
+  it('negative phrases, plain text and an echoed query never count', () => {
+    expect(resultNames('No account named Example Corp found', 'Example Corp')).toBe(false)
+    expect(resultNames('{"message":"No match for Globex"}', 'Globex')).toBe(false)
+    expect(resultNames('{"query":"Globex","total":"0 results"}', 'Globex')).toBe(false)
+    expect(resultNames('{"query":"Globex","results":[]}', 'Globex')).toBe(false)
+    expect(resultNames('{"error":"Globex not found"}', 'Globex')).toBe(false)
+    expect(resultNames('Globex is a large company', 'Globex')).toBe(false)
+    expect(resultNames('{"matchedBy":null,"note":"Globex"}', 'Globex')).toBe(false)
   })
 })
 

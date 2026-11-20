@@ -64,22 +64,52 @@ export function accountSearchTools(tools: OleTool[]): OleTool[] {
   return tools.filter(t => isLiveTool(t) && mayGetNames(t) && ACCOUNT_SEARCH.test(t.tool))
 }
 
-/** the argument a search tool takes the name in: the first string property its schema declares among the usual ones */
+/**
+ * The argument a search tool takes the name in: the first property its schema declares among the usual query names.
+ * null when it declares none of them: the search is skipped, since an argument-less search proves nothing.
+ */
 const QUERY_KEYS = ['query', 'q', 'name', 'search', 'term', 'keyword', 'text', 'account_name', 'company', 'company_name']
-export function searchArgs(tool: OleTool, name: string): Record<string, string> {
+export function searchArgs(tool: OleTool, name: string): Record<string, string> | null {
   const props = tool.parameters?.properties
   const declared = props && typeof props === 'object' ? Object.keys(props) : []
-  const key = QUERY_KEYS.find(k => declared.includes(k)) ?? (declared.length ? null : 'query')
-  return key ? { [key]: name } : {}
+  const key = QUERY_KEYS.find(k => declared.includes(k))
+  return key ? { [key]: name } : null
 }
 
-/** a result that says nothing: an error, a refusal or an empty value */
-const EMPTY = /^(?:error:|not allowed:|lookup failed|no result|\(empty result\))|^\s*(?:\[\s*\]|\{\s*\}|null|)\s*$/i
+/** a result that says it found nothing, whatever else it holds */
+const NEGATIVE = /^(?:error:|not allowed:|lookup failed)|\bno (?:match(?:es|ing)?|results?|records?|accounts?|compan(?:y|ies)|organi[sz]ations?)\b|\bnot found\b|\b0 (?:results?|matches|records?|accounts?)\b|\bnothing found\b/i
+/** a field that holds a record's name */
+const NAME_KEY = /^(?:name|title|display_?name|full_?name|(?:account|company|organi[sz]ation|customer|client|org)(?:_?name)?)$/i
+const MATCH_KEY = /^match(?:ed)?_?(?:by|on)?$/i
 
-/** whether a lookup's result is about this name: not empty, and naming it (whole words, any case, legal suffixes aside) */
+/** whether a parsed value holds, at most a few levels down, a record whose name field names this name */
+function namesRecord(v: unknown, name: string, depth = 0): boolean {
+  if (depth > 4 || !v || typeof v !== 'object') return false
+  if (Array.isArray(v)) return v.some(x => namesRecord(x, name, depth + 1))
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof x === 'string' && NAME_KEY.test(k) && mentions(x, name) > 0) return true
+    if (x && typeof x === 'object' && namesRecord(x, name, depth + 1)) return true
+  }
+  return false
+}
+
+/**
+ * Whether a lookup's result positively found this name (#126): structured JSON, not a refusal or a "nothing found"
+ * phrase, holding a record whose name field names it (whole words, any case, legal suffixes aside), or a server match
+ * (matchedBy set) whose result names it. Plain text, an empty list or the query echoed back never count.
+ */
 export function resultNames(result: string, name: string): boolean {
-  if (EMPTY.test(result.trim())) return false
-  return mentions(result, name) > 0
+  const text = result.trim()
+  if (!text || NEGATIVE.test(text)) return false
+  let v: unknown
+  try { v = JSON.parse(text) } catch { return false }
+  if (!v || typeof v !== 'object') return false
+  if (namesRecord(v, name)) return true
+  if (!Array.isArray(v)) {
+    const matched = Object.entries(v as Record<string, unknown>).some(([k, x]) => MATCH_KEY.test(k) && x !== null && x !== false && x !== '' && typeof x !== 'object')
+    if (matched && mentions(text, name) > 0) return true
+  }
+  return false
 }
 
 export type Candidate = { name: string; resolved: true }

@@ -139,8 +139,6 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   let callStartsAt: number | null = null
   let subject: { name: string; auto: boolean } | null = null
   let chosen = false, autoPicked = false
-  /** the record each resolved name matched, lower-case name to record name */
-  const subjectRecords = new Map<string, string>()
   /** bumped on every call start, stop and clear: a pending auto-pick from before never runs */
   let pickToken = 0
   /** live bullets and Ask get the lookup-style tools only (#15), and no single-record lookups on a call with no matching record (#57) */
@@ -182,8 +180,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     openQuestions: memory.openQuestions, commitments: memory.commitments,
     prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt, text: prepared.text } : null,
     matched: hasMatchedRecord(prepared),
-    // chips while the call is unmatched, and after Ole chose one by itself, so a click still switches (#126)
-    subjectCandidates: meetingId && resolver && (!hasMatchedRecord(prepared) || subject?.auto) ? resolver.candidates() : [],
+    // chips while the call is unmatched, and after a subject was picked, so a click still switches among them (#126)
+    subjectCandidates: meetingId && resolver && (!hasMatchedRecord(prepared) || subject) ? resolver.candidates() : [],
     subject: meetingId ? subject : null,
     nextMeeting: nextState(),
     }
@@ -338,15 +336,16 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       if (ctx && resultNames(ctx.result, name)) {
         const record = matchedRecordName(ctx.result)
         if (!record || mentions(record, name) > 0 || mentions(name, record) > 0) {
-          subjectRecords.set(name.toLowerCase(), record ?? name)
           return { resolved: true, via: 'context', lookups }
         }
       }
       const search = serversAllowed() ? accountSearchTools(tools)[0] : undefined
-      if (search) {
+      // a search whose schema declares no query argument is never called: an argument-less search proves nothing
+      const args = search ? searchArgs(search, name) : null
+      if (search && args) {
         lookups++
-        const result = await call(search.name, JSON.stringify(searchArgs(search, name)), { timeoutMs: SUBJECT_SEARCH_TIMEOUT_MS })
-        if (resultNames(result, name)) { subjectRecords.set(name.toLowerCase(), name); return { resolved: true, via: 'search', lookups } }
+        const result = await call(search.name, JSON.stringify(args), { timeoutMs: SUBJECT_SEARCH_TIMEOUT_MS })
+        if (resultNames(result, name)) return { resolved: true, via: 'search', lookups }
       }
       return { resolved: false, via: null, lookups }
     } catch (e) {
@@ -356,7 +355,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
 
   /**
    * Prepare for a subject during the call (#126): the name as focus, for the live meeting, replacing its briefing. The
-   * chosen record becomes the call's own record (#109, #116) when the briefing names it.
+   * call's record comes from that Prepare's own match, as for any briefing.
    */
   async function chooseSubject(name: string, auto: boolean): Promise<OleLiveState> {
     if (!meetingId || blocked()) return state()
@@ -365,8 +364,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     else { chosen = true; pickToken++ }
     await prepare({ focus: name, meetingTitle: callTitle, forMeeting: callId, startsAt: callStartsAt })
     if (meetingId !== callId || prepared?.focus !== name || error) return state()
-    const record = subjectRecords.get(name.toLowerCase()) ?? name
-    if (hasMatchedRecord(prepared) && mentions(prepared.text, record) > 0) prepared = { ...prepared, records: [record] }
+    // the call's record (the anonymity allowlist, #109, #116) is only ever what Prepare itself matched (recordNames over
+    // the server's meeting-context match): never a heard or typed name, so a wrong pick names no one it shouldn't
     subject = { name, auto }
     console.info(`ole subject: prepared for a name of ${name.length} chars (${auto ? 'picked by Ole' : 'chosen'}), ${hasMatchedRecord(prepared) ? 'matched' : 'no match'}`)
     send()
@@ -552,9 +551,9 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       subject = null
       chosen = false
       autoPicked = false
-      subjectRecords.clear()
       // a briefing from before the call is this call's only when it belongs to it (#128): auto-prepared for this same
-      // calendar event, or prepared by hand in the last 15 minutes. Anything else is dropped, so the call starts
+      // calendar event with a call title that agrees, or prepared by hand in the last 15 minutes unless the calendar event
+      // on now doesn't name its focus (then the event is prepared instead). Anything else is dropped, so the call starts
       // unmatched (or prepares from its title) and the subject is picked up from the conversation (#126)
       const before = prepared, by = preparedBy
       preparedBy = null
@@ -563,14 +562,24 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       if (before && !manualFresh && !autoEvent) prepared = null
       const startedAt = host.clock.now()
       void (async () => {
-        let event: Meeting | null = null, looked = false
+        let event: Meeting | null = null, looked = false, fromEvent = false
         let reuse = manualFresh
         if (autoEvent) {
           event = await calendarEvent(); looked = true
           if (meetingId !== m.id) return
-          reuse = sameEvent(event, autoEvent) || (!event && !!named && named === autoEvent.title && startedAt < autoEvent.end)
+          // the same event, and a call title that agrees with it; with no event on now, a call titled like it before it ends
+          reuse = (sameEvent(event, autoEvent) && (!named || named === autoEvent.title)) || (!event && !!named && named === autoEvent.title && startedAt < autoEvent.end)
           if (reuse) callStartsAt = autoEvent.start
           else if (prepared === before) { prepared = null; send() }
+        } else if (manualFresh && before?.focus) {
+          // prepared by hand just before: the call's, unless a calendar event on now is clearly about someone else
+          event = await calendarEvent(); looked = true
+          if (meetingId !== m.id) return
+          if (event && mentions(event.title, before.focus) === 0) {
+            reuse = false
+            fromEvent = true
+            if (prepared === before) { prepared = null; send() }
+          }
         }
         // a local Prepare never runs during a call (#5): the bullets just get the tools
         if (reuse || local) {
@@ -582,7 +591,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
         // "Meeting", "Zoom call", "Untitled": a default title says nothing, so the calendar event on now names it (#44, #56)
         if (!named && !looked) event = await calendarEvent()
         if (meetingId !== m.id) return
-        const useEvent = named ? null : event
+        const useEvent = named && !fromEvent ? null : event
         const title = named ?? useEvent?.title ?? null
         callStartsAt = useEvent?.start ?? null
         preparedFromDefault = !title
@@ -632,8 +641,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       let scheduled = false
       resolver = engine ? createSubjectResolver({
         resolve: name => resolveSubject(name),
-        // after Ole picked a subject itself, more names are still checked, so a later choice can switch
-        matched: () => hasMatchedRecord(prepared) && !subject?.auto,
+        // once matched, no new names are looked up; switching stays possible among the ones already resolved
+        matched: () => hasMatchedRecord(prepared),
         busy: () => preparing,
         material: () => prepared?.text ?? '',
         onResolved: () => {

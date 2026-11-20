@@ -130,4 +130,44 @@ describe('a prepared briefing belongs to its meeting (#128)', () => {
     expect(s.handlers.state().prepared?.text).not.toContain('Globex')
     s.meetingStopped(ID)
   })
+
+  it('one auto-prepared for the same event is not reused when the call\'s own title disagrees', async () => {
+    let start = 0
+    const { s, now, advance } = await session(() => [{ id: 'e1', title: 'Globex renewal', start, end: start + 30 * 60_000 }])
+    start = now() + 6 * 60_000
+    await s.autoPrepare()
+    advance(6 * 60_000)
+    s.meetingStarted({ id: ID, title: 'Initech kickoff' })
+    await vi.waitFor(() => expect(s.handlers.state().prepared?.meetingTitle).toBe('Initech kickoff'), { timeout: 3000 })
+    expect(s.handlers.state().prepared?.text).not.toContain('Globex')
+    s.meetingStopped(ID)
+  })
+
+  it('one prepared by hand is dropped when the event on now is about someone else; the event is prepared instead', async () => {
+    let list: Upcoming[] = []
+    const { s, now, advance } = await session(() => list)
+    await s.handlers.prepare({ focus: 'Globex' })
+    advance(5 * 60_000)
+    list = [{ id: 'e2', title: 'Team retro', start: now() - 60_000, end: now() + 30 * 60_000 }]
+    s.meetingStarted({ id: ID, title: 'Meeting' })
+    await vi.waitFor(() => expect(s.handlers.state().prepared?.meetingTitle).toBe('Team retro'), { timeout: 3000 })
+    expect(s.handlers.state().prepared?.focus).toBeNull()
+    expect(s.handlers.state().prepared?.text).not.toContain('Globex')
+    s.meetingStopped(ID)
+  })
+
+  it('one prepared by hand is kept when the event on now names its focus (any case, legal suffix aside)', async () => {
+    let list: Upcoming[] = []
+    const { s, now, advance } = await session(() => list)
+    await s.handlers.prepare({ focus: 'Globex Inc.' })
+    const n = prepareCount()
+    advance(5 * 60_000)
+    list = [{ id: 'e3', title: 'GLOBEX renewal', start: now() - 60_000, end: now() + 30 * 60_000 }]
+    s.meetingStarted({ id: ID, title: 'Meeting' })
+    await new Promise(r => setTimeout(r, 30))
+    expect(prepareCount()).toBe(n)
+    expect(s.handlers.state().prepared?.focus).toBe('Globex Inc.')
+    s.meetingStopped(ID)
+  })
+
 })
