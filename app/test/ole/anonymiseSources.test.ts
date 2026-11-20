@@ -55,9 +55,9 @@ describe('anonymiseSource (#109)', () => {
   })
   it("the matched record's own name stays", () => {
     expect(anonymiseSource('account: Example Corp', { allowed: ['Example Corp'], known: [...known, 'Example Corp'] })).toBe('account: Example Corp')
-    // the record with or without its legal suffix, and the name inside the meeting title
+    // the record with or without its legal suffix; a longer text such as the meeting title allows nothing (#116)
     expect(anonymiseSource('account: Example', { allowed: ['Example Corp'], known: ['Example'] })).toBe('account: Example')
-    expect(anonymiseSource('account: Example Corp', { allowed: ['Example Corp weekly'], known: ['Example Corp'] })).toBe('account: Example Corp')
+    expect(anonymiseSource('account: Example Corp', { allowed: ['Example Corp weekly'], known: ['Example Corp'] })).toBe(`account: ${ANOTHER_ORG}`)
   })
   it('a "Kind: Name" in the label is anonymised even when no result named it', () => {
     expect(anonymiseSource('From call records: Umbrella Group', { allowed: ['Example Corp'], known: [] })).toBe(`From call records: ${ANOTHER_ORG}`)

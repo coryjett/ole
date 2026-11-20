@@ -233,7 +233,8 @@ export function createEnricher(o: {
       const material = messages.filter(m => m.role === 'tool' && !EMPTY_RESULT.test((m.content ?? '').trim())).map(m => m.content ?? '').join('\n')
       // sources name no organisation but the meeting's own and the one looked up (#109)
       const rules = anonymityFor(o.context(), [o.context()?.text ?? '', material], [item.term])
-      const facts = parseFacts(reply.content, material).map(f => ({ ...f, ...anonymiseSourceLink(f.source, f.url, rules) }))
+      // the fact's own link is replaced by what anonymising kept, never spread back over it (#116)
+      const facts = parseFacts(reply.content, material).map(f => ({ text: f.text, ...anonymiseSourceLink(f.source, f.url, rules) }))
       const section = material.trim() ? mentionedSection(item.term, facts) : ''
       log(`ole enrich: name of ${item.term.length} chars, ${lookups} lookups, ${section ? `${section.split('\n').length - 1} facts added` : 'nothing found'}`)
       if (section && !stopped) o.onSection(section)

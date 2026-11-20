@@ -4,7 +4,7 @@ import { noteLine } from './meetingSource'
 import { toOpenAiTools } from './tools'
 import { createBulletStream } from './bulletStream'
 import { linkAndLabel, receivedUrls } from './links'
-import { anonymiseSourceLink, knownOrganisations, type KnownOrg } from './anonymise'
+import { anonymiseSourceLink, knownOrganisations, type AnonymityRules } from './anonymise'
 
 export type TranscriptLine = { speaker: string; text: string; startMs: number }
 export type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
@@ -102,14 +102,16 @@ export function stripMentioned(text: string): string {
 }
 
 /**
- * What a source may name during this call (#109): allowed are the matched record's name(s), the meeting title and the
- * focus, and only when the call matched a record (plus `extra`, such as the name a mid-call section was looked up
- * for); known are the organisations Prepare's results named and those in `material` (this turn's results).
+ * What a source may name during this call (#109, #116): allowed are only the matched record's name(s), and only when
+ * the call matched a record (plus `extra`, such as the name a mid-call section was looked up for); the meeting title
+ * and focus never allow a name themselves, they only helped Prepare pick the record. known are the organisations
+ * Prepare's results named and those in `material` (this turn's results); truncated when Prepare found more than it
+ * kept, so sources fail closed.
  */
-export function anonymityFor(context: PreparedContext | null, material: string | string[], extra: string[] = []): { allowed: string[]; known: KnownOrg[] } {
+export function anonymityFor(context: PreparedContext | null, material: string | string[], extra: string[] = []): AnonymityRules {
   const matched = hasMatchedRecord(context)
-  const allowed = [...(matched ? [...(context?.records ?? []), context?.meetingTitle ?? '', context?.focus ?? ''] : []), ...extra].filter(s => s.trim())
-  return { allowed, known: [...(context?.orgs ?? []), ...knownOrganisations(material)] }
+  const allowed = [...(matched ? context?.records ?? [] : []), ...extra].filter(s => s.trim())
+  return { allowed, known: [...(context?.orgs ?? []), ...knownOrganisations(material)], ...(context?.orgsTruncated ? { truncated: true } : {}) }
 }
 
 /** tools that fetch one organisation's or person's records (CRM-style names): left out of a call with no matching record (#57) */
