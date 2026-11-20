@@ -73,7 +73,7 @@ describe('when the Mac calendar has calendars, it stays the only source', () => 
 describe('mapping a server meeting to a Yogurt event', () => {
   it('prefixed id, title, times, no attendees, the server calendar', () => {
     expect(serverEvent(meeting({ attendees: 4 }), 'Meetings')).toEqual({
-      id: 'ole-server:srv:1', title: 'Weekly sync', start: T0, end: T0 + HOUR, attendees: [], url: null,
+      id: 'ole-server:c68eb015e27541d812169ef8f873f09f' /* hashed srv:1 (#152) */, title: 'Weekly sync', start: T0, end: T0 + HOUR, attendees: [], url: null,
       calendar: { id: SERVER_CALENDAR_ID, name: 'From Meetings', source: 'server' },
     })
   })
@@ -87,10 +87,10 @@ describe('mapping a server meeting to a Yogurt event', () => {
   it('Hide events without a call link applies to server meetings as to the Mac\'s', async () => {
     const withLink = meeting({ id: 'srv:2', link: 'https://meet.google.com/abc-defg-hij' })
     const { cal } = setup({ status: 'denied', hide: true, server: { serverName: 'M', meetings: [meeting(), withLink] } })
-    expect((await cal.read(T0, T0 + HOUR)).events.map(e => e.id)).toEqual(['ole-server:srv:2'])
+    expect((await cal.read(T0, T0 + HOUR)).events.map(e => e.id)).toEqual(['ole-server:e329456b8b3cff608b0d7960bec80eb5' /* hashed srv:2 (#152) */])
     // linking a recording to its event sees every event, as with the Mac calendar
     expect((await cal.read(T0, T0 + HOUR, 'link-event')).events).toHaveLength(2)
-    expect((await cal.read(T0, T0 + HOUR, e => e.id === 'ole-server:srv:1')).events).toHaveLength(2)
+    expect((await cal.read(T0, T0 + HOUR, e => e.id === 'ole-server:c68eb015e27541d812169ef8f873f09f' /* hashed srv:1 (#152) */)).events).toHaveLength(2)
   })
 })
 
