@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <sub>macOS 14.4+ (Apple Silicon) · Siesta key + Solo VPN · OpenAI key (optional)</sub><br><br>
+  <sub>macOS 14.4+ (Apple Silicon) · Siesta key + VPN · OpenAI key (optional)</sub><br><br>
   <a href="#install">Install</a> · <a href="#set-up">Set up</a> · <a href="#privacy">Privacy</a> · <a href="OLE.md">Fork notes</a> · <a href="LICENSE">MIT license</a><br><br>
   A fork of <a href="https://github.com/FrigadeHQ/yogurt">Yogurt</a> by Frigade.
 </p>
@@ -51,7 +51,8 @@ In **Settings > Ole**:
 
 | Setting | What to put there |
 |---|---|
-| **Siesta key** | Create one in Siesta under Settings > API Keys. Needs the Solo VPN. |
+| **Siesta URL** | Your Siesta server's MCP endpoint, ending in `/mcp`. |
+| **Siesta key** | Create one in Siesta under Settings > API Keys. Siesta is reached over VPN. |
 | **OpenAI key** | A platform key from platform.openai.com. Needed for live bullets, and for OpenAI transcription or summaries. |
 | **Transcription** | *Local* (whisper.cpp on your Mac) or *OpenAI*. |
 | **Assistant** | *Local* (a model on your Mac) or *OpenAI*. |

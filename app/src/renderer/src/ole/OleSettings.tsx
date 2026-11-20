@@ -53,14 +53,14 @@ function ChoiceRow({ id, label, description, value, disabled, onChange }: { id: 
   )
 }
 
-function ModelRow({ id, label, value, disabled, onSave }: { id: string; label: string; value: string; disabled: boolean; onSave: (v: string) => void }) {
+function ModelRow({ id, label, value, disabled, onSave, maxLength = 100 }: { id: string; label: string; value: string; disabled: boolean; onSave: (v: string) => void; maxLength?: number }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   const commit = () => { if (draft.trim() && draft.trim() !== value) onSave(draft.trim()); else setDraft(value) }
   return (
     <div className="settings-row">
       <label htmlFor={id} className="settings-label settings-row-copy">{label}</label>
-      <input id={id} data-testid={id} value={draft} disabled={disabled} spellCheck={false} maxLength={100}
+      <input id={id} data-testid={id} value={draft} disabled={disabled} spellCheck={false} maxLength={maxLength}
         onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
         className="settings-name-field" />
     </div>
@@ -99,6 +99,8 @@ export function OleSettings({ api, initialProviders, initialStatus }: { api: Ole
           onSave={(v) => patch({ openaiTranscribeModel: v })} />
         <ModelRow id="ole-chat-model" label="OpenAI chat model" value={providers?.openaiChatModel ?? ''} disabled={off}
           onSave={(v) => patch({ openaiChatModel: v })} />
+        <ModelRow id="ole-siesta-url" label="Siesta URL (https://…/mcp)" value={providers?.siestaUrl ?? ''} disabled={off} maxLength={300}
+          onSave={(v) => patch({ siestaUrl: v })} />
         {KEYS.map(([name, label]) => <KeyRow key={name} name={name} label={label} status={status?.[name]} save={saveKey} />)}
         {error && <div className="settings-row"><p role="alert" className="settings-description">{error}</p></div>}
       </div>

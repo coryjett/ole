@@ -124,12 +124,12 @@ describe('prepareContext', () => {
 
   it('no-account path returns empty text and skips per-account tools', async () => {
     const client = makeClient({
-      get_upcoming_meetings: () => JSON.stringify([{ summary: 'Solo meeting', startTime: iso(now + 10 * 60_000), matchedAccountId: null }]),
+      get_upcoming_meetings: () => JSON.stringify([{ summary: 'Intro meeting', startTime: iso(now + 10 * 60_000), matchedAccountId: null }]),
     })
     const ctx = await prepareContext(client, { now })
     expect(ctx.accountId).toBeNull()
     expect(ctx.text).toBe('')
-    expect(ctx.meetingTitle).toBe('Solo meeting')
+    expect(ctx.meetingTitle).toBe('Intro meeting')
 
     const calls = client.callTool as unknown as ReturnType<typeof vi.fn>
     expect(calls.mock.calls.some(([name]) => name === 'get_account_details')).toBe(false)

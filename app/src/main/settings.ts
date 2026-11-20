@@ -56,7 +56,8 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   oleTranscription?: 'local' | 'openai'
   oleAssistant?: 'local' | 'openai'
   oleTranscribeModel?: string
-  oleChatModel?: string }
+  oleChatModel?: string
+  oleSiestaUrl?: string }
 
 /** "English only" unless Multi-language was picked */
 export const spokenSetting = (s: Settings): Spoken => spokenOf(s.spoken)

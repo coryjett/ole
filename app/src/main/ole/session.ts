@@ -44,7 +44,9 @@ let d!: { file: string; send: (s: OleLiveState) => void; save?: (meetingId: stri
 function siesta(dFile: string): SiestaClient | null {
   const key = readSecret(dFile, 'siesta')
   if (!key) return null
-  return createSiestaClient({ key })
+  const url = providersOf(loadSettings(dFile)).siestaUrl
+  if (!url) return null
+  return createSiestaClient({ key, url })
 }
 
 async function prepare(
@@ -52,7 +54,7 @@ async function prepare(
 ): Promise<OleLiveState> {
   const client = siesta(d.file)
   if (!client) {
-    error = 'Add a Siesta key in Settings'
+    error = 'Add the Siesta URL and key in Settings'
     preparing = false
     send()
     return state()

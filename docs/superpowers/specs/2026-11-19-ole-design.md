@@ -82,7 +82,7 @@ Yogurt is Electron 44 and TypeScript, with Swift and Rust native helpers. The bu
 
 ### Siesta via MCP
 
-Endpoint `https://siesta.fe.solo.io/mcp` (Streamable HTTP), `Authorization: Bearer <Siesta key>`. Siesta's internal routes sit behind Solo's VPN gate, so Ole reaches Siesta only on the VPN. v1 only reads.
+Endpoint `https://siesta.fe.solo.io/mcp` (Streamable HTTP), `Authorization: Bearer <Siesta key>`. Siesta's internal routes sit behind a VPN gate, so Ole reaches Siesta only on the VPN. v1 only reads.
 
 ### Transcription and assistant (v1: OpenAI)
 
@@ -108,7 +108,7 @@ Ole is a tracking fork (decided by Cory): it keeps pulling Yogurt's updates rath
 
 ## Constraints
 
-- Personal project: repo at `~/Documents/Workspace/Other/ole`, local only for now. It reads Solo data through Siesta, so no customer names in the repo.
+- Personal project: repo at `~/Documents/Workspace/Other/ole`, local only for now. It reads company data through Siesta, so no customer names in the repo.
 - VPN required to reach Siesta.
 - Customer audio goes to OpenAI on the user's key.
 - v1 runs unsigned on Cory's Mac; signing for anyone else is decided before the first build that goes to someone else.
@@ -125,9 +125,9 @@ Ole is a tracking fork (decided by Cory): it keeps pulling Yogurt's updates rath
 - Name Ole; a personal repo in `~/Documents/Workspace/Other/ole`.
 - Calls may have no account yet; handle them as in "Calls with no account" (Claude's proposal, accepted).
 - Other customers' names are anonymised in bullets ("a large financial services customer"), and the bullets hide while the user is screen sharing if the build can detect it.
-- Mid-call Siesta lookups may send search text derived from what the customer said to Siesta (internal to Solo), throttled.
+- Mid-call Siesta lookups may send search text derived from what the customer said to Siesta (an internal system), throttled.
 - GitHub issues in v1 are only those linked to the account's opportunities (`get_open_issues`, `get_opportunity_feature_requests`); a Siesta issue-search tool comes later.
-- Customer audio may go to OpenAI on Cory's personal key in v1, for Cory only; anyone else waits on Solo's data rules.
+- Customer audio may go to OpenAI on Cory's personal key in v1, for Cory only; anyone else waits on the company's data rules.
 
 ## Open for the builder
 

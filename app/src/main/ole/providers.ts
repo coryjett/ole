@@ -8,16 +8,24 @@ type OleProviderSettings = Settings & {
   oleAssistant?: string
   oleTranscribeModel?: string
   oleChatModel?: string
+  oleSiestaUrl?: string
 }
 
 export const PROVIDER_DEFAULTS: OleProviders = {
   transcription: 'local',
   assistant: 'local',
   openaiTranscribeModel: 'gpt-4o-mini-transcribe',
-  openaiChatModel: 'gpt-5.6-luna'
+  openaiChatModel: 'gpt-5.6-luna',
+  siestaUrl: ''
 }
 
 export const isProviderChoice = (v: unknown): v is ProviderChoice => v === 'local' || v === 'openai'
+
+/** an https URL with no spaces or credentials, at most 300 characters */
+export function isValidSiestaUrl(v: string): boolean {
+  if (v.length > 300 || /\s/.test(v)) return false
+  try { const u = new URL(v); return u.protocol === 'https:' && !u.username && !u.password } catch { return false }
+}
 
 function isValidModelName(v: string): boolean {
   if (v.length === 0 || v.length > 100) return false
@@ -39,7 +47,10 @@ export function providersOf(s: Settings): OleProviders {
     openaiChatModel = PROVIDER_DEFAULTS.openaiChatModel
   }
 
-  return { transcription, assistant, openaiTranscribeModel, openaiChatModel }
+  const url = (settings.oleSiestaUrl ?? '').trim()
+  const siestaUrl = isValidSiestaUrl(url) ? url : PROVIDER_DEFAULTS.siestaUrl
+
+  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, siestaUrl }
 }
 
 export function setProviders(file: string, patch: unknown): OleProviders {
@@ -65,6 +76,11 @@ export function setProviders(file: string, patch: unknown): OleProviders {
     if (isValidModelName(model)) {
       settingsPatch.oleChatModel = model
     }
+  }
+
+  if ('siestaUrl' in p && typeof p.siestaUrl === 'string') {
+    const url = p.siestaUrl.trim()
+    if (url === '' || isValidSiestaUrl(url)) settingsPatch.oleSiestaUrl = url
   }
 
   return providersOf(updateSettings(file, settingsPatch as Partial<Settings>))

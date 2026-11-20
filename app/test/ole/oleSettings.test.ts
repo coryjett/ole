@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it, vi } from 'vitest'
 import { OleSettings, type OleSettingsApi } from '../../src/renderer/src/ole/OleSettings'
 
-const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna' } as const
+const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', siestaUrl: '' } as const
 const status = { openai: { set: true, masked: 'sk-…3456' }, siesta: { set: false, masked: '' } }
 const api = (): OleSettingsApi => ({ getProviders: vi.fn(async () => providers), setProviders: vi.fn(async () => providers), setSecret: vi.fn(async () => status), secretStatus: vi.fn(async () => status) })
 const render = () => renderToStaticMarkup(createElement(OleSettings, { api: api(), initialProviders: providers, initialStatus: status }))

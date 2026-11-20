@@ -1,7 +1,6 @@
 // Ole: Siesta MCP client. Siesta's /mcp is a stateless Streamable HTTP server (MCP SDK transport with
 // no session id), so every POST stands alone: no initialize, no Mcp-Session-Id. Replies are SSE by default.
 
-export const SIESTA_MCP_URL = 'https://siesta.fe.solo.io/mcp'
 
 export type SiestaErrorKind = 'auth' | 'unreachable' | 'http' | 'rpc' | 'tool' | 'timeout'
 
@@ -35,8 +34,8 @@ export function parseSse(body: string): unknown[] {
   return messages
 }
 
-export function createSiestaClient({ key, url = SIESTA_MCP_URL, fetch = globalThis.fetch }: {
-  key: string; url?: string; fetch?: typeof globalThis.fetch
+export function createSiestaClient({ key, url, fetch = globalThis.fetch }: {
+  key: string; url: string; fetch?: typeof globalThis.fetch
 }): SiestaClient {
   let nextId = 0
 

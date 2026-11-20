@@ -9,6 +9,8 @@ export type OleProviders = {
   assistant: ProviderChoice;
   openaiTranscribeModel: string;
   openaiChatModel: string;
+  /** the Siesta MCP endpoint (https); '' until the person sets it */
+  siestaUrl: string;
 };
 
 export type OleBullet = { id: string; text: string; source: string; at: number };

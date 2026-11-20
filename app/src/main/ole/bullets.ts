@@ -34,7 +34,7 @@ const clock = (ms: number) => {
 }
 
 export const BULLETS_SYSTEM = [
-  'You help a Solo.io sales engineer during a live customer call by surfacing short context bullets they can glance at.',
+  'You help a sales engineer during a live customer call by surfacing short context bullets they can glance at.',
   'Reply with JSON only: {"bullets":[{"text":"...","source":"..."}]}.',
   'Give 0 to 3 NEW bullets, each under 20 words.',
   'Every bullet must cite its source: the section of the prepared context it came from, or the search_calls result it came from. With no source, give no bullet. Never invent facts.',
