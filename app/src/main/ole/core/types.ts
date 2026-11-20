@@ -93,6 +93,8 @@ export type OleLiveState = {
   unavailable: Array<{ name: string; reason: string }>
   /** the briefing has a matched record (#126); absent from a state sent before it existed */
   matched?: boolean
+  /** who the matched briefing is for: the matched record, else the focus or meeting title it was prepared for (#138) */
+  matchedName?: string | null
   /** names the other side said that resolved to a record, in the order heard, while the call is unmatched (#126) */
   subjectCandidates?: Array<{ name: string; resolved: true }>
   /** who Ole prepared this call for from the conversation: a name the user chose, or one Ole picked itself (auto) (#126) */

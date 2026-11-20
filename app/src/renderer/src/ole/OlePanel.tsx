@@ -78,7 +78,12 @@ export function OleSubject({ state }: { state: OleLiveState }) {
   const unmatched = state.matched === false && !state.preparing
   const choose = (name: string) => { if (name) void window.yogurt.ole.chooseSubject(name) }
   const showInput = open || unmatched || candidates.length > 0
+  // a wrong match must be easy to see and to fix: say who the briefing is for, with a way to switch (#138)
+  const matchedName = state.matched && !state.preparing ? state.matchedName?.trim() : ''
   return <div data-testid="ole-subject" className="mt-1 flex flex-col gap-1 text-[13px]">
+    {matchedName && <p data-testid="ole-matched" role="status" className="font-semibold">Briefing for {matchedName}
+      {!open && <> <span aria-hidden="true" className="opacity-50">·</span> <button data-testid="ole-not-right" className="text-action text-[12px] font-normal" onClick={() => setOpen(true)}>Not right?</button></>}
+    </p>}
     {unmatched && !state.blocked && <p data-testid="ole-unmatched" role="status" className="settings-description">Ole hasn't matched this call yet. It will pick up who it's with from the conversation.</p>}
     {state.subject && <p data-testid="ole-subject-updated" role="status" className="settings-description">Briefing updated for {state.subject.name}</p>}
     <div className="flex flex-wrap items-center gap-2">
@@ -92,7 +97,7 @@ export function OleSubject({ state }: { state: OleLiveState }) {
       </span>}
       {showInput
         ? <NameInput testId="ole-someone-else" label="Prepare for someone else" placeholder="Someone else…" disabled={state.preparing || !!state.blocked} onSubmit={choose} />
-        : <button data-testid="ole-someone-else-link" className="text-action text-[12px]" onClick={() => setOpen(true)}>Someone else…</button>}
+        : matchedName ? null : <button data-testid="ole-someone-else-link" className="text-action text-[12px]" onClick={() => setOpen(true)}>Someone else…</button>}
     </div>
   </div>
 }
