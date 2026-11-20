@@ -5,7 +5,7 @@
 <h1 align="center">Ole</h1>
 
 <p align="center">
-  A live call companion. It listens to the call, and Siesta whispers back.
+  A live call companion. It listens to the call, and your MCP server whispers back.
 </p>
 
 <p align="center">
@@ -13,16 +13,16 @@
 </p>
 
 <p align="center">
-  <sub>macOS 14.4+ (Apple Silicon) · Siesta key + VPN · OpenAI key (optional)</sub><br><br>
+  <sub>macOS 14.4+ (Apple Silicon) · MCP server + key · OpenAI key (optional)</sub><br><br>
   <a href="#install">Install</a> · <a href="#set-up">Set up</a> · <a href="#privacy">Privacy</a> · <a href="OLE.md">Fork notes</a> · <a href="LICENSE">MIT license</a><br><br>
   A fork of <a href="https://github.com/FrigadeHQ/yogurt">Yogurt</a> by Frigade.
 </p>
 
 ## What it does
 
-- **Ready before the call.** One click finds your next meeting in Siesta, matches it to an account, and loads what matters: opportunities and their health, the POC tracker, linked GitHub issues and feature requests, recent call briefs, open action items, competitors.
+- **Ready before the call.** One click finds your next meeting on your MCP server, matches it to an account, and loads what matters: opportunities and their health, the POC tracker, linked GitHub issues and feature requests, recent call briefs, open action items, competitors.
 - **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. When a customer describes a problem, Ole can pull how other customers handled it (anonymised).
-- **Calls with no account.** Discovery calls and prospects not in Salesforce yet still get context from Siesta's wider knowledge. Link an account later, or never.
+- **Calls with no account.** Discovery calls and prospects not in your CRM yet still get context from the server's wider knowledge. Link an account later, or never.
 - **Who said what.** Speaker names from Zoom, Teams and Meet.
 - **A summary when you hang up.** Discussion, decisions, next steps and open questions, from the transcript and your own notes.
 - **A library of every call.** Folders, search, copy and Markdown export.
@@ -31,9 +31,9 @@
 
 ## How it works
 
-1. **Prepare.** Before the call, Ole asks Siesta (over MCP) for the account's context once and keeps it.
+1. **Prepare.** Before the call, Ole asks your MCP server for the account's context once and keeps it.
 2. **Listen.** Your microphone and the call audio are recorded as two tracks and transcribed live.
-3. **Surface.** Every ~20 seconds of new conversation, the transcript is checked against the prepared context. Siesta is only asked again when something isn't there, a few times a minute at most.
+3. **Surface.** Every ~20 seconds of new conversation, the transcript is checked against the prepared context. The server is only asked again when something isn't there, a few times a minute at most.
 4. **Wrap up.** Recording stops, the summary is written, and the meeting lands in your library with its transcript, bullets and notes.
 
 ## Install
@@ -51,8 +51,8 @@ In **Settings > Ole**:
 
 | Setting | What to put there |
 |---|---|
-| **Siesta URL** | Your Siesta server's MCP endpoint, ending in `/mcp`. |
-| **Siesta key** | Create one in Siesta under Settings > API Keys. Siesta is reached over VPN. |
+| **MCP server URL** | Your server's MCP endpoint (https), usually ending in `/mcp`. |
+| **MCP server key** | The API key the server gives you. If the server is behind a VPN, connect first. |
 | **OpenAI key** | A platform key from platform.openai.com. Needed for live bullets, and for OpenAI transcription or summaries. |
 | **Transcription** | *Local* (whisper.cpp on your Mac) or *OpenAI*. |
 | **Assistant** | *Local* (a model on your Mac) or *OpenAI*. |
@@ -63,12 +63,12 @@ Keys are encrypted with the macOS Keychain and only ever shown masked.
 
 - Meetings, transcripts, notes and bullets live on your Mac in `~/Library/Application Support/Ole`.
 - With **OpenAI** picked, call audio and transcript text go to OpenAI on your key. With **Local**, they never leave your Mac.
-- Siesta gets the meeting and account being prepared, and short search phrases from the conversation when Ole looks for other customers' experience. Ole only reads from Siesta.
+- Your MCP server gets the meeting and account being prepared, and short search phrases from the conversation when Ole looks for other customers' experience. Ole only reads from it.
 - Nobody on the call is told you are recording. Tell them.
 
 <details><summary>FAQ</summary>
 
-**Does it work without Siesta?** Recording, transcripts, summaries and the library work without it (that part is Yogurt). The prepared context and bullets need Siesta.
+**Does it work without an MCP server?** Recording, transcripts, summaries and the library work without one (that part is Yogurt). The prepared context and bullets need it.
 
 **Does it work without OpenAI?** Yes, with local models for transcription and summaries. The live bullets need an OpenAI key in the alpha.
 

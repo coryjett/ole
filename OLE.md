@@ -1,12 +1,12 @@
 # Ole
 
-Ole is a fork of [Yogurt](https://github.com/FrigadeHQ/yogurt) (MIT, by Frigade) that adds a live call companion for Siesta: a pre-call warm-up from Siesta over MCP, context bullets during the call, and OpenAI as an optional provider for transcription and notes. Yogurt does the hard parts (two-track capture, live transcription, speaker names, notes, library); Ole adds what only Siesta can provide.
+Ole is a fork of [Yogurt](https://github.com/FrigadeHQ/yogurt) (MIT, by Frigade) that adds a live call companion: a pre-call warm-up from an MCP server, context bullets during the call, and OpenAI as an optional provider for transcription and notes. Yogurt does the hard parts (two-track capture, live transcription, speaker names, notes, library); Ole adds the context from your MCP server and OpenAI.
 
 Design: `docs/superpowers/specs/2026-11-19-ole-design.md`. Plan: `docs/superpowers/plans/2026-11-19-ole-fork-foundation.md`.
 
 ## Install (alpha)
 
-Download the `.dmg` from the pre-releases at https://github.com/coryjett/ole/releases, drag Ole to Applications, open it. Then Settings > Ole: add your OpenAI key and Siesta key, set Transcription and Assistant to OpenAI if you have no local models. Siesta needs the VPN.
+Download the `.dmg` from the pre-releases at https://github.com/coryjett/ole/releases, drag Ole to Applications, open it. Then Settings > Ole: add your OpenAI key and the MCP server URL and key, set Transcription and Assistant to OpenAI if you have no local models. If the server is behind a VPN, connect first.
 
 New versions download in the background and macOS shows "Ole x is ready"; Settings > Updates has the restart button.
 
