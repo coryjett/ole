@@ -55,7 +55,7 @@ describe('thumbs up or down (#55)', () => {
       feedback: { useful: ['Fixed in 2.3, same error'], notUseful: ['Consider asking about timelines'] },
     })
     const user = msgs[1].content ?? ''
-    expect(user).toContain('- Generic advice (the user marked this not useful)')
+    expect(user).toContain('- Generic advice (the user marked this not useful: give nothing more on its topic this call)')
     expect(user).toContain('- Same 429s at a fintech (the user marked this useful)')
     expect(user).toContain('Bullets the user found useful on earlier calls:\n- Fixed in 2.3, same error')
     expect(user).toContain('Bullets the user found not useful on earlier calls (give none like these):\n- Consider asking about timelines')

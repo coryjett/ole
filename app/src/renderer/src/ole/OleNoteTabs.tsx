@@ -13,7 +13,7 @@ import { OleBullets } from './OleBullets'
 import { OleCallLists } from './OleCallLists'
 import { OlePanelHeader } from './OlePanel'
 import { OleCallSourcesView, OleExportReplay, OleSavedBulletsView } from './OleSavedBullets'
-import { OLE_TAB_LABEL, oleTabs, quickNoteKey, unseenCount, type OleTab } from './oleTabs'
+import { OLE_TAB_LABEL, oleTabs, quickNoteKey, quickNoteTarget, unseenCount, type OleTab } from './oleTabs'
 
 type Saved = { meetingId: string; bullets: OleBullet[]; answers: OleAnswer[]; call: OleCallMemory | null; briefing: string }
 export type OleNote = { state: OleLiveState | null; saved: Saved | null; tabs: OleTab[]; unseen: number }
@@ -84,13 +84,20 @@ export function OleTabLabel({ tab, unseen = 0 }: { tab: OleTab; unseen?: number 
  * Live: Prepare and its warnings, the strip, the bullets, the call's lists, every answer from Ask (#122); the page
  * scrolls, nothing is capped. answersInColumn: the Ask column is on screen and lists them, so they aren't twice (#148).
  */
-export function OleLiveTab({ state, answersInColumn = false }: { state: OleLiveState; answersInColumn?: boolean }) {
+export function OleLiveTab({ state, answersInColumn = false, addNote }: { state: OleLiveState; answersInColumn?: boolean
+  /** adds a line to My notes (the quick-note path): a note on a bullet goes there too (#174) */
+  addNote?: (text: string) => boolean }) {
   const text = state.prepared?.text ?? ''
   return <div data-testid="ole-live-tab" className="flex flex-col gap-2">
     <OlePanelHeader state={state} />
     {text && <BeforeYouJoinStrip text={text} />}
     <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight="none" header={false} spotlight
-      onPin={(id, on) => void window.yogurt.ole.pinBullet(id, on)} onRate={(id, r) => void window.yogurt.ole.rateBullet(id, r)} />
+      onPin={(id, on) => void window.yogurt.ole.pinBullet(id, on)} onRate={(id, r) => void window.yogurt.ole.rateBullet(id, r)}
+      onNote={(b, text) => { void window.yogurt.ole.noteBullet(b.id, text); addNote?.(`${text} (re: ${b.text})`) }}
+    />
+    {/* what the person told Ole this call (#176), so it's clear what Ole is following */}
+    {(state.directions?.length ?? 0) > 0 && <div data-testid="ole-directions" className="text-[12px] leading-[17px]" style={{ color: 'var(--muted)' }}>
+      <span className="font-semibold">You told Ole:</span> {state.directions!.join(' · ')}</div>}
     <OleCallLists openQuestions={state.openQuestions} commitments={state.commitments} />
     {!answersInColumn && <OleAnswers answers={state.answers ?? []} />}
   </div>
@@ -105,14 +112,14 @@ function BriefingTab({ text, empty }: { text: string; empty: string }) {
  * The tab panel for Ole's tabs. It stays mounted while another tab shows (hidden), so a half-typed question or
  * focus is kept, the way the transcript keeps its place. askColumn: the Ask column is shown beside it (#148).
  */
-export function OleTabPanels({ tab, meetingId, recording, ole, askColumn = false }: { tab: OleTab | null; meetingId: string; recording: boolean; ole: OleNote; askColumn?: boolean }) {
+export function OleTabPanels({ tab, meetingId, recording, ole, askColumn = false, addNote }: { tab: OleTab | null; meetingId: string; recording: boolean; ole: OleNote; askColumn?: boolean; addNote?: (text: string) => boolean }) {
   const { state, saved } = ole
   const live = recording && !!state && state.meetingId === meetingId
   return <section data-testid="note-ole-panel" id="note-ole-panel" role="tabpanel" aria-labelledby={tab ? `note-ole-${tab}-tab` : undefined} hidden={!tab}
     className="note-content" style={{ overflowY: 'auto', overscrollBehavior: 'contain' }}>
     <div className="note-page-width" style={{ paddingBlock: '18px 40px' }}>
       {live && <>
-        <div hidden={tab !== 'live'}><OleLiveTab state={state} answersInColumn={askColumn} /></div>
+        <div hidden={tab !== 'live'}><OleLiveTab state={state} answersInColumn={askColumn} addNote={addNote} /></div>
         <div hidden={tab !== 'briefing'}><BriefingTab text={state.prepared?.text ?? ''} empty="No briefing for this call yet. Ole picks up who it's with from the conversation; choose a name on the Live tab to prepare now." /></div>
       </>}
       {!recording && saved && <>
@@ -135,14 +142,19 @@ export function OleQuickNote({ onAdd }: { onAdd: (text: string) => boolean }) {
   const [text, setText] = useState('')
   const input = useRef<HTMLInputElement>(null)
   return <div data-testid="ole-quick-note" className="note-page-width flex items-center gap-1" style={{ paddingTop: 8 }}>
-    <input ref={input} data-testid="ole-quick-note-input" className="settings-input w-full" aria-label="Add a note to My notes" placeholder="Add a note…"
+    <input ref={input} data-testid="ole-quick-note-input" className="settings-input w-full" aria-label="Add a note to My notes, or start with > to tell Ole" placeholder="Add a note… or > to tell Ole"
       value={text} maxLength={500} onChange={e => setText(e.target.value)}
       onKeyDown={e => {
         const act = quickNoteKey({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })
         if (!act) return
         e.preventDefault()
         if (act === 'leave') e.currentTarget.blur()
-        else if (onAdd(text)) setText('')
+        else {
+          // "> ..." steers Ole for the rest of the call (#176); anything else is a note
+          const to = quickNoteTarget(text)
+          if (to && 'steer' in to) { void window.yogurt?.ole?.steer?.(to.steer); setText('') }
+          else if (onAdd(text)) setText('')
+        }
       }} />
     {text && <button data-testid="ole-quick-note-clear" aria-label="Clear" className="workspace-button" onClick={() => { setText(''); input.current?.focus() }}>×</button>}
   </div>

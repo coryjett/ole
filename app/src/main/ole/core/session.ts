@@ -1,5 +1,6 @@
 // Ole: the live call companion. Before the call, the model gathers a briefing from the MCP servers' read-only tools
 // (prepare.ts); during it, context bullets from the transcript, the briefing and throttled tool lookups (bullets.ts).
+import { DIRECTIONS_MAX, NOTE_MAX, steerLine } from './steer'
 import type { McpServerConfig, OleAnswer, OleBullet, OleCallMemory, OleExportResult, OleLiveState, OleTool, PreparedContext } from './types'
 import type { OleHost } from './host'
 import { providersOf } from './providers'
@@ -100,6 +101,10 @@ export type OleHandlers = {
   pin(id: unknown, on: unknown): OleLiveState
   /** ole:bullet:rate (#55) */
   rate(id: unknown, rating: unknown): OleLiveState
+  /** ole:bullet:note (#174): the person's note on a live bullet; '' removes it */
+  noteBullet(id: unknown, text: unknown): OleLiveState
+  /** ole:steer (#176): a direction for the rest of the call */
+  steer(text: unknown): OleLiveState
   /**
    * ole:ask: a question during the call (#53). requestId (optional, from the UI): the handle ole:ask:cancel stops it
    * by (#122)
@@ -174,6 +179,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   /** calendar events already auto-prepared */
   const autoDone = new Set<string>()
   let answers: OleAnswer[] = []
+  /** what the person told Ole this call, oldest first (#176) */
+  let directions: string[] = []
   let answerSeq = 0
   const finishedAnswers = new Map<string, OleAnswer[]>()
   const finished = new Map<string, OleBullet[]>()
@@ -207,7 +214,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     const memory = summarizer?.memory() ?? EMPTY_MEMORY
     return {
     meetingId, preparing, error, bullets, answers, blocked: blocked(), unavailable,
-    openQuestions: memory.openQuestions, commitments: memory.commitments,
+    openQuestions: memory.openQuestions, commitments: memory.commitments, directions,
     prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt, text: prepared.text } : null,
     matched: hasMatchedRecord(prepared),
     matchedName: hasMatchedRecord(prepared) ? (prepared?.records?.[0] || prepared?.focus || prepared?.meetingTitle || null) : null,
@@ -450,7 +457,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       // the call's memory: running summary (#75), the user's notes (#77), earlier questions oldest first (#76)
       const earlier = answers.filter(a => !a.pending && a.id !== id).slice(0, 3).reverse().map(a => ({ question: a.question, text: a.text }))
       const answering = answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(),
-        call: (n, a, opts) => call(n, a, opts), summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier, mentioned: sections.length > 0,
+        call: (n, a, opts) => call(n, a, opts), summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier, directions, mentioned: sections.length > 0,
         ...(signal ? { signal } : {}) })
       // Stop answers at once, even when a request ignores the signal; its late result is dropped
       answering.catch(() => {})
@@ -496,6 +503,17 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     // pin (#54) and rate (#55) a bullet of the call on now
     pin: (id: unknown, on: unknown) => {
       if (typeof id === 'string' && typeof on === 'boolean') engine?.update(id, { pinned: on })
+      return state()
+    },
+    // a note on a live bullet (#174) steers the rest of the call's bullets
+    noteBullet: (id: unknown, text: unknown) => {
+      if (typeof id === 'string' && typeof text === 'string') engine?.update(id, { note: steerLine(text, NOTE_MAX) })
+      return state()
+    },
+    // a direction for the rest of the call (#176): the newest DIRECTIONS_MAX are kept
+    steer: (text: unknown) => {
+      const d = steerLine(text)
+      if (d && meetingId) { directions = [...directions, d].slice(-DIRECTIONS_MAX); send() }
       return state()
     },
     rate: (id: unknown, rating: unknown) => {
@@ -592,6 +610,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       meetingId = m.id
       bullets = []
       answers = []
+      directions = []
       const local = providersOf(host.settings.get()).prepareOn === 'local'
       const named = host.genericTitle(m.title) ? null : m.title
       // the subject picked up from the conversation starts over with each call (#126)
@@ -665,6 +684,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
         feedback: () => { try { return feedbackOf(host.settings.get()) } catch { return { useful: [], notUseful: [] } } },
         summary: () => summarizer?.summary() ?? '',
         notes: () => notesNow(m.id),
+        directions: () => directions,
         mentioned: () => sections.length > 0,
       }) : null
       // the running summary updates in the background from the live model (#75)
@@ -731,7 +751,9 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       resolver = null
       pickToken++
       subject = null
-      const memory = summarizer?.memory() ?? EMPTY_MEMORY
+      // the directions given this call go with its record, so the summary sees them (#176)
+      const memory = { ...(summarizer?.memory() ?? EMPTY_MEMORY), ...(directions.length ? { directions } : {}) }
+      directions = []
       summarizer = null
       // the call's open questions and commitments stay with the meeting (#82)
       if (!isEmptyMemory(memory)) { finishedCalls.set(id, memory); try { host.files.saveCall?.(id, memory) } catch (e) { host.log.warn('saving the call summary failed', e) } }

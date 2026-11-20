@@ -1,5 +1,6 @@
 // Ole: a question typed during the call (#53), answered from the briefing, the last few minutes of the call and,
 // when those lack it, one or two read-only lookups.
+import { directionsPart } from './steer'
 import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
@@ -48,6 +49,8 @@ export async function answerQuestion(o: {
   chat: ChatFn; question: string; context: PreparedContext | null; lines: TranscriptLine[]; tools: OleTool[]; call: CallToolFn
   /** the running summary (#75), the user's notes (#77) and earlier questions in this call, oldest first (#76) */
   summary?: string; notes?: string; earlier?: Array<{ question: string; text: string }>
+  /** what the person told Ole this call (#176) */
+  directions?: string[]
   /** the enricher added sections to the briefing this call (#86), from the session's state */
   mentioned?: boolean
   /** the user pressed Stop (#122): every chat and lookup is cancelled, and answerQuestion rejects with the abort */
@@ -58,6 +61,8 @@ export async function answerQuestion(o: {
   if (!hasMatchedRecord(o.context)) parts.push(noRecordRule(o.mentioned))
   if (o.summary?.trim()) parts.push(`The call so far (summary):\n${o.summary.trim()}`)
   if (o.notes?.trim()) parts.push(`The user's notes so far:\n${latestNotes(o.notes)}`)
+  const steer = directionsPart(o.directions)
+  if (steer) parts.push(steer)
   parts.push(o.lines.length ? `Recent lines (latest):\n${o.lines.slice(-RECENT_LINES).map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}` : 'Nothing said yet.')
   const earlier = (o.earlier ?? []).slice(-EARLIER_QUESTIONS)
   if (earlier.length) parts.push(`Earlier questions in this call:\n${earlier.map(e => `Q: ${e.question}\nA: ${e.text}`).join('\n')}`)
