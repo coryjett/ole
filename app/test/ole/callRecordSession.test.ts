@@ -15,13 +15,14 @@ vi.mock('../../src/main/ole/mcp', async (orig) => {
   return { ...real, createMcpClient: () => ({ listTools: async () => [{ name: 'get_upcoming_meetings', inputSchema: { type: 'object' } }], listPrompts: async () => [], getPrompt: async () => '', callTool: async () => '[]' }) }
 })
 const record = { summary: 'They want rate limits for the morning burst.', openQuestions: ['Is there a free tier?'], commitments: [{ who: 'Me', what: 'Send the benchmark plan' }] }
-const openaiChat = vi.fn(async (req: { messages: Array<{ role: string; content: string }> }) => {
+const usual = async (req: { messages: Array<{ role: string; content: string }> }) => {
   const sys = req.messages[0].content
   if (sys.includes('surfacing short context bullets')) return { role: 'assistant', content: '{"bullets":[]}' }
   if (sys.includes('running record of a live call')) return { role: 'assistant', content: JSON.stringify(record) }
   if (sys.includes('question the user typed')) return { role: 'assistant', content: JSON.stringify({ answer: 'Burst limits shipped in 2.3.', source: 'release notes' }) }
   return { role: 'assistant', content: '## Before you join\n- x' }
-})
+}
+const openaiChat = vi.fn(usual)
 vi.mock('../../src/main/ole/openaiModel', () => ({ openaiChat }))
 
 const ID = '00000000-0000-4000-8000-000000000002'
@@ -43,7 +44,7 @@ async function setup(extra: Record<string, unknown> = {}) {
 }
 const state = () => handlers.get('ole:state')!() as { openQuestions: string[]; commitments: Array<{ who: string; what: string }> }
 
-beforeEach(() => { openaiChat.mockClear() })
+beforeEach(() => { openaiChat.mockReset(); openaiChat.mockImplementation(usual) })
 
 describe('open questions and commitments during and after the call (#82)', () => {
   it('reach the live state as the summary updates, and are saved with the meeting', async () => {
@@ -81,5 +82,59 @@ describe('open questions and commitments during and after the call (#82)', () =>
     expect(ask[1].content).toContain('Open questions:\n- Is there a free tier?')
     expect(ask[1].content).toContain('Commitments:\n- Me: Send the benchmark plan')
     ole.meetingStopped(ID)
+  })
+})
+
+describe('the "From Ole" section when the call ends (#83)', () => {
+  it('goes into the notes after the pinned bullets, in one append', async () => {
+    const { ole, appendNotes } = await setup()
+    ole.meetingStarted({ id: ID, title: 'Rate limits' })
+    ole.segment({ meetingId: ID, track: 'them', text: 'do you have a free tier', startMs: 0 })
+    await vi.waitFor(() => expect(state().openQuestions).toHaveLength(1), { timeout: 3000 })
+    await handlers.get('ole:ask')!({}, 'what shipped in 2.3?')
+    ole.meetingStopped(ID)
+    expect(appendNotes).toHaveBeenCalledTimes(1)
+    expect(appendNotes).toHaveBeenCalledWith(ID, [
+      '## From Ole',
+      'They want rate limits for the morning burst.',
+      '',
+      '**Open questions**',
+      '- Is there a free tier?',
+      '',
+      '**Commitments**',
+      '- Me: Send the benchmark plan',
+      '',
+      '**Asked during the call**',
+      '- what shipped in 2.3?: Burst limits shipped in 2.3. (release notes)',
+    ].join('\n'))
+  })
+
+  it('pinned bullets come first, in the same append', async () => {
+    openaiChat.mockImplementation(async (req: { messages: Array<{ role: string; content: string }> }) => {
+      const sys = req.messages[0].content
+      if (sys.includes('surfacing short context bullets')) return { role: 'assistant', content: JSON.stringify({ bullets: [{ text: 'Renewal is in March', source: 'opportunity: Renewal' }] }) }
+      if (sys.includes('running record of a live call')) return { role: 'assistant', content: JSON.stringify(record) }
+      return { role: 'assistant', content: '## Before you join\n- x' }
+    })
+    const { ole, appendNotes } = await setup()
+    ole.meetingStarted({ id: ID, title: 'Rate limits' })
+    ole.segment({ meetingId: ID, track: 'them', text: 'when is the renewal', startMs: 0 })
+    const bullets = () => (handlers.get('ole:state')!() as { bullets: Array<{ id: string }> }).bullets
+    await vi.waitFor(() => expect(bullets()).toHaveLength(1), { timeout: 3000 })
+    await vi.waitFor(() => expect(state().openQuestions).toHaveLength(1), { timeout: 3000 })
+    await handlers.get('ole:bullet:pin')!({}, bullets()[0].id, true)
+    ole.meetingStopped(ID)
+    expect(appendNotes).toHaveBeenCalledTimes(1)
+    const md = appendNotes.mock.calls[0][1] as string
+    expect(md.startsWith('## Pinned from the call\n- Renewal is in March (opportunity: Renewal)\n\n## From Ole\n')).toBe(true)
+  })
+
+  it('a call where Ole kept nothing adds nothing to the notes', async () => {
+    openaiChat.mockImplementation(async () => ({ role: 'assistant', content: '{"bullets":[]}' }))
+    const { ole, appendNotes } = await setup({ summaryEveryMs: 60 * 60_000 })
+    ole.meetingStarted({ id: ID, title: 'Rate limits' })
+    ole.segment({ meetingId: ID, track: 'them', text: 'hello', startMs: 0 })
+    ole.meetingStopped(ID)
+    expect(appendNotes).not.toHaveBeenCalled()
   })
 })

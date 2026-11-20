@@ -48,6 +48,7 @@ Ole brings the right context to a call, from whatever systems know your world. Y
 - **Prepare on your Mac if you like.** The briefing can run on the local model instead; live context stays on OpenAI or your own server.
 - **Who said what.** Speaker names from Zoom, Teams and Meet.
 - **A summary when you hang up.** Discussion, decisions, next steps and open questions, from the transcript and your own notes.
+- **Ole's part in your notes.** When the call ends, a short "From Ole" section joins your notes, after any pinned bullets: the running summary, open questions, commitments and the questions you asked with their answers, so the summary and next steps include them.
 - **A library of every call.** Folders, search, copy and Markdown export.
 - **No bot in the meeting.** Ole records from your Mac; nobody sees an extra participant.
 - **Your choice of models.** Transcription runs on your Mac or OpenAI; the briefing, bullets and summaries run on OpenAI with your own key or on any OpenAI-compatible server you run, and summaries can also run on your Mac.

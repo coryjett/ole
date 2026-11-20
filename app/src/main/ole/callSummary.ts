@@ -2,7 +2,7 @@
 // minutes. Updated in the background from the previous state and only the lines since, never blocking a turn.
 // Structured (#82): the summary text, the questions raised and still open, and the commitments (who will do what).
 import type { ChatFn, TranscriptLine } from './bullets'
-import type { OleCallMemory, OleCommitment } from './types'
+import type { OleAnswer, OleCallMemory, OleCommitment } from './types'
 
 /** how much new conversation triggers an update */
 export const SUMMARY_EVERY_MS = 3 * 60_000
@@ -95,6 +95,23 @@ export function callMemoryText(m: OleCallMemory): string {
   if (m.openQuestions.length) parts.push(`Open questions:\n${m.openQuestions.map(q => `- ${q}`).join('\n')}`)
   if (m.commitments.length) parts.push(`Commitments:\n${m.commitments.map(c => `- ${commitmentLine(c)}`).join('\n')}`)
   return parts.join('\n\n')
+}
+
+/** an answer worth keeping in the notes: answered, not the "couldn't find it" or a failure */
+const answered = (a: OleAnswer) => !a.pending && !!a.text.trim() && !/^Couldn['’]t (?:find that|answer)\b/.test(a.text)
+
+/**
+ * The "From Ole" notes section a finished call adds to the meeting's notes (#83): the running summary, open
+ * questions, commitments and the questions asked with their answers, oldest first. '' when there is nothing.
+ */
+export function fromOleNotes(m: OleCallMemory, answers: OleAnswer[] = []): string {
+  const parts: string[] = []
+  if (m.summary.trim()) parts.push(m.summary.trim())
+  if (m.openQuestions.length) parts.push(`**Open questions**\n${m.openQuestions.map(q => `- ${q}`).join('\n')}`)
+  if (m.commitments.length) parts.push(`**Commitments**\n${m.commitments.map(c => `- ${commitmentLine(c)}`).join('\n')}`)
+  const asked = answers.filter(answered).sort((a, b) => a.at - b.at)
+  if (asked.length) parts.push(`**Asked during the call**\n${asked.map(a => `- ${a.question.replace(/\s+/g, ' ').trim()}: ${a.text.replace(/\s+/g, ' ').trim()}${a.source ? ` (${a.source})` : ''}`).join('\n')}`)
+  return parts.length ? `## From Ole\n${parts.join('\n\n')}` : ''
 }
 
 export function createCallSummarizer(o: { chat: ChatFn; now?: () => number; everyMs?: number; onChange?: (m: OleCallMemory) => void }): {

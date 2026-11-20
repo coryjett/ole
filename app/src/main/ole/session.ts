@@ -18,7 +18,7 @@ import { answerQuestion } from './ask'
 import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
 import { feedbackOf, recordRating } from './feedback'
 import { createTurnRecorder, type RecordedCall } from './turnRecorder'
-import { createCallSummarizer, EMPTY_MEMORY, isEmptyMemory } from './callSummary'
+import { createCallSummarizer, EMPTY_MEMORY, fromOleNotes, isEmptyMemory } from './callSummary'
 import { buildReplayFixture, exportFileName, type ExportSegment } from './replayExport'
 import type { OleExportResult } from '../../shared/types'
 
@@ -39,7 +39,7 @@ type Deps = {
   notify?: (title: string, body: string) => void
   /** how often the servers are checked in the background; 0 turns the background check off (tests) */
   checkEveryMs?: number
-  /** adds markdown to the end of a meeting's own notes, so pinned bullets reach the summary (#54) */
+  /** adds markdown to the end of a meeting's own notes, so pinned bullets (#54) and Ole's record of the call (#83) reach the summary */
   appendNotes?: (meetingId: string, md: string) => void
   /** a meeting's questions and answers (#53), saved with it and read back */
   saveAnswers?: (meetingId: string, answers: OleAnswer[]) => void
@@ -393,9 +393,10 @@ export function hookOle(d: Deps): {
       if (!isEmptyMemory(memory)) { finishedCalls.set(id, memory); try { d.saveCall?.(id, memory) } catch (e) { console.warn('saving the call summary failed', e) } }
       finished.set(id, bullets)
       try { d.save?.(id, bullets) } catch (e) { console.warn('saving the context bullets failed', e) }
-      // pinned bullets join the person's own notes, so the summary and the notes keep them (#54)
-      const pinned = pinnedNotes(bullets)
-      if (pinned) try { d.appendNotes?.(id, pinned) } catch (e) { console.warn('adding the pinned bullets to the notes failed', e) }
+      // pinned bullets join the person's own notes, so the summary and the notes keep them (#54); then what Ole kept of
+      // the call: summary, open questions, commitments and the questions asked (#83). One append, so one notes write.
+      const md = [pinnedNotes(bullets), fromOleNotes(memory, answers)].filter(Boolean).join('\n\n')
+      if (md) try { d.appendNotes?.(id, md) } catch (e) { console.warn('adding Ole\'s notes to the meeting failed', e) }
       if (answers.length) { finishedAnswers.set(id, answers); try { d.saveAnswers?.(id, answers) } catch (e) { console.warn('saving the answers failed', e) } }
       answers = []
       if (recorder) {
