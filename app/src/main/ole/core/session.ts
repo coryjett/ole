@@ -137,6 +137,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   let resolver: SubjectResolver | null = null
   let callTitle: string | null = null
   let callStartsAt: number | null = null
+  /** when the live call started (#137) */
+  let callStartedAt: number | null = null
   let subject: { name: string; auto: boolean } | null = null
   let chosen = false, autoPicked = false
   /** bumped on every call start, stop and clear: a pending auto-pick from before never runs */
@@ -180,6 +182,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     openQuestions: memory.openQuestions, commitments: memory.commitments,
     prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt, text: prepared.text } : null,
     matched: hasMatchedRecord(prepared),
+    matchedName: hasMatchedRecord(prepared) ? (prepared?.records?.[0] || prepared?.focus || prepared?.meetingTitle || null) : null,
     // chips while the call is unmatched, and after a subject was picked, so a click still switches among them (#126)
     subjectCandidates: meetingId && resolver && (!hasMatchedRecord(prepared) || subject) ? resolver.candidates() : [],
     subject: meetingId ? subject : null,
@@ -515,7 +518,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     },
     prepare: (opts: unknown) => {
       const input = (opts && typeof opts === 'object' ? opts : {}) as Record<string, unknown>
-      return prepare({ focus: text(input.focus, 200), meetingTitle: text(input.meetingTitle, 300) })
+      // Refresh briefing during a call stays on that call: its id and start time (#137)
+      return prepare({ focus: text(input.focus, 200), meetingTitle: text(input.meetingTitle, 300), ...(meetingId ? { forMeeting: meetingId, startsAt: callStartsAt } : {}) })
     },
     chooseSubject: (name: unknown) => {
       const chosenName = text(name, SUBJECT_NAME_MAX)
@@ -547,7 +551,9 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       // the subject picked up from the conversation starts over with each call (#126)
       pickToken++
       callTitle = named
-      callStartsAt = null
+      // the call's own start: a live call only ever matches a meeting near when it started, never the next one (#137)
+      callStartedAt = host.clock.now()
+      callStartsAt = callStartedAt
       subject = null
       chosen = false
       autoPicked = false
@@ -595,9 +601,9 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
         // a call with its own title never takes another event's start or note (#135)
         const useEvent = named ? null : event
         const title = named ?? useEvent?.title ?? null
-        callStartsAt = useEvent?.start ?? null
+        callStartsAt = useEvent?.start ?? callStartedAt
         preparedFromDefault = !title
-        await prepare({ meetingTitle: title, forMeeting: m.id, startsAt: useEvent?.start ?? null, note: useEvent?.note, noteSource: useEvent?.source })
+        await prepare({ meetingTitle: title, forMeeting: m.id, startsAt: callStartsAt, note: useEvent?.note, noteSource: useEvent?.source })
       })()
       // each bullets turn is kept with the call, on this Mac, for Export for replay (#70)
       recorder = !liveBlocked() ? createTurnRecorder({ chat, callTool: (name, argsJson) => call(name, argsJson) }) : null
@@ -659,7 +665,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     meetingRenamed(m) {
       if (m.id !== meetingId || !preparedFromDefault || host.genericTitle(m.title)) return
       preparedFromDefault = false
-      if (providersOf(host.settings.get()).prepareOn !== 'local') void prepare({ meetingTitle: m.title, forMeeting: m.id })
+      if (providersOf(host.settings.get()).prepareOn !== 'local') void prepare({ meetingTitle: m.title, forMeeting: m.id, startsAt: callStartsAt })
     },
     segment(seg) {
       if (seg.meetingId !== meetingId || !engine || !seg.text.trim()) return
