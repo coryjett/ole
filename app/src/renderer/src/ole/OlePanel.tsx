@@ -39,7 +39,6 @@ export function OlePanelHeader({ state }: { state: OleLiveState }) {
   const refresh = () => void window.yogurt.ole.prepare({ focus: state.prepared?.focus ?? null, meetingTitle: state.prepared?.meetingTitle ?? null })
   return <>
     <div className="flex flex-wrap items-center gap-2">
-      <strong className="text-[13px]">Ole</strong>
       {state.meetingId && <button data-testid="ole-refresh" className="workspace-button settings-action ml-auto" disabled={state.preparing || !!state.blocked} onClick={refresh}
         title="Rebuilds the briefing; bullets so far stay.">{state.preparing ? 'Preparing…' : 'Refresh briefing'}</button>}
     </div>
