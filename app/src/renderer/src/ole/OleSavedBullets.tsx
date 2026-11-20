@@ -53,7 +53,7 @@ export function OleExportReplayView({ anonymise, busy, result, onAnonymise, onEx
   </div>
 }
 
-function OleExportReplay({ meetingId }: { meetingId: string }) {
+export function OleExportReplay({ meetingId }: { meetingId: string }) {
   const [anonymise, setAnonymise] = useState(true)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<OleExportResult | null>(null)

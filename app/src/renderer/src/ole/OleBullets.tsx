@@ -32,7 +32,8 @@ function BulletControls({ b, onPin, onRate }: { b: OleBullet; onPin: (id: string
   </span>
 }
 
-export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate }: { bullets: OleBullet[]; prepared: OlePrepared | null; maxHeight?: number; now?: number
+export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate }: { bullets: OleBullet[]; prepared: OlePrepared | null; /** 'none': no cap, the page around it scrolls (the note's Live tab, #108) */
+  maxHeight?: number | 'none'; now?: number
   /** live call only: pin (#54) and rate (#55); a saved meeting shows the marks without buttons */
   onPin?: (id: string, on: boolean) => void; onRate?: (id: string, r: 'up' | 'down' | null) => void }) {
   const [all, setAll] = useState(false)
