@@ -29,7 +29,7 @@ A running ledger of every change Ole makes to Yogurt-owned files: anything outsi
 | A title written from the notes goes through an optional `generatedTitle` hook before it is saved, so Ole puts the call's matched organization in front (`hookNotes`'s queued title job, the only place a generated title is written); `index.ts` passes the Ole session's `generatedTitle` | #154 | `main/notes/index.ts`, `main/index.ts` |
 | The notes writer takes an optional `extraNotes` hook: text given to the writer after the person's own notes and never saved into them; `index.ts` passes the Ole session's `notesInput` (pinned bullets and Ole's record of the call), which used to be appended to My notes | #168 | `main/notes/index.ts`, `main/index.ts` |
 | OpenAI transcription (chunked and streaming) behind the Transcribe seam | #85, #89 | `main/asr/index.ts` |
-| Ole tabs, quick-note bar and docked Ask on the note page; the Ask column beside the tab panels on a wide note, and the width measurement it needs | #108, #122, #148 | `renderer/src/screens/Note.tsx` |
+| Ole tabs, quick-note bar and docked Ask on the note page; after a call no Ole tabs, and Ole's sources under the Summary (#170); the Ask column beside the tab panels on a wide note, and the width measurement it needs | #108, #122, #148, #170 | `renderer/src/screens/Note.tsx` |
 | Ask button hands over to Ole's docked Ask during a call (one line) | #122 | `renderer/src/components/Chat.tsx` |
 | Ole panel on Home | #35 | `renderer/src/screens/Home.tsx` |
 | Ole settings section | #10 and later | `renderer/src/screens/Settings.tsx` |

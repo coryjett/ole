@@ -84,3 +84,24 @@ export function OleSavedBullets({ meetingId }: { meetingId: string }) {
   const olePart = !!briefing || bullets.length > 0 || answers.length > 0 || !!call
   return <>{briefing && <div className="settings-group" style={{ padding: 12, margin: '8px 0' }}><OleBriefing text={briefing} defaultOpen={false} /></div>}<OleSavedBulletsView bullets={bullets} answers={answers} call={call} />{olePart && <OleExportReplay meetingId={meetingId} />}</>
 }
+
+/**
+ * Under the summary after a call (#170): the bullets with their source links and the questions asked, collapsed, and
+ * Export for replay. Open questions and commitments aren't repeated here: the summary has them (#168).
+ */
+export function OleCallSourcesView({ meetingId, bullets, answers, exportable }: { meetingId: string; bullets: OleBullet[]; answers: OleAnswer[]; exportable: boolean }) {
+  const n = bullets.length + answers.length
+  if (!n && !exportable) return null
+  const sorted = [...bullets].sort((a, b) => a.at - b.at)
+  return <details data-testid="ole-call-sources" className="settings-group" style={{ padding: 12, margin: '24px 0 8px' }}>
+    <summary className="cursor-pointer text-[13px] font-semibold">{n ? `Sources from the call (${n})` : 'From the call'}</summary>
+    {sorted.length > 0 && <ul role="list" className="mt-2 flex flex-col gap-2">
+      {sorted.map(b => <li key={b.id} data-testid="ole-saved-bullet" className="text-[13px] leading-[19px]" dir="auto">
+        <span>{b.pinned && <span title="Pinned">📌 </span>}{b.text}</span>
+        <span className="block text-[11px] leading-[16px]" style={{ color: 'var(--muted)' }}>{b.quote ? <>From <SourceName b={b} />: “{b.quote}”</> : <SourceName b={b} />}</span>
+      </li>)}
+    </ul>}
+    {answers.length > 0 && <><p className="mt-3 text-[13px] font-semibold">Asked during the call ({answers.length})</p><OleAnswers answers={answers} /></>}
+    {exportable && <OleExportReplay meetingId={meetingId} />}
+  </details>
+}

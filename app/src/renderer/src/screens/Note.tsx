@@ -1,5 +1,5 @@
 import { TranscriptionControl, TranscriptionNotice } from '../components/Transcription'
-import { OleQuickNote, OleTabLabel, OleTabPanels, useOleNote } from '../ole/OleNoteTabs'
+import { OleCallSources, OleQuickNote, OleTabLabel, OleTabPanels, useOleNote } from '../ole/OleNoteTabs'
 import { OleAskColumn, OleAskPanel } from '../ole/OleAsk'
 import { askColumnShown, useAskColumnWide } from '../ole/oleAskColumn'
 import { appendQuickNote, callElapsedMs, fitTab, isOleTab, type NoteTab, type OleTab } from '../ole/oleTabs'
@@ -461,6 +461,8 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
                   onChange={(md) => { typing.current = true; const next = { ...current.current!, mine: md }; current.current = next; setNotes(next); mineSave.change(md) }}
                   onBlur={() => { typing.current = false; mineSave.flush() }}
                 /> : <Enhanced key={id} presentation={summaryState} focus={primary === 'notes' && at?.ms === null ? at : undefined} notes={notes} disabled={starting} onChange={(md) => { setEditedHere(true); const next = { ...current.current!, enhanced: md }; current.current = next; setNotes(next); enhancedSave.change(md) }} onBlur={enhancedSave.flush} onRetry={requestRewrite} />}
+                {/* Ole: after the call, what it kept and its sources sit under the summary (#170) */}
+                {shown === 'enhanced' && !recording && <OleCallSources meetingId={id} ole={ole} />}
           </NoteReadingPane>
           {(primary === 'transcript' || transcriptVisited) && <section hidden={primary !== 'transcript'} id="note-transcript-panel" role="tabpanel" aria-labelledby="note-transcript-tab" className="note-content note-transcript-pane">
             <Transcript notice={<>{(hasAudio&&(m.transcriptionPending||!hasTranscript)||m.transcriptionState==='waiting-model'||m.transcriptionState==='waiting-recording')&&<TranscriptionNotice state={m.transcriptionState} hasLines={hasTranscript} onContinue={()=>void runTranscript()} disabled={recording||!!m.stopSavePending}/>}

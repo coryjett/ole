@@ -12,6 +12,8 @@ export const NAMES_WAIT_MS = 60_000
 export const PEOPLE_REWRITE_MS = 3000
 /** Reject oversized notes without silently discarding any accepted editor text. */
 export const NOTES_MAX = 2_000_000
+/** Ole: the most of its record of the call given to the writer (#168) */
+export const OLE_NOTES_MAX = 8000
 /** the draft goes to the window at most this often while it is written */
 const DRAFT_EVERY_MS = 50
 
@@ -126,11 +128,12 @@ export function hookNotes(p: {
     if (!m || m.state === 'recording' || resuming.has(id)) return
     const was = currentNotes(id)
     // Ole: its record of the call goes in after the person's own notes, for the writer only (#168)
-    const extra = (() => { try { return p.extraNotes?.(id).trim() ?? '' } catch { return '' } })()
-    const mine = extra ? (was.mine.trim() ? `${was.mine.trimEnd()}\n\n${extra}` : extra) : was.mine
+    // capped like the person's own notes are bounded; Ole's record alone never starts a summary
+    const extra = (() => { try { return p.extraNotes?.(id).trim().slice(0, OLE_NOTES_MAX) ?? '' } catch { return '' } })()
     const segments = p.store.segments(id)
     // nothing said and nothing typed: there is nothing to write up
-    if (!segments.length && !mine.trim()) { if (!quiet) finish(m, 'empty'); return }
+    if (!segments.length && !was.mine.trim()) { if (!quiet) finish(m, 'empty'); return }
+    const mine = extra ? (was.mine.trim() ? `${was.mine.trimEnd()}\n\n${extra}` : extra) : was.mine
     // still "getting ready" while the model loads: "writing" comes with the first words (or a long meeting's first part)
     // the people the prompt is built with: a change while writing then still marks these notes as out of date
     const used = { stamp: stamp(m.attendees) }

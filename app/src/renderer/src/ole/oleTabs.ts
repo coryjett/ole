@@ -14,14 +14,12 @@ export const OLE_TAB_LABEL: Record<OleTab, string> = { live: 'Live', briefing: '
 /** what Ole kept for a saved meeting */
 export type OleSavedParts = { bullets: number; answers: number; lists: number; briefing: boolean }
 
-/** recording: always Live and Briefing. Saved: Context with bullets, answers, open questions or commitments; Briefing with a briefing. */
-export function oleTabs(recording: boolean, saved: OleSavedParts | null): OleTab[] {
-  if (recording) return ['live', 'briefing']
-  if (!saved) return []
-  const tabs: OleTab[] = []
-  if (saved.bullets > 0 || saved.answers > 0 || saved.lists > 0) tabs.push('context')
-  if (saved.briefing) tabs.push('briefing')
-  return tabs
+/**
+ * recording: Live and Briefing. After the call none: the note is Transcript, Summary and My notes (#170); what Ole kept
+ * feeds the summary (#168) and its sources sit under it (OleCallSources)
+ */
+export function oleTabs(recording: boolean, _saved: OleSavedParts | null): OleTab[] {
+  return recording ? ['live', 'briefing'] : []
 }
 
 /** the tab to show for the one chosen: an Ole tab that isn't there now becomes its counterpart (live and context), else My notes */

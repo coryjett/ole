@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openStore, type Meeting, type Store } from '../src/main/store'
-import { hookNotes, NOTES_MAX } from '../src/main/notes'
+import { hookNotes, NOTES_MAX, OLE_NOTES_MAX } from '../src/main/notes'
 import { createQueue } from '../src/main/notes/queue'
 import type { Llm } from '../src/main/notes/enhance'
 import type { NoteView } from '../src/shared/types'
@@ -474,6 +474,19 @@ describe('a title from the notes', () => {
     expect(s.prompts.join('\n')).toContain('- Me: Send the plan')
     expect(s.store.notes(s.m.id).mine).toBe('- ship tuesday')
     expect(s.notes.view(s.m.id).mine).toBe('- ship tuesday')
+  })
+  it('Ole: its record alone never starts a summary with no transcript and nothing typed (#168)', async () => {
+    const s = setup({ extraNotes: () => '## From Ole\nThey want burst limits.' })
+    s.store.setNotes(s.m.id, { mine: '' })
+    s.store.hideSegments(s.store.segments(s.m.id).map((x) => x.id))
+    s.stop(); s.transcribed(); await wait(30)
+    expect(s.prompts).toEqual([])
+  })
+  it('Ole: its record is capped before it reaches the writer (#168)', async () => {
+    const s = setup({ extraNotes: () => 'x'.repeat(OLE_NOTES_MAX * 3) })
+    s.stop(); s.transcribed(); await wait(30)
+    expect(s.prompts.join('\n').includes('x'.repeat(OLE_NOTES_MAX + 1))).toBe(false)
+    expect(s.prompts.join('\n')).toContain('x'.repeat(100))
   })
   it('Ole: with nothing typed, its record still reaches the summary and My notes stays empty (#168)', async () => {
     const s = setup({ extraNotes: () => '## From Ole\nThey want burst limits.' })

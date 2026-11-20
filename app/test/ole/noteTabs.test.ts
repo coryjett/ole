@@ -1,22 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { Note } from '../../src/renderer/src/screens/Note'
-import { OleQuickNote, OleTabLabel, OleTabPanels } from '../../src/renderer/src/ole/OleNoteTabs'
+import { OleCallSources, OleQuickNote, OleTabLabel, OleTabPanels } from '../../src/renderer/src/ole/OleNoteTabs'
 import { OleAskColumn, OleAskPanel } from '../../src/renderer/src/ole/OleAsk'
 import { appendQuickNote, callElapsedMs, callTime, fitTab, oleTabs, quickNoteKey, unseenCount } from '../../src/renderer/src/ole/oleTabs'
 import type { MeetingView, NoteView, OleLiveState } from '../../src/shared/types'
 
 describe("Ole's tabs, pure parts (#108)", () => {
   const none = { bullets: 0, answers: 0, lists: 0, briefing: false }
-  it('Live and Briefing during a call; Context and Briefing after it, each only with something in it', () => {
+  it('Live and Briefing during a call; after it no Ole tabs at all: Transcript, Summary and My notes (#170)', () => {
     expect(oleTabs(true, null)).toEqual(['live', 'briefing'])
     expect(oleTabs(false, null)).toEqual([])
     expect(oleTabs(false, none)).toEqual([])
-    expect(oleTabs(false, { ...none, bullets: 2 })).toEqual(['context'])
-    expect(oleTabs(false, { ...none, answers: 1 })).toEqual(['context'])
-    expect(oleTabs(false, { ...none, lists: 1 })).toEqual(['context'])
-    expect(oleTabs(false, { ...none, briefing: true })).toEqual(['briefing'])
-    expect(oleTabs(false, { ...none, bullets: 1, briefing: true })).toEqual(['context', 'briefing'])
+    expect(oleTabs(false, { bullets: 2, answers: 1, lists: 3, briefing: true })).toEqual([])
   })
   it('an Ole tab that is gone becomes its counterpart, else My notes', () => {
     expect(fitTab('live', ['context', 'briefing'])).toBe('context')
@@ -168,17 +164,23 @@ describe("Ole's tabs on the note page (#108)", () => {
     expect(byType(OleTabPanels)).toBeUndefined()
     expect(selected('note-notes-tab')).toBe(true)
   })
-  it('a saved meeting shows Context with bullets and Briefing with a briefing', async () => {
+  it('after the call the sources sit under the Summary, not under My notes (#170)', async () => {
     meeting = { ...meeting, state: 'done', endedAt: 2 }
+    notes = { ...notes, enhanced: '## Summary\n- Ship Tuesday', status: 'done' }
     saved = { ...saved, bullets: [bullet('a', 1)] }
     await settle()
-    expect(byId('note-ole-context-tab')).toBeDefined()
-    expect(byId('note-ole-briefing-tab')).toBeUndefined()
-    unmount()
-    saved = { bullets: [], answers: [], call: { openQuestions: [], commitments: [] }, briefing: '## Who\n- Someone' }
+    await click('note-summary-tab')
+    expect(byType(OleCallSources)).toBeDefined()
+    await click('note-notes-tab')
+    expect(byType(OleCallSources)).toBeUndefined()
+  })
+  it('a saved meeting has no Ole tabs, even with bullets and a briefing (#170)', async () => {
+    meeting = { ...meeting, state: 'done', endedAt: 2 }
+    saved = { ...saved, bullets: [bullet('a', 1)], briefing: '## Who\n- Someone' }
     await settle()
     expect(byId('note-ole-context-tab')).toBeUndefined()
-    expect(byId('note-ole-briefing-tab')).toBeDefined()
+    expect(byId('note-ole-briefing-tab')).toBeUndefined()
+    expect(byId('note-ole-live-tab')).toBeUndefined()
   })
   it('Live counts bullets that came while another tab was shown, and clears when shown', async () => {
     oleState = { ...oleState, bullets: [bullet('a', 1)] }
@@ -207,7 +209,7 @@ describe('the quick note (#108)', () => {
     expect(byType(OleQuickNote)).toBeUndefined()
     unmount(); meeting = { ...meeting, state: 'done', endedAt: 2 }; saved = { ...saved, briefing: 'x' }
     await settle()
-    await click('note-ole-briefing-tab')
+    await click('note-transcript-toggle')
     expect(byType(OleQuickNote)).toBeUndefined()
   })
   it('appends to My notes through the notes save path, after what was typed, without leaving the tab', async () => {
