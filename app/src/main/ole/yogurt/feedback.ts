@@ -1,5 +1,5 @@
 // Ole: thumbs up or down on bullets (#55), kept across calls so later calls surface more of what helped.
-import { loadSettings, updateSettings } from '../settings'
+import { loadSettings, updateSettings } from '../../settings'
 
 /** rated bullets kept per kind, newest first */
 export const FEEDBACK_KEEP = 20

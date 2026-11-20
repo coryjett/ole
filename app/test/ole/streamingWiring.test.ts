@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Capture, encodeFrame, hookCapture, recordingFinished, type CaptureProc } from '../../src/main/capture'
 import { hookTranscription, settleTranscription, stopTranscriptionServer, transcribeRecorded } from '../../src/main/asr'
 import { openStore, type Meeting, type Segment, type Store } from '../../src/main/store'
-import type { WsLike } from '../../src/main/ole/openaiStream'
+import type { WsLike } from '../../src/main/ole/yogurt/openaiStream'
 
 // #85: a live meeting transcribed by OpenAI streams, and its lines reach the store and the window in the usual shape
 

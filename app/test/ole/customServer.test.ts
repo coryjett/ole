@@ -10,11 +10,11 @@ vi.mock('electron', () => ({
   ipcMain: { handle: (n: string, f: (...a: unknown[]) => unknown) => handlers.set(n, f) },
   safeStorage: { isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() },
 }))
-const { openaiChat, OLE_USER_AGENT } = await import('../../src/main/ole/openaiModel')
-const { listOpenAIModels } = await import('../../src/main/ole/openaiTest')
-const { setProviders, providersOf } = await import('../../src/main/ole/providers')
+const { openaiChat, OLE_USER_AGENT } = await import('../../src/main/ole/core/openai')
+const { listOpenAIModels } = await import('../../src/main/ole/core/openaiTest')
+const { setProviders, providersOf } = await import('../../src/main/ole/yogurt/providers')
 const { loadSettings } = await import('../../src/main/settings')
-const { hookOle } = await import('../../src/main/ole/session')
+const { hookOle } = await import('../../src/main/ole/yogurt/session')
 const { CustomServerRows } = await import('../../src/renderer/src/ole/OleSettings')
 
 const ok = () => new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'hi' } }] }), { status: 200 })

@@ -1,9 +1,9 @@
 // Ole: which engine transcribes and which writes notes and answers (Local or OpenAI), with the OpenAI model names and the warm-up instructions.
 import { ipcMain } from 'electron'
-import { loadSettings, updateSettings, type Settings } from '../settings'
-import type { AssistantChoice, OleProviders, ProviderChoice } from './types'
+import { loadSettings, updateSettings, type Settings } from '../../settings'
+import type { AssistantChoice, OleProviders, ProviderChoice } from '../core/types'
 import { readSecret } from './secrets'
-import { listOpenAIModels, testOpenAI } from './openaiTest'
+import { listOpenAIModels, testOpenAI } from '../core/openaiTest'
 
 type OleProviderSettings = Settings & {
   oleTranscription?: string

@@ -9,21 +9,21 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() },
 }))
 const callTool = vi.fn(async (_name: string, _args: Record<string, unknown>) => '{"matchedBy":null}')
-vi.mock('../../src/main/ole/mcp', async (orig) => {
-  const real = await orig<typeof import('../../src/main/ole/mcp')>()
+vi.mock('../../src/main/ole/core/mcp', async (orig) => {
+  const real = await orig<typeof import('../../src/main/ole/core/mcp')>()
   const properties = { meeting_title: { type: 'string' }, focus: { type: 'string' }, starts_at: { type: 'string' } }
   return { ...real, createMcpClient: () => ({ listTools: async () => [{ name: 'get_meeting_context', inputSchema: { type: 'object', properties } }], listPrompts: async () => [], getPrompt: async () => '', callTool }) }
 })
 const openaiChat = vi.fn(async () => ({ role: 'assistant', content: '## Before you join\n- x' }))
-vi.mock('../../src/main/ole/openaiModel', () => ({ openaiChat }))
+vi.mock('../../src/main/ole/core/openai', () => ({ openaiChat }))
 
 const ID = '00000000-0000-4000-8000-000000000002'
 
 async function setup(extra: Record<string, unknown> = {}) {
-  const { hookOle } = await import('../../src/main/ole/session')
-  const { writeSecret } = await import('../../src/main/ole/secrets')
-  const { setProviders } = await import('../../src/main/ole/providers')
-  const { setServers } = await import('../../src/main/ole/servers')
+  const { hookOle } = await import('../../src/main/ole/yogurt/session')
+  const { writeSecret } = await import('../../src/main/ole/yogurt/secrets')
+  const { setProviders } = await import('../../src/main/ole/yogurt/providers')
+  const { setServers } = await import('../../src/main/ole/yogurt/servers')
   const file = join(mkdtempSync(join(tmpdir(), 'ole-ctx-')), 'settings.json')
   writeSecret(file, 'openai', 'sk-test-123456')
   setProviders(file, { assistant: 'openai' })

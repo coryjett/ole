@@ -1,8 +1,8 @@
 // Ole: the MCP servers the person added in Settings. Each server's key is the sealed secret `mcp:<id>`.
 import { ipcMain } from 'electron'
-import { loadSettings, updateSettings, type Settings } from '../settings'
+import { loadSettings, updateSettings, type Settings } from '../../settings'
 import { readSecret, removeSecret, SERVER_ID } from './secrets'
-import type { McpServerConfig, SecretName } from './types'
+import type { McpServerConfig, SecretName } from '../core/types'
 
 export const MAX_SERVERS = 10
 export const MAX_NAME = 40

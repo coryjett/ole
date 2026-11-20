@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { shouldProtect } from '../../src/main/ole/capture'
-import { PROVIDER_DEFAULTS } from '../../src/main/ole/providers'
+import { shouldProtect } from '../../src/main/ole/yogurt/capture'
+import { PROVIDER_DEFAULTS } from '../../src/main/ole/yogurt/providers'
 
 describe('hide while sharing: off by default, only during a call (#61)', () => {
   it('is off unless turned on', () => {

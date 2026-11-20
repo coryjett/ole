@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { createBulletsEngine, overlap, parseBullets, type ChatFn } from '../../src/main/ole/bullets'
+import { createBulletsEngine, overlap, parseBullets, type ChatFn } from '../../src/main/ole/core/bullets'
 import { OleBullets } from '../../src/renderer/src/ole/OleBullets'
-import type { OleBullet } from '../../src/main/ole/types'
+import type { OleBullet } from '../../src/main/ole/core/types'
 
 const context = { meetingTitle: 'Sync', focus: null, preparedAt: 0, text: '## Issues\n- Issue #412: 429 errors returned under burst traffic (issue #412)' }
 
@@ -43,7 +43,7 @@ describe('a short excerpt under each bullet (#39)', () => {
 
 describe('headline bullets (#40)', () => {
   it('the prompt asks for headlines of 10 words at most', async () => {
-    const { BULLETS_SYSTEM } = await import('../../src/main/ole/bullets')
+    const { BULLETS_SYSTEM } = await import('../../src/main/ole/core/bullets')
     expect(BULLETS_SYSTEM).toContain('10 words at most')
   })
   it('cuts a wordy bullet at a word boundary', () => {

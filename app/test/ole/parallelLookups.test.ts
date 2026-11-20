@@ -1,8 +1,8 @@
 // #80: a round's lookups run together, in bullets and in Ask, with the per-minute limit and the kept results intact.
 import { describe, expect, it, vi } from 'vitest'
-import { createBulletsEngine, EARLIER_LOOKUP, type ChatFn, type ToolCall } from '../../src/main/ole/bullets'
-import { answerQuestion } from '../../src/main/ole/ask'
-import type { OleTool } from '../../src/main/ole/types'
+import { createBulletsEngine, EARLIER_LOOKUP, type ChatFn, type ToolCall } from '../../src/main/ole/core/bullets'
+import { answerQuestion } from '../../src/main/ole/core/ask'
+import type { OleTool } from '../../src/main/ole/core/types'
 
 const tool: OleTool = { name: 's__search_docs', serverId: 's', serverName: 'S', tool: 'search_docs', description: 'docs', parameters: { type: 'object' } }
 const call = (id: string, q: string): ToolCall => ({ id, type: 'function', function: { name: 's__search_docs', arguments: JSON.stringify({ q }) } })

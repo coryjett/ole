@@ -1,8 +1,8 @@
 // #79: a question or a new term from the other side brings the next bullets turn forward to 10 s, at most once per 10 s.
 import { describe, expect, it, vi } from 'vitest'
-import { candidateTerms, createBulletsEngine, FAST_MIN_MS, fastTrigger, isQuestion, knownWords, type ChatFn } from '../../src/main/ole/bullets'
-import { virtualClock } from '../../src/main/ole/replay'
-import type { PreparedContext } from '../../src/main/ole/types'
+import { candidateTerms, createBulletsEngine, FAST_MIN_MS, fastTrigger, isQuestion, knownWords, type ChatFn } from '../../src/main/ole/core/bullets'
+import { virtualClock } from '../../src/main/ole/core/replay'
+import type { PreparedContext } from '../../src/main/ole/core/types'
 
 describe('the trigger is pure string work (#79)', () => {
   it('questions: a question mark, or an interrogative opening (after an optional filler)', () => {

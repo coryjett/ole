@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { briefingHeadings, onlyHeadings, BULLETS_SYSTEM } from '../../src/main/ole/bullets'
+import { briefingHeadings, onlyHeadings, BULLETS_SYSTEM } from '../../src/main/ole/core/bullets'
 import { OleBriefing } from '../../src/renderer/src/ole/OleBriefing'
 
 const brief = '## Who and why\n- Wants one place for policy (call brief, 12 Nov)\n## Deals\n- K Agent at Meeting Booked (opportunity: K Agent)\nWatch for:\n- risk'
@@ -40,7 +40,7 @@ describe('the briefing is readable (#35)', () => {
 
 describe('tool-plus-record citations are real sources (#48)', () => {
   it('keeps "[get_account_details: Bridgewater Associates]" and drops only a bare tool name', async () => {
-    const { onlyHeadings, readableSource } = await import('../../src/main/ole/bullets')
+    const { onlyHeadings, readableSource } = await import('../../src/main/ole/core/bullets')
     const none = new Set<string>()
     expect(onlyHeadings('[get_account_details: Bridgewater Associates]', none)).toBe(false)
     expect(onlyHeadings('get_account_health: Bridgewater; get_interactions: POC check in, 19 Nov', none)).toBe(false)

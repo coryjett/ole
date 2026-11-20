@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createOpenAITranscriber } from '../../src/main/ole/openaiTranscribe'
+import { createOpenAITranscriber } from '../../src/main/ole/yogurt/openaiTranscribe'
 import type { Chunk } from '../../src/main/asr/chunker'
 
 function chunk(samples: number, startMs = 0): Chunk {

@@ -1,6 +1,6 @@
 // #81: a bullet that restates an earlier one in other words is dropped and counted as repeated.
 import { describe, expect, it, vi } from 'vitest'
-import { contentWords, createBulletsEngine, nearDuplicate, NEAR_DUPLICATE, type ChatFn } from '../../src/main/ole/bullets'
+import { contentWords, createBulletsEngine, nearDuplicate, NEAR_DUPLICATE, type ChatFn } from '../../src/main/ole/core/bullets'
 
 describe('content words (#81)', () => {
   it('lower case, stop words out, numbers and versions kept, rough stems', () => {

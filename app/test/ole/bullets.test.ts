@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createBulletsEngine, buildBulletsPrompt, callKey } from '../../src/main/ole/bullets'
-import type { CallToolFn, ChatFn, TranscriptLine } from '../../src/main/ole/bullets'
-import type { OleTool } from '../../src/main/ole/types'
+import { createBulletsEngine, buildBulletsPrompt, callKey } from '../../src/main/ole/core/bullets'
+import type { CallToolFn, ChatFn, TranscriptLine } from '../../src/main/ole/core/bullets'
+import type { OleTool } from '../../src/main/ole/core/types'
 
 const tool = (name: string): OleTool => ({ name, serverId: 's', serverName: 'S', tool: name, description: `[S] ${name}`, parameters: { type: 'object', properties: { query: { type: 'string' } } } })
 const TOOLS = [tool('s__search_calls'), tool('s__get_competitor')]

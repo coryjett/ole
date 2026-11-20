@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() }, safeStorage: { isEncryptionAvailable: () => false } }))
-const { testServer } = await import('../../src/main/ole/session')
+const { testServer } = await import('../../src/main/ole/yogurt/session')
 
 const server = { id: 'crm', name: 'CRM', url: 'https://crm.example/mcp', enabled: true }
 const status = (n: number) => vi.fn<typeof fetch>(async () => new Response('', { status: n }))

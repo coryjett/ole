@@ -1,8 +1,8 @@
 // Ole: API keys sealed with the system keychain (safeStorage). No plain fallback; the renderer only ever sees masked status.
 import { ipcMain, safeStorage } from 'electron'
-import { loadSettings, updateSettings, type Settings } from '../settings'
+import { loadSettings, updateSettings, type Settings } from '../../settings'
 import { serversOf } from './servers'
-import type { SecretName } from './types'
+import type { SecretName } from '../core/types'
 
 type OleSettings = Settings & { oleSecrets?: Partial<Record<SecretName, string>> }
 export type SecretStatus = Partial<Record<SecretName, { set: boolean; masked: string }>>

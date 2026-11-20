@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boundedSchema, isReadOnly, SCHEMA_MAX_CHARS } from '../../src/main/ole/tools'
+import { boundedSchema, isReadOnly, SCHEMA_MAX_CHARS } from '../../src/main/ole/core/tools'
 
 describe('read-only check', () => {
   it('never trusts a read prefix when a write verb appears anywhere in the name', () => {

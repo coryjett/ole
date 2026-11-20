@@ -2,12 +2,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { buildBulletsPrompt, type ChatFn } from '../../src/main/ole/bullets'
-import { callMemoryText, createCallSummarizer, EMPTY_MEMORY, ITEM_MAX, LIST_MAX, parseCallMemory, savedCallMemory, SUMMARY_SYSTEM } from '../../src/main/ole/callSummary'
+import { buildBulletsPrompt, type ChatFn } from '../../src/main/ole/core/bullets'
+import { callMemoryText, createCallSummarizer, EMPTY_MEMORY, ITEM_MAX, LIST_MAX, parseCallMemory, savedCallMemory, SUMMARY_SYSTEM } from '../../src/main/ole/core/callSummary'
 import { OleCallLists } from '../../src/renderer/src/ole/OleCallLists'
 import { OleSavedBulletsView } from '../../src/renderer/src/ole/OleSavedBullets'
 import { LiveView } from '../../src/renderer/src/ole/OlePanel'
-import type { OleCallMemory } from '../../src/main/ole/types'
+import type { OleCallMemory } from '../../src/main/ole/core/types'
 
 const prev: OleCallMemory = { summary: 'Pricing came up.', openQuestions: ['Is there a free tier?'], commitments: [{ who: 'Me', what: 'Send the benchmark plan' }] }
 

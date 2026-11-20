@@ -1,6 +1,6 @@
 // Ole: Settings' OpenAI Test button (#2). Checks the saved key against GET /models and whether the chat and
 // transcription model names in Settings are on the account. Runs in the main process: the key never reaches the renderer.
-import { OLE_USER_AGENT, OPENAI_BASE_URL, reason } from './openaiModel'
+import { OLE_USER_AGENT, OPENAI_BASE_URL, reason } from './openai'
 
 export type OpenAITestResult = { ok: boolean; error?: string; chatModel?: { name: string; found: boolean }; transcribeModel?: { name: string; found: boolean } }
 

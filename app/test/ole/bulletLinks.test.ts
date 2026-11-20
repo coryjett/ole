@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { createBulletsEngine, parseBullets, type ChatFn } from '../../src/main/ole/bullets'
+import { createBulletsEngine, parseBullets, type ChatFn } from '../../src/main/ole/core/bullets'
 import { OleBullets } from '../../src/renderer/src/ole/OleBullets'
 import { BriefingText } from '../../src/renderer/src/ole/OleBriefing'
-import type { OleBullet } from '../../src/main/ole/types'
+import type { OleBullet } from '../../src/main/ole/core/types'
 
 const real = 'https://github.com/example/project/issues/412'
 const context = { meetingTitle: 'Sync', focus: null, preparedAt: 0, text: `- 429 errors under burst traffic ([issue #412](${real}))` }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { FAST_PATH_TIMEOUT_MS, meetingContextArgs, prepareContext, SERVER_MATCHED_LINE, serverMatched, type PrepareChatFn } from '../../src/main/ole/prepare'
-import type { ToolCall } from '../../src/main/ole/bullets'
-import type { OleTool } from '../../src/main/ole/types'
+import { FAST_PATH_TIMEOUT_MS, meetingContextArgs, prepareContext, SERVER_MATCHED_LINE, serverMatched, type PrepareChatFn } from '../../src/main/ole/core/prepare'
+import type { ToolCall } from '../../src/main/ole/core/bullets'
+import type { OleTool } from '../../src/main/ole/core/types'
 
 const now = Date.parse('2026-11-19T15:00:00Z')
 const startsAt = Date.parse('2026-11-19T15:30:00Z')
@@ -187,7 +187,7 @@ describe('meetingContextArgs', () => {
 
 describe('fast-path failure kinds in the log (#95)', () => {
   it('classifies without echoing the server message', async () => {
-    const { failureKind } = await import('../../src/main/ole/prepare')
+    const { failureKind } = await import('../../src/main/ole/core/prepare')
     expect(failureKind(new Error('request timed out after 20 s'))).toBe('timeout')
     expect(failureKind(new Error('fetch failed: ECONNREFUSED'))).toBe('transport')
     expect(failureKind(new Error('500 at https://internal.example/x?token=abc'))).toBe('server error')

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
-import { testOpenAI } from '../../src/main/ole/openaiTest'
+import { testOpenAI } from '../../src/main/ole/core/openaiTest'
 import { OpenAIKeyRow } from '../../src/renderer/src/ole/OleSettings'
 
 const models = (ids: string[]) => vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: ids.map(id => ({ id })) }), { status: 200 }))

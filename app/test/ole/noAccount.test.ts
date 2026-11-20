@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildBulletsPrompt, generalTools, hasMatchedRecord, NO_RECORD_RULE } from '../../src/main/ole/bullets'
-import { answerQuestion } from '../../src/main/ole/ask'
-import { PREPARE_SYSTEM } from '../../src/main/ole/prepare'
-import type { ChatFn } from '../../src/main/ole/bullets'
-import type { OleTool } from '../../src/main/ole/types'
+import { buildBulletsPrompt, generalTools, hasMatchedRecord, NO_RECORD_RULE } from '../../src/main/ole/core/bullets'
+import { answerQuestion } from '../../src/main/ole/core/ask'
+import { PREPARE_SYSTEM } from '../../src/main/ole/core/prepare'
+import type { ChatFn } from '../../src/main/ole/core/bullets'
+import type { OleTool } from '../../src/main/ole/core/types'
 
 const ctx = (text: string) => ({ meetingTitle: 'Weekly sync', focus: null, text, preparedAt: 1 })
 const tool = (name: string): OleTool => ({ name: `s__${name}`, serverId: 's', serverName: 'S', tool: name, description: name, parameters: { type: 'object' } })

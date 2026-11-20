@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { buildBulletsPrompt, createBulletsEngine, pinnedNotes } from '../../src/main/ole/bullets'
-import type { ChatFn } from '../../src/main/ole/bullets'
-import { feedbackOf, recordRating, FEEDBACK_KEEP } from '../../src/main/ole/feedback'
+import { buildBulletsPrompt, createBulletsEngine, pinnedNotes } from '../../src/main/ole/core/bullets'
+import type { ChatFn } from '../../src/main/ole/core/bullets'
+import { feedbackOf, recordRating, FEEDBACK_KEEP } from '../../src/main/ole/yogurt/feedback'
 
 vi.mock('electron', () => ({ ipcMain: { handle: () => {} } }))
 

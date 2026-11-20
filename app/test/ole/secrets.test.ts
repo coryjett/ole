@@ -16,7 +16,7 @@ vi.mock('electron', () => ({
     decryptString: (b: Buffer) => Buffer.from([...b].reverse()).toString(),
   },
 }))
-import { hookOleSecrets, isSecretName, maskSecret, openSecret, readSecret, removeSecret, sealSecret, secretStatus, writeSecret } from '../../src/main/ole/secrets'
+import { hookOleSecrets, isSecretName, maskSecret, openSecret, readSecret, removeSecret, sealSecret, secretStatus, writeSecret } from '../../src/main/ole/yogurt/secrets'
 import { hookPreferences } from '../../src/main/preferences'
 import { loadSettings, updateSettings } from '../../src/main/settings'
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { collectTools, unavailableReason, type ToolServer } from '../../src/main/ole/tools'
-import { McpError } from '../../src/main/ole/mcp'
+import { collectTools, unavailableReason, type ToolServer } from '../../src/main/ole/core/tools'
+import { McpError } from '../../src/main/ole/core/mcp'
 
 const server = (id: string, listTools: () => Promise<unknown[]>): ToolServer => ({
   config: { id, name: id.toUpperCase(), url: `https://${id}.example/mcp`, enabled: true },

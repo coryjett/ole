@@ -1,7 +1,7 @@
 // Ole: ask a question during the call (#53). The answer comes from the briefing, the call so far and, when needed, a
 // read-only lookup; each answer names its source and links it when Ole has the link.
 import { useState } from 'react'
-import type { OleAnswer } from '../../../main/ole/types'
+import type { OleAnswer } from '../../../main/ole/core/types'
 
 export function OleAnswers({ answers }: { answers: OleAnswer[] }) {
   if (!answers.length) return null

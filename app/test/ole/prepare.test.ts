@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { NO_TOOLS_TEXT, PREPARE_SYSTEM, prepareContext, TOTAL_CAP, type PrepareChatFn } from '../../src/main/ole/prepare'
-import type { ToolCall } from '../../src/main/ole/bullets'
-import type { OleTool } from '../../src/main/ole/types'
+import { NO_TOOLS_TEXT, PREPARE_SYSTEM, prepareContext, TOTAL_CAP, type PrepareChatFn } from '../../src/main/ole/core/prepare'
+import type { ToolCall } from '../../src/main/ole/core/bullets'
+import type { OleTool } from '../../src/main/ole/core/types'
 
 const now = Date.parse('2026-11-19T15:00:00Z')
 

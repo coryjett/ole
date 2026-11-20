@@ -18,11 +18,11 @@ if (!files.length) {
 
 // the engine is TypeScript; vite's module runner loads it as the tests do
 const load = async (rel) => (await runnerImport(fileURLToPath(new URL(rel, import.meta.url)), { configFile: false, logLevel: 'silent' })).module
-const { replayCall, summarise, scrub, liveChat } = await load('../src/main/ole/replay.ts')
+const { replayCall, summarise, scrub, liveChat } = await load('../src/main/ole/core/replay.ts')
 
 let chat, liveKey
 if (live) {
-  const { openaiChat, OPENAI_BASE_URL } = await load('../src/main/ole/openaiModel.ts')
+  const { openaiChat, OPENAI_BASE_URL } = await load('../src/main/ole/core/openai.ts')
   const key = process.env.OLE_REPLAY_API_KEY?.trim()
   if (!key) { console.error('--live needs OLE_REPLAY_API_KEY'); process.exit(2) }
   const baseUrl = process.env.OLE_REPLAY_BASE_URL?.trim() || OPENAI_BASE_URL

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createLocalChat, firstJson, localPrompt, toolMenu } from '../../src/main/ole/localChat'
+import { createLocalChat, firstJson, localPrompt, toolMenu } from '../../src/main/ole/core/localChat'
 import type { Llm } from '../../src/main/notes/enhance'
 
 const handlers = new Map<string, (...a: unknown[]) => unknown>()
@@ -48,8 +48,8 @@ describe('Prepare on the local model (#5)', () => {
 
 describe('where Prepare runs (#5)', () => {
   it('on this Mac it runs without an OpenAI key, never during a call, and live context stays off', async () => {
-    const { hookOle } = await import('../../src/main/ole/session')
-    const { setProviders } = await import('../../src/main/ole/providers')
+    const { hookOle } = await import('../../src/main/ole/yogurt/session')
+    const { setProviders } = await import('../../src/main/ole/yogurt/providers')
     const file = join(mkdtempSync(join(tmpdir(), 'ole-local-')), 'settings.json')
     setProviders(file, { assistant: 'local', prepareOn: 'local' })
     handlers.clear()

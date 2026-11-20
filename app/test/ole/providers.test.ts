@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 const handlers = vi.hoisted(() => new Map<string, (...args: any[]) => any>())
 vi.mock('electron', () => ({ ipcMain: { handle: (name: string, fn: (...args: any[]) => any) => handlers.set(name, fn) } }))
-import { hookOleProviders, providersOf, setProviders } from '../../src/main/ole/providers'
+import { hookOleProviders, providersOf, setProviders } from '../../src/main/ole/yogurt/providers'
 import { loadSettings, updateSettings, type Settings } from '../../src/main/settings'
 
 let dir = ''

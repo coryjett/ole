@@ -1,9 +1,9 @@
 // #86: a name said during the call that the briefing doesn't cover is looked up in the background and added to it.
 import { describe, expect, it, vi } from 'vitest'
-import { buildBulletsPrompt, createBulletsEngine, hasMatchedRecord, MENTIONED_RULE, NO_RECORD_RULE, nameTerms, stripMentioned, type ChatFn } from '../../src/main/ole/bullets'
-import { answerQuestion } from '../../src/main/ole/ask'
-import { createEnricher, enrichTools, ENRICH_GAP_MS, ENRICH_LOOKUPS, ENRICH_MAX_TERMS, ENRICH_SYSTEM, mayGetNames, mentionedSection, parseFacts } from '../../src/main/ole/enrich'
-import type { OleTool, PreparedContext } from '../../src/main/ole/types'
+import { buildBulletsPrompt, createBulletsEngine, hasMatchedRecord, MENTIONED_RULE, NO_RECORD_RULE, nameTerms, stripMentioned, type ChatFn } from '../../src/main/ole/core/bullets'
+import { answerQuestion } from '../../src/main/ole/core/ask'
+import { createEnricher, enrichTools, ENRICH_GAP_MS, ENRICH_LOOKUPS, ENRICH_MAX_TERMS, ENRICH_SYSTEM, mayGetNames, mentionedSection, parseFacts } from '../../src/main/ole/core/enrich'
+import type { OleTool, PreparedContext } from '../../src/main/ole/core/types'
 
 const tool = (name: string, description = '', openWorld?: boolean): OleTool => ({ name: `s__${name}`, serverId: 's', serverName: 'S', tool: name, description, parameters: { type: 'object' }, ...(openWorld === undefined ? {} : { openWorld }) })
 const CRM = [tool('search_accounts'), tool('get_contact'), tool('search_docs'), tool('query-docs'), tool('resolve-library-id'), tool('get_page'), tool('search_kb', 'Search the public documentation'), tool('update_account')]

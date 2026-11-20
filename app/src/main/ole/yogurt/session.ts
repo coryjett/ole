@@ -1,27 +1,27 @@
 // Ole: the live call companion. Before the call, the model gathers a briefing from the MCP servers' read-only tools
 // (prepare.ts); during it, context bullets from the transcript, the briefing and throttled tool lookups (bullets.ts).
 import { ipcMain } from 'electron'
-import type { McpServerConfig, OleAnswer, OleBullet, OleCallMemory, OleTool, PreparedContext } from './types'
-import type { OleLiveState } from '../../shared/types'
-import { loadSettings } from '../settings'
+import type { McpServerConfig, OleAnswer, OleBullet, OleCallMemory, OleTool, PreparedContext } from '../core/types'
+import type { OleLiveState } from '../../../shared/types'
+import { loadSettings } from '../../settings'
 import { readSecret } from './secrets'
 import { providersOf } from './providers'
 import { serversOf } from './servers'
-import { openaiChat } from './openaiModel'
-import { createMcpClient, McpError } from './mcp'
-import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, isReadOnly, type Unavailable } from './tools'
-import { prepareContext } from './prepare'
-import { genericTitle } from '../titles'
-import { createLocalChat, type LocalRun } from './localChat'
-import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from './bullets'
-import { answerQuestion } from './ask'
-import { createEnricher, type Enricher } from './enrich'
-import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
+import { openaiChat } from '../core/openai'
+import { createMcpClient, McpError } from '../core/mcp'
+import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, isReadOnly, type Unavailable } from '../core/tools'
+import { prepareContext } from '../core/prepare'
+import { genericTitle } from '../../titles'
+import { createLocalChat, type LocalRun } from '../core/localChat'
+import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from '../core/bullets'
+import { answerQuestion } from '../core/ask'
+import { createEnricher, type Enricher } from '../core/enrich'
+import { eventNow, pickAutoPrepare, type Upcoming } from '../core/calendarMatch'
 import { feedbackOf, recordRating } from './feedback'
-import { createTurnRecorder, type RecordedCall } from './turnRecorder'
-import { createCallSummarizer, EMPTY_MEMORY, fromOleNotes, isEmptyMemory } from './callSummary'
-import { buildReplayFixture, exportFileName, type ExportSegment } from './replayExport'
-import type { OleExportResult } from '../../shared/types'
+import { createTurnRecorder, type RecordedCall } from '../core/turnRecorder'
+import { createCallSummarizer, EMPTY_MEMORY, fromOleNotes, isEmptyMemory } from '../core/callSummary'
+import { buildReplayFixture, exportFileName, type ExportSegment } from '../core/replayExport'
+import type { OleExportResult } from '../../../shared/types'
 
 /** a prepared briefing older than this is gathered again when a meeting starts */
 const STALE_MS = 2 * 60 * 60_000
@@ -231,7 +231,7 @@ export function hookOle(d: Deps): {
     if (!serversOf(loadSettings(d.file)).some(s => s.enabled)) return
     const now = Date.now(), lead = p.autoPrepareLead * 60_000
     let next: Upcoming | null
-    try { next = pickAutoPrepare(await d.upcoming(now, now + lead), now, lead, autoDone) } catch (e) { console.warn('reading the calendar failed', e); return }
+    try { next = pickAutoPrepare(await d.upcoming(now, now + lead), now, lead, autoDone, genericTitle) } catch (e) { console.warn('reading the calendar failed', e); return }
     if (!next) return
     autoDone.add(next.id)
     await prepare({ meetingTitle: next.title, startsAt: next.start })
@@ -323,7 +323,7 @@ export function hookOle(d: Deps): {
     if (briefing === undefined) try { briefing = d.loadBriefing?.(id) ?? '' } catch { briefing = '' }
     const name = exportFileName(m.startedAt)
     const fixture = buildReplayFixture({
-      name: name.replace(/\.json$/, ''), meetingTitle: m.title, attendees: m.attendees, segments: m.segments, anonymise,
+      name: name.replace(/\.json$/, ''), meetingTitle: m.title, attendees: m.attendees, segments: m.segments, anonymise, genericTitle,
       briefing: { text: briefing, meetingTitle: kept?.briefing ? kept.briefing.meetingTitle : m.title, focus: kept?.briefing?.focus ?? null },
       // a call from before turns were kept: the tools the servers offer now, as the app would offer them live
       tools: kept ? kept.tools : tools.filter(isLiveTool).map(t => t.name),

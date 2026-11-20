@@ -1,6 +1,6 @@
 // Ole: the context bullets a finished meeting collected during the call, on its note page.
 import { useEffect, useState } from 'react'
-import type { OleAnswer, OleBullet, OleCallMemory } from '../../../main/ole/types'
+import type { OleAnswer, OleBullet, OleCallMemory } from '../../../main/ole/core/types'
 import type { OleExportResult } from '../../../shared/types'
 import { OleAnswers } from './OleAsk'
 import { OleBriefing } from './OleBriefing'

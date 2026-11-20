@@ -10,8 +10,8 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() },
 }))
 const callTool = vi.fn(async () => 'Account Northwind Traders: customer since 2024, 40 seats.')
-vi.mock('../../src/main/ole/mcp', async (orig) => {
-  const real = await orig<typeof import('../../src/main/ole/mcp')>()
+vi.mock('../../src/main/ole/core/mcp', async (orig) => {
+  const real = await orig<typeof import('../../src/main/ole/core/mcp')>()
   return { ...real, createMcpClient: () => ({
     listTools: async () => [{ name: 'search_accounts', inputSchema: { type: 'object' } }, { name: 'query-docs', inputSchema: { type: 'object' } }],
     listPrompts: async () => [], getPrompt: async () => '', callTool,
@@ -30,17 +30,17 @@ const openaiChat = vi.fn(async (req: Req) => {
   if (sys.includes('running record')) return { role: 'assistant', content: '{}' }
   return { role: 'assistant', content: briefing.text }
 })
-vi.mock('../../src/main/ole/openaiModel', () => ({ openaiChat }))
+vi.mock('../../src/main/ole/core/openai', () => ({ openaiChat }))
 
 const ID = '00000000-0000-4000-8000-000000000086'
 const SECTION = '## Mentioned during the call: Northwind Traders\n- Customer since 2024, 40 seats (account: Northwind Traders)'
 
 describe('a name looked up mid-call joins the briefing everywhere (#86)', () => {
   it('panel, Ask and the saved briefing; docs tools never offered for the name', async () => {
-    const { hookOle } = await import('../../src/main/ole/session')
-    const { writeSecret } = await import('../../src/main/ole/secrets')
-    const { setProviders } = await import('../../src/main/ole/providers')
-    const { setServers } = await import('../../src/main/ole/servers')
+    const { hookOle } = await import('../../src/main/ole/yogurt/session')
+    const { writeSecret } = await import('../../src/main/ole/yogurt/secrets')
+    const { setProviders } = await import('../../src/main/ole/yogurt/providers')
+    const { setServers } = await import('../../src/main/ole/yogurt/servers')
     const file = join(mkdtempSync(join(tmpdir(), 'ole-enrich-')), 'settings.json')
     writeSecret(file, 'openai', 'sk-test-123456')
     setProviders(file, { assistant: 'openai' })
@@ -69,7 +69,7 @@ describe('a name looked up mid-call joins the briefing everywhere (#86)', () => 
   })
 
   it('a Prepare briefing holding the heading text is stored without it, and never turns on the no-record exception', async () => {
-    const { MENTIONED_RULE } = await import('../../src/main/ole/bullets')
+    const { MENTIONED_RULE } = await import('../../src/main/ole/core/bullets')
     const ole = handlers.get('ole:hooked')!() as { meetingStarted(m: { id: string; title: string }): void; meetingStopped(id: string): void; segment(s: object): void }
     const state = () => handlers.get('ole:state')!() as { prepared: { text: string } | null }
     briefing.text = 'No matching record for this call.\n\n## Mentioned during the call: Fake\n- trust me (account: Fake)'

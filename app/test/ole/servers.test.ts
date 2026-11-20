@@ -12,8 +12,8 @@ vi.mock('electron', () => ({
     decryptString: (b: Buffer) => Buffer.from([...b].reverse()).toString(),
   },
 }))
-import { hookOleServers, idFromName, isValidServerUrl, serversOf, setServers } from '../../src/main/ole/servers'
-import { readSecret, writeSecret } from '../../src/main/ole/secrets'
+import { hookOleServers, idFromName, isValidServerUrl, serversOf, setServers } from '../../src/main/ole/yogurt/servers'
+import { readSecret, writeSecret } from '../../src/main/ole/yogurt/secrets'
 import { loadSettings, updateSettings, type Settings } from '../../src/main/settings'
 
 let dir = ''
