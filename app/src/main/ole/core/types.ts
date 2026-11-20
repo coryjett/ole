@@ -49,7 +49,8 @@ export type OleBullet = { id: string; text: string; source: string; at: number; 
 export type OleAnswer = { id: string; question: string; text: string; source?: string; url?: string; at: number; pending?: boolean; ok?: boolean };
 
 /** someone on the call said they will do something (#82); who: as the call names them, '' when unclear */
-export type OleCommitment = { who: string; what: string };
+/** done: the call later showed it carried out (#158); present only when true, absent (open) on records saved before it */
+export type OleCommitment = { who: string; what: string; done?: boolean };
 
 /** the call's running record (#75, #82): summary text, questions still open, commitments */
 export type OleCallMemory = { summary: string; openQuestions: string[]; commitments: OleCommitment[] };

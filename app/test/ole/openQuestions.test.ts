@@ -14,10 +14,11 @@ const prev: OleCallMemory = { summary: 'Pricing came up.', openQuestions: ['Is t
 describe('reading the record from the model (#82)', () => {
   it('takes summary, open questions and commitments', () => {
     const m = parseCallMemory(JSON.stringify({ summary: ' New summary ', openQuestions: ['Does it run on-prem?'], commitments: [{ who: 'Dana', what: 'Share the traffic numbers' }] }), prev)
-    expect(m).toEqual({ summary: 'New summary', openQuestions: ['Does it run on-prem?'], commitments: [{ who: 'Dana', what: 'Share the traffic numbers' }] })
+    expect(m).toEqual({ summary: 'New summary', openQuestions: ['Does it run on-prem?'], commitments: [{ who: 'Dana', what: 'Share the traffic numbers' }, ...prev.commitments] })
   })
-  it('an empty list is a real answer: every question was answered', () => {
-    expect(parseCallMemory(JSON.stringify({ summary: 'x', openQuestions: [], commitments: [] }), prev)).toEqual({ summary: 'x', openQuestions: [], commitments: [] })
+  it('an empty list is a real answer: every question was answered (commitments are never dropped, #158)', () => {
+    expect(parseCallMemory(JSON.stringify({ summary: 'x', openQuestions: [], commitments: [] }), prev)).toEqual({ summary: 'x', openQuestions: [], commitments: prev.commitments })
+    expect(parseCallMemory(JSON.stringify({ summary: 'x', openQuestions: [], commitments: [] }), EMPTY_MEMORY)).toEqual({ summary: 'x', openQuestions: [], commitments: [] })
   })
   it('a missing or wrong-shaped field keeps its previous value', () => {
     expect(parseCallMemory(JSON.stringify({ openQuestions: 'nope', commitments: { who: 'x' } }), prev)).toEqual(prev)
@@ -67,7 +68,7 @@ describe('the structured summarizer (#82)', () => {
     await vi.waitFor(() => expect(s.memory().summary).toBe('S2'))
     const second = chat.mock.calls[1][0].messages[1].content ?? ''
     expect(second).toContain('Open questions so far:\n- Is there a free tier?')
-    expect(second).toContain('Commitments so far:\n- Me: Send a getting started link')
+    expect(second).toContain('Commitments so far:\n[{"who":"Me","what":"Send a getting started link","done":false}]')
     expect(second).not.toContain('Do you have a free tier?')
     expect(s.memory().openQuestions).toEqual([])
     expect(changes.map(c => c.summary)).toEqual(['S1', 'S2'])
