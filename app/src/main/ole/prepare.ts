@@ -1,7 +1,7 @@
-// Ole: pre-call warm-up. Picks the account from Siesta's upcoming meetings, then pulls that account's context
-// from Siesta's MCP tools in parallel into one labelled text block for the assistant.
+// Ole: pre-call warm-up. Picks the account from the MCP server's upcoming meetings, then pulls that account's context
+// from the MCP server's tools in parallel into one labelled text block for the assistant.
 import type { PreparedContext } from './types'
-import type { SiestaClient } from './siesta'
+import type { McpClient } from './mcp'
 
 export const TOOL_TIMEOUT_MS = 15_000
 export const SECTION_CAP = 4000
@@ -58,7 +58,7 @@ export function buildText(sections: Array<{ label: string; body: string | null }
   return text
 }
 
-export async function prepareContext(client: SiestaClient, opts: { meetingTitle?: string; accountId?: string; now?: number } = {}): Promise<PreparedContext> {
+export async function prepareContext(client: McpClient, opts: { meetingTitle?: string; accountId?: string; now?: number } = {}): Promise<PreparedContext> {
   const now = opts.now ?? Date.now()
   let meetingTitle = opts.meetingTitle ?? null
   let accountId = opts.accountId ?? null
@@ -115,8 +115,8 @@ export async function prepareContext(client: SiestaClient, opts: { meetingTitle?
   return { meetingTitle, accountId, accountName, text, preparedAt: now }
 }
 
-// Account switcher: Siesta's search_accounts takes `name`
-export async function searchAccounts(client: SiestaClient, query: string): Promise<Array<{ id: string; name: string }>> {
+// Account switcher: the MCP server's search_accounts takes `name`
+export async function searchAccounts(client: McpClient, query: string): Promise<Array<{ id: string; name: string }>> {
   if (!query.trim()) return []
   const found = rows(await client.callTool('search_accounts', { name: query.trim() }, { timeoutMs: TOOL_TIMEOUT_MS }))
   return found.flatMap(r => str(r.id) && str(r.name) ? [{ id: r.id as string, name: r.name as string }] : [])

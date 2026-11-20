@@ -8,7 +8,7 @@ type OleProviderSettings = Settings & {
   oleAssistant?: string
   oleTranscribeModel?: string
   oleChatModel?: string
-  oleSiestaUrl?: string
+  oleMcpUrl?: string
 }
 
 export const PROVIDER_DEFAULTS: OleProviders = {
@@ -16,13 +16,13 @@ export const PROVIDER_DEFAULTS: OleProviders = {
   assistant: 'local',
   openaiTranscribeModel: 'gpt-4o-mini-transcribe',
   openaiChatModel: 'gpt-5.6-luna',
-  siestaUrl: ''
+  mcpUrl: ''
 }
 
 export const isProviderChoice = (v: unknown): v is ProviderChoice => v === 'local' || v === 'openai'
 
 /** an https URL with no spaces or credentials, at most 300 characters */
-export function isValidSiestaUrl(v: string): boolean {
+export function isValidMcpUrl(v: string): boolean {
   if (v.length > 300 || /\s/.test(v)) return false
   try { const u = new URL(v); return u.protocol === 'https:' && !u.username && !u.password } catch { return false }
 }
@@ -47,10 +47,10 @@ export function providersOf(s: Settings): OleProviders {
     openaiChatModel = PROVIDER_DEFAULTS.openaiChatModel
   }
 
-  const url = (settings.oleSiestaUrl ?? '').trim()
-  const siestaUrl = isValidSiestaUrl(url) ? url : PROVIDER_DEFAULTS.siestaUrl
+  const url = (settings.oleMcpUrl ?? '').trim()
+  const mcpUrl = isValidMcpUrl(url) ? url : PROVIDER_DEFAULTS.mcpUrl
 
-  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, siestaUrl }
+  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, mcpUrl }
 }
 
 export function setProviders(file: string, patch: unknown): OleProviders {
@@ -78,9 +78,9 @@ export function setProviders(file: string, patch: unknown): OleProviders {
     }
   }
 
-  if ('siestaUrl' in p && typeof p.siestaUrl === 'string') {
-    const url = p.siestaUrl.trim()
-    if (url === '' || isValidSiestaUrl(url)) settingsPatch.oleSiestaUrl = url
+  if ('mcpUrl' in p && typeof p.mcpUrl === 'string') {
+    const url = p.mcpUrl.trim()
+    if (url === '' || isValidMcpUrl(url)) settingsPatch.oleMcpUrl = url
   }
 
   return providersOf(updateSettings(file, settingsPatch as Partial<Settings>))

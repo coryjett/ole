@@ -5,11 +5,11 @@ import { loadSettings } from '../settings'
 import { readSecret } from './secrets'
 import { providersOf } from './providers'
 import { openaiChat } from './openaiModel'
-import { createSiestaClient, type SiestaClient } from './siesta'
+import { createMcpClient, type McpClient } from './mcp'
 import { prepareContext, searchAccounts } from './prepare'
 import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
 
-// Ole: the live call companion. Siesta warm-up before the call, context bullets during it (bullets.ts).
+// Ole: the live call companion. Warm-up from the MCP server before the call, context bullets during it (bullets.ts).
 
 let prepared: PreparedContext | null = null
 let preparing = false
@@ -41,20 +41,20 @@ function send(): void {
 
 let d!: { file: string; send: (s: OleLiveState) => void; save?: (meetingId: string, bullets: OleBullet[]) => void }
 
-function siesta(dFile: string): SiestaClient | null {
-  const key = readSecret(dFile, 'siesta')
+function mcp(dFile: string): McpClient | null {
+  const key = readSecret(dFile, 'mcp')
   if (!key) return null
-  const url = providersOf(loadSettings(dFile)).siestaUrl
+  const url = providersOf(loadSettings(dFile)).mcpUrl
   if (!url) return null
-  return createSiestaClient({ key, url })
+  return createMcpClient({ key, url })
 }
 
 async function prepare(
   o: { accountId?: string | null; meetingTitle?: string | null; forMeeting?: string }
 ): Promise<OleLiveState> {
-  const client = siesta(d.file)
+  const client = mcp(d.file)
   if (!client) {
-    error = 'Add the Siesta URL and key in Settings'
+    error = 'Add the MCP server URL and key in Settings'
     preparing = false
     send()
     return state()
@@ -106,7 +106,7 @@ export function hookOle(
 
   ipcMain.handle('ole:search-accounts', async (_e, q: unknown) => {
     if (typeof q !== 'string' || q.length < 2 || q.length > 100) return []
-    const client = siesta(d.file)
+    const client = mcp(d.file)
     if (!client) return []
     return searchAccounts(client, q)
   })
@@ -134,8 +134,8 @@ export function hookOle(
     })
 
     const searchCalls = async (q: string): Promise<string> => {
-      const c = siesta(d.file)
-      if (!c) return 'Siesta is not connected'
+      const c = mcp(d.file)
+      if (!c) return 'The MCP server is not connected'
       return c.callTool('search_calls', { query: q }, { timeoutMs: 15000 })
     }
 

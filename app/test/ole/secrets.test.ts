@@ -39,8 +39,8 @@ it('stores keys sealed, never in plain text', () => {
 })
 
 it('readSecret returns the plain key in the main process', () => {
-  set('siesta', '  siesta-key-abcdef  ')
-  expect(readSecret(file, 'siesta')).toBe('siesta-key-abcdef')
+  set('mcp', '  mcp-key-abcdef  ')
+  expect(readSecret(file, 'mcp')).toBe('mcp-key-abcdef')
   expect(readSecret(file, 'openai')).toBeNull()
   expect(openSecret(sealSecret('x'))).toBe('x')
   expect(openSecret('b:eA==')).toBeNull()
@@ -48,7 +48,7 @@ it('readSecret returns the plain key in the main process', () => {
 
 it('status is masked and never holds the key', () => {
   const after = set('openai', 'sk-test-123456')
-  expect(after).toEqual({ openai: { set: true, masked: 'sk-…3456' }, siesta: { set: false, masked: '' } })
+  expect(after).toEqual({ openai: { set: true, masked: 'sk-…3456' }, mcp: { set: false, masked: '' } })
   expect(status()).toEqual(after)
   expect(JSON.stringify(status())).not.toContain('sk-test-123456')
   expect(maskSecret('')).toBe('')
@@ -66,11 +66,11 @@ it('settings:get never includes a sealed or plain key', () => {
 
 it('an empty value clears the key', () => {
   set('openai', 'sk-test-123456')
-  set('siesta', 'siesta-key-abcdef')
+  set('mcp', 'mcp-key-abcdef')
   expect(set('openai', '').openai).toEqual({ set: false, masked: '' })
   expect(readSecret(file, 'openai')).toBeNull()
-  expect(readSecret(file, 'siesta')).toBe('siesta-key-abcdef')
-  writeSecret(file, 'siesta', '')
+  expect(readSecret(file, 'mcp')).toBe('mcp-key-abcdef')
+  writeSecret(file, 'mcp', '')
   expect('oleSecrets' in loadSettings(file)).toBe(false)
 })
 

@@ -1,22 +1,22 @@
-// Ole: Siesta MCP client. Siesta's /mcp is a stateless Streamable HTTP server (MCP SDK transport with
+// Ole: the MCP client. The server's /mcp is a stateless Streamable HTTP server (MCP SDK transport with
 // no session id), so every POST stands alone: no initialize, no Mcp-Session-Id. Replies are SSE by default.
 
 
-export type SiestaErrorKind = 'auth' | 'unreachable' | 'http' | 'rpc' | 'tool' | 'timeout'
+export type McpErrorKind = 'auth' | 'unreachable' | 'http' | 'rpc' | 'tool' | 'timeout'
 
-export class SiestaError extends Error {
-  constructor(message: string, readonly kind: SiestaErrorKind) {
+export class McpError extends Error {
+  constructor(message: string, readonly kind: McpErrorKind) {
     super(message)
-    this.name = 'SiestaError'
+    this.name = 'McpError'
   }
 }
 
-export type SiestaTool = { name: string; description?: string; inputSchema?: unknown }
-export type SiestaCallOptions = { signal?: AbortSignal; timeoutMs?: number }
+export type McpTool = { name: string; description?: string; inputSchema?: unknown }
+export type McpCallOptions = { signal?: AbortSignal; timeoutMs?: number }
 
-export type SiestaClient = {
-  listTools(opts?: SiestaCallOptions): Promise<SiestaTool[]>
-  callTool(name: string, args?: Record<string, unknown>, opts?: SiestaCallOptions): Promise<string>
+export type McpClient = {
+  listTools(opts?: McpCallOptions): Promise<McpTool[]>
+  callTool(name: string, args?: Record<string, unknown>, opts?: McpCallOptions): Promise<string>
 }
 
 type RpcMessage = { id?: unknown; result?: unknown; error?: { message?: unknown } }
@@ -34,17 +34,17 @@ export function parseSse(body: string): unknown[] {
   return messages
 }
 
-export function createSiestaClient({ key, url, fetch = globalThis.fetch }: {
+export function createMcpClient({ key, url, fetch = globalThis.fetch }: {
   key: string; url: string; fetch?: typeof globalThis.fetch
-}): SiestaClient {
+}): McpClient {
   let nextId = 0
 
-  async function rpc(method: string, params: unknown, opts: SiestaCallOptions = {}): Promise<unknown> {
+  async function rpc(method: string, params: unknown, opts: McpCallOptions = {}): Promise<unknown> {
     const timeout = AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)
     const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout
     const aborted = () => opts.signal?.aborted
-      ? new SiestaError('Siesta request cancelled', 'timeout')
-      : timeout.aborted ? new SiestaError('Siesta timed out', 'timeout') : null
+      ? new McpError('MCP request cancelled', 'timeout')
+      : timeout.aborted ? new McpError('The MCP server timed out', 'timeout') : null
     const id = ++nextId
     let res: Response
     try {
@@ -55,14 +55,14 @@ export function createSiestaClient({ key, url, fetch = globalThis.fetch }: {
         signal,
       })
     } catch {
-      throw aborted() ?? new SiestaError('Siesta unreachable (VPN?)', 'unreachable')
+      throw aborted() ?? new McpError('MCP server unreachable (VPN?)', 'unreachable')
     }
-    if (res.status === 401 || res.status === 403) throw new SiestaError('Siesta rejected the key', 'auth')
-    if (!res.ok) throw new SiestaError(`Siesta HTTP ${res.status}`, 'http')
+    if (res.status === 401 || res.status === 403) throw new McpError('The MCP server rejected the key', 'auth')
+    if (!res.ok) throw new McpError(`MCP server HTTP ${res.status}`, 'http')
 
     let body: string
     try { body = await res.text() } catch {
-      throw aborted() ?? new SiestaError('Siesta unreachable (VPN?)', 'unreachable')
+      throw aborted() ?? new McpError('MCP server unreachable (VPN?)', 'unreachable')
     }
     let messages: unknown[]
     if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) messages = parseSse(body)
@@ -73,8 +73,8 @@ export function createSiestaClient({ key, url, fetch = globalThis.fetch }: {
       } catch { messages = [] }
     }
     const reply = messages.find((m): m is RpcMessage => !!m && typeof m === 'object' && (m as RpcMessage).id === id)
-    if (!reply) throw new SiestaError('Siesta returned no response', 'rpc')
-    if (reply.error) throw new SiestaError(`Siesta error: ${String(reply.error.message ?? 'unknown')}`, 'rpc')
+    if (!reply) throw new McpError('The MCP server returned no response', 'rpc')
+    if (reply.error) throw new McpError(`MCP server error: ${String(reply.error.message ?? 'unknown')}`, 'rpc')
     return reply.result
   }
 
@@ -82,13 +82,13 @@ export function createSiestaClient({ key, url, fetch = globalThis.fetch }: {
     async listTools(opts) {
       const result = await rpc('tools/list', {}, opts) as { tools?: unknown } | undefined
       if (!Array.isArray(result?.tools)) return []
-      return result.tools.filter((t): t is SiestaTool => !!t && typeof (t as SiestaTool).name === 'string')
+      return result.tools.filter((t): t is McpTool => !!t && typeof (t as McpTool).name === 'string')
     },
     async callTool(name, args, opts) {
       const result = await rpc('tools/call', { name, arguments: args ?? {} }, opts) as { content?: unknown; isError?: boolean } | undefined
       const content = Array.isArray(result?.content) ? result.content as Array<{ type?: unknown; text?: unknown }> : []
       const text = content.filter(c => c?.type === 'text' && typeof c.text === 'string').map(c => c.text as string).join('\n')
-      if (result?.isError) throw new SiestaError(text || 'Siesta tool failed', 'tool')
+      if (result?.isError) throw new McpError(text || 'MCP tool failed', 'tool')
       return text
     },
   }

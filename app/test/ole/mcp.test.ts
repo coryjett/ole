@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createSiestaClient, SiestaError, parseSse } from '../../src/main/ole/siesta'
+import { createMcpClient, McpError, parseSse } from '../../src/main/ole/mcp'
 
-const url = 'https://siesta.test/mcp'
-const fail = (p: Promise<unknown>) => p.then(() => { throw new Error('expected a failure') }, (e: unknown) => e as SiestaError)
+const url = 'https://mcp.test/mcp'
+const fail = (p: Promise<unknown>) => p.then(() => { throw new Error('expected a failure') }, (e: unknown) => e as McpError)
 const key = 'super-secret-key'
 
 function sseResponse(result: unknown): Response {
@@ -26,7 +26,7 @@ describe('parseSse', () => {
   })
 })
 
-describe('createSiestaClient', () => {
+describe('createMcpClient', () => {
   it('POSTs tools/call with auth headers and reads id from request body over SSE', async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const parsed = JSON.parse(String(init?.body)) as { jsonrpc: string; id: number }
@@ -35,7 +35,7 @@ describe('createSiestaClient', () => {
         { headers: { 'content-type': 'text/event-stream' } },
       )
     })
-    const client = createSiestaClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
+    const client = createMcpClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
 
     expect(await client.callTool('get_account_details', { account_id: 'A1' })).toBe('ok')
 
@@ -57,7 +57,7 @@ describe('createSiestaClient', () => {
 
   it('handles JSON response path', async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse({ content: [{ type: 'text', text: 'json-path' }] }))
-    const client = createSiestaClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
+    const client = createMcpClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
     expect(await client.callTool('ping')).toBe('json-path')
   })
 
@@ -69,7 +69,7 @@ describe('createSiestaClient', () => {
         { headers: { 'content-type': 'text/event-stream' } },
       )
     })
-    const client = createSiestaClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
+    const client = createMcpClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
     const tools = await client.listTools()
     expect(tools).toEqual([{ name: 'a' }])
     expect((fetchMock.mock.calls[0][1] as RequestInit).body).toContain('tools/list')
@@ -77,28 +77,28 @@ describe('createSiestaClient', () => {
 
   it('401 gives auth error without leaking the key', async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response('', { status: 401 }))
-    const client = createSiestaClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
+    const client = createMcpClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
     const err = await fail(client.callTool('x'))
-    expect(err).toBeInstanceOf(SiestaError)
+    expect(err).toBeInstanceOf(McpError)
     expect(err.kind).toBe('auth')
-    expect(err.message).toBe('Siesta rejected the key')
+    expect(err.message).toBe('The MCP server rejected the key')
     expect(err.message).not.toContain(key)
   })
 
   it('fetch TypeError gives unreachable', async () => {
     const fetchMock = vi.fn(async () => { throw new TypeError('network down') })
-    const client = createSiestaClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
+    const client = createMcpClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
     const err = await fail(client.callTool('x'))
-    expect(err).toBeInstanceOf(SiestaError)
+    expect(err).toBeInstanceOf(McpError)
     expect(err.kind).toBe('unreachable')
-    expect(err.message).toBe('Siesta unreachable (VPN?)')
+    expect(err.message).toBe('MCP server unreachable (VPN?)')
   })
 
   it('isError result throws tool error with text', async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => sseResponse({ content: [{ type: 'text', text: 'bad input' }], isError: true }))
-    const client = createSiestaClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
+    const client = createMcpClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
     const err = await fail(client.callTool('x'))
-    expect(err).toBeInstanceOf(SiestaError)
+    expect(err).toBeInstanceOf(McpError)
     expect(err.kind).toBe('tool')
     expect(err.message).toBe('bad input')
   })
@@ -111,9 +111,9 @@ describe('createSiestaClient', () => {
         { headers: { 'content-type': 'text/event-stream' } },
       )
     })
-    const client = createSiestaClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
+    const client = createMcpClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
     const err = await fail(client.callTool('x'))
-    expect(err).toBeInstanceOf(SiestaError)
+    expect(err).toBeInstanceOf(McpError)
     expect(err.kind).toBe('rpc')
     expect(err.message).toContain('nope')
   })
@@ -126,9 +126,9 @@ describe('createSiestaClient', () => {
         signal.addEventListener('abort', () => reject(signal.reason))
       })
     })
-    const client = createSiestaClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
+    const client = createMcpClient({ key, url, fetch: fetchMock as unknown as typeof globalThis.fetch })
     const err = await fail(client.callTool('x', {}, { timeoutMs: 20 }))
-    expect(err).toBeInstanceOf(SiestaError)
+    expect(err).toBeInstanceOf(McpError)
     expect(err.kind).toBe('timeout')
   })
 })

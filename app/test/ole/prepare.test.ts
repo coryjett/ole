@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildText, pickMeeting, prepareContext, searchAccounts, SECTION_CAP, TOTAL_CAP, TOOL_TIMEOUT_MS } from '../../src/main/ole/prepare'
-import { SiestaError, type SiestaClient } from '../../src/main/ole/siesta'
+import { McpError, type McpClient } from '../../src/main/ole/mcp'
 
 const now = Date.parse('2026-11-19T15:00:00Z')
 
 type Handler = (args: Record<string, unknown>) => string | Promise<string>
 
-function makeClient(handlers: Record<string, Handler>): SiestaClient {
+function makeClient(handlers: Record<string, Handler>): McpClient {
   const listTools = vi.fn(async () => [])
   const callTool = vi.fn(async (name: string, args?: Record<string, unknown>) => {
     const handler = handlers[name]
@@ -183,9 +183,9 @@ describe('prepareContext', () => {
 
   it('get_upcoming_meetings auth error rejects', async () => {
     const client = makeClient({
-      get_upcoming_meetings: () => { throw new SiestaError('Siesta rejected the key', 'auth') },
+      get_upcoming_meetings: () => { throw new McpError('The MCP server rejected the key', 'auth') },
     })
-    await expect(prepareContext(client, { now })).rejects.toMatchObject({ kind: 'auth', message: 'Siesta rejected the key' })
+    await expect(prepareContext(client, { now })).rejects.toMatchObject({ kind: 'auth', message: 'The MCP server rejected the key' })
   })
 })
 

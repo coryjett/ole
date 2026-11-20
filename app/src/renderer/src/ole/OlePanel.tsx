@@ -1,4 +1,4 @@
-// Ole: the call companion panel. Prepare from Siesta before the call, pick or change the account, and the live
+// Ole: the call companion panel. Prepare from the MCP server before the call, pick or change the account, and the live
 // context bullets while it records.
 import { useEffect, useState } from 'react'
 import type { OleLiveState } from '../../../shared/types'
@@ -46,7 +46,7 @@ export function OlePanel({ compact = false }: { compact?: boolean }) {
     {state.error && <p data-testid="ole-error" role="status" className="settings-description" style={{ color: 'var(--color-danger, #d33)' }}>{state.error}</p>}
     {switching && <div className="mt-2 flex flex-col gap-1">
       <div className="flex items-center gap-1">
-        <input data-testid="ole-account-search" className="settings-input" autoFocus placeholder="Search Siesta accounts" value={query} onChange={e => setQuery(e.target.value)} />
+        <input data-testid="ole-account-search" className="settings-input" autoFocus placeholder="Search accounts" value={query} onChange={e => setQuery(e.target.value)} />
         {query && <button aria-label="Clear" className="workspace-button" onClick={() => setQuery('')}>×</button>}
       </div>
       {results.map(r => <button key={r.id} className="text-left text-[13px] underline-offset-2 hover:underline" onClick={() => pick(r.id)}>{r.name}</button>)}

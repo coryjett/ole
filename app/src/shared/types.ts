@@ -293,7 +293,7 @@ export type YogurtApi = {
     /** English only or Multi-language: the meeting being recorded and the next ones */
     setSpoken(v: import('./spoken').Spoken): Promise<void>
   }
-  /** Ole: keys, providers, Siesta warm-up and live context bullets */
+  /** Ole: keys, providers, MCP warm-up and live context bullets */
   ole: OleApi
   /** finds meetings by date, title, attendees, folders, transcript and notes; nothing typed: the latest. folder: only the meetings in it */
   search: { query(q: string, folder?: string, people?: Person[]): Promise<SearchResult[]>; people(): Promise<Person[]> }
@@ -476,7 +476,7 @@ export type OleLiveState = {
 export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & {
   state(): Promise<OleLiveState>
   onState(cb: (s: OleLiveState) => void): () => void
-  /** warm-up from Siesta; no account given: the next matched meeting */
+  /** warm-up from the MCP server; no account given: the next matched meeting */
   prepare(o?: { accountId?: string | null; meetingTitle?: string | null }): Promise<OleLiveState>
   searchAccounts(q: string): Promise<Array<{ id: string; name: string }>>
 }

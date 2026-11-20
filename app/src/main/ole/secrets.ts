@@ -5,7 +5,7 @@ import type { SecretName } from './types'
 
 type OleSettings = Settings & { oleSecrets?: Partial<Record<SecretName, string>> }
 
-export const SECRET_NAMES: SecretName[] = ['openai', 'siesta']
+export const SECRET_NAMES: SecretName[] = ['openai', 'mcp']
 
 function isSecretName(name: unknown): name is SecretName {
   return typeof name === 'string' && SECRET_NAMES.includes(name as SecretName)

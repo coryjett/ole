@@ -17,7 +17,7 @@ export const SEARCH_CALLS_TOOL = {
   type: 'function',
   function: {
     name: 'search_calls',
-    description: 'Search Siesta call transcripts across all accounts for how other customers handled a topic.',
+    description: 'Search call transcripts across all accounts for how other customers handled a topic.',
     parameters: { type: 'object', properties: { query: { type: 'string', description: 'A short topic, such as a product, problem or competitor' } }, required: ['query'] },
   },
 } as const

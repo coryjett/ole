@@ -12,7 +12,7 @@ export type OleSettingsApi = {
 }
 
 const CHOICES: Array<[ProviderChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI']]
-const KEYS: Array<[SecretName, string]> = [['openai', 'OpenAI key'], ['siesta', 'Siesta key']]
+const KEYS: Array<[SecretName, string]> = [['openai', 'OpenAI key'], ['mcp', 'MCP server key']]
 
 function KeyRow({ name, label, status, save }: { name: SecretName; label: string; status?: { set: boolean; masked: string }; save: (name: SecretName, value: string) => Promise<boolean> }) {
   // the draft is only what the person types now; the saved key never comes back to the renderer
@@ -99,8 +99,8 @@ export function OleSettings({ api, initialProviders, initialStatus }: { api: Ole
           onSave={(v) => patch({ openaiTranscribeModel: v })} />
         <ModelRow id="ole-chat-model" label="OpenAI chat model" value={providers?.openaiChatModel ?? ''} disabled={off}
           onSave={(v) => patch({ openaiChatModel: v })} />
-        <ModelRow id="ole-siesta-url" label="Siesta URL (https://…/mcp)" value={providers?.siestaUrl ?? ''} disabled={off} maxLength={300}
-          onSave={(v) => patch({ siestaUrl: v })} />
+        <ModelRow id="ole-mcp-url" label="MCP server URL (https://…/mcp)" value={providers?.mcpUrl ?? ''} disabled={off} maxLength={300}
+          onSave={(v) => patch({ mcpUrl: v })} />
         {KEYS.map(([name, label]) => <KeyRow key={name} name={name} label={label} status={status?.[name]} save={saveKey} />)}
         {error && <div className="settings-row"><p role="alert" className="settings-description">{error}</p></div>}
       </div>

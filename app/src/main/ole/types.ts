@@ -1,6 +1,6 @@
 // Ole: shared types for the Ole additions to Yogurt.
 
-export type SecretName = 'openai' | 'siesta';
+export type SecretName = 'openai' | 'mcp';
 
 export type ProviderChoice = 'local' | 'openai';
 
@@ -9,8 +9,8 @@ export type OleProviders = {
   assistant: ProviderChoice;
   openaiTranscribeModel: string;
   openaiChatModel: string;
-  /** the Siesta MCP endpoint (https); '' until the person sets it */
-  siestaUrl: string;
+  /** the MCP server endpoint (https); '' until the person sets it */
+  mcpUrl: string;
 };
 
 export type OleBullet = { id: string; text: string; source: string; at: number };
