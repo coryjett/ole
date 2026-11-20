@@ -34,7 +34,7 @@ A running ledger of every change Ole makes to Yogurt-owned files: anything outsi
 | Ole panel on Home | #35 | `renderer/src/screens/Home.tsx` |
 | Ole settings section | #10 and later | `renderer/src/screens/Settings.tsx` |
 | Onboarding steps for the OpenAI key and MCP servers | #18 | `renderer/src/screens/Onboarding.tsx` |
-| Live bullets in the floating widget; widget links open in the browser | #42 | `renderer/src/windows/Widget.tsx`, `main/widget.ts` |
+| Live bullets in the floating widget (only the act ones since #172); widget links open in the browser | #42, #172 | `renderer/src/windows/Widget.tsx`, `main/widget.ts` |
 | Branding: product name (shown as ¡ole! since #162; the internal app name stays Ole so saved keys and logs don't move, and the menu bar uses the shown name), logo, app id, data folder, export credit, permission prompts | brand, #162 | `main/appMenu.ts`, `main/index.ts`, `electron-builder.yml`, `build/wordmark.svg`, `shared/brand.ts`, `shared/i18n.ts`, `shared/logo.ts`, `renderer/src/components/Logo.tsx`, `renderer/index.html`, `renderer/src/assets/ole-mark.png`, `main/paths.ts`, `shared/exportNotes.ts`, `resources/tray*.png` |
 | Releases from Ole's own feed with the "Ole Local" certificate | release | `scripts/release-mac.sh` (plus Ole's own `ole-release.sh`, `release-check.mjs`, `ole-update-check.sh`) |
 | 15-minute update checks for pre-release builds | #101 | `main/updates.ts` |

@@ -106,7 +106,7 @@ const byType = (type: unknown) => find(tree, el => el.type === type)
 const click = async (id: string) => { (byId(id)!.props.onClick as (e: { detail: number }) => void)({ detail: 0 }); await render(); await render() }
 const selected = (id: string) => byId(id)?.props['aria-selected']
 const badge = () => (find(tree, el => el.type === OleTabLabel && el.props.tab === 'live')?.props.unseen as number | undefined) ?? 0
-const bullet = (id: string, at: number) => ({ id, text: `Bullet ${id}`, source: 'call', at })
+const bullet = (id: string, at: number, act = true) => ({ id, text: `Bullet ${id}`, source: 'call', at, ...(act ? { act: true as const } : {}) })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -181,6 +181,15 @@ describe("Ole's tabs on the note page (#108)", () => {
     expect(byId('note-ole-context-tab')).toBeUndefined()
     expect(byId('note-ole-briefing-tab')).toBeUndefined()
     expect(byId('note-ole-live-tab')).toBeUndefined()
+  })
+  it('background bullets never raise the Live badge; only act ones do (#172)', async () => {
+    oleState = { ...oleState, bullets: [] }
+    await settle()
+    await click('note-transcript-toggle')
+    oleChanged({ ...oleState, bullets: [bullet('bg', 1, false), bullet('bg2', 2, false)] }); await render()
+    expect(badge()).toBe(0)
+    oleChanged({ ...oleState, bullets: [bullet('bg', 1, false), bullet('bg2', 2, false), bullet('a', 3)] }); await render()
+    expect(badge()).toBe(1)
   })
   it('Live counts bullets that came while another tab was shown, and clears when shown', async () => {
     oleState = { ...oleState, bullets: [bullet('a', 1)] }
