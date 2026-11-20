@@ -1,4 +1,5 @@
 // Ole: the Settings section for providers, keys and MCP servers. Keys are write-only from here; only masked status comes back.
+import { MODEL_ADVICE, isRecommended, type ModelRole } from './modelAdvice'
 import { useEffect, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/types'
@@ -211,8 +212,8 @@ function ChoiceRow({ id, label, description, value, disabled, onChange }: { id: 
 type OpenAIModelList = Awaited<ReturnType<OleSettingsApi['openaiModels']>>
 
 /** a model dropdown filled from the key's model list; the saved value always stays selectable (#8) */
-export function ModelSelect({ id, label, hint, value, options, note, disabled, onChange }: {
-  id: string; label: string; hint: string; value: string; options?: string[]; note?: string; disabled: boolean; onChange: (v: string) => void
+export function ModelSelect({ id, label, hint, role, value, options, note, disabled, onChange }: {
+  id: string; label: string; hint: string; role: ModelRole; value: string; options?: string[]; note?: string; disabled: boolean; onChange: (v: string) => void
 }) {
   const list = options ?? []
   const missing = !!value && list.length > 0 && !list.includes(value)
@@ -222,12 +223,13 @@ export function ModelSelect({ id, label, hint, value, options, note, disabled, o
       <div className="settings-row-copy">
         <label htmlFor={id} className="settings-label">{label}</label>
         <p className="settings-description">{hint}</p>
+        <p data-testid={`${id}-advice`} className="settings-description">{MODEL_ADVICE[role]}</p>
         {missing && <p data-testid={`${id}-missing`} role="alert" className="settings-description" style={{ color: '#ff6b6b' }}>{value} isn't available to this key</p>}
         {!list.length && note && <p data-testid={`${id}-note`} className="settings-description">{note}</p>}
       </div>
       <span className="settings-select-wrap">
         <select id={id} data-testid={id} value={value} disabled={disabled || all.length === 0} onChange={(e) => onChange(e.target.value)} className="settings-select">
-          {all.map(m => <option key={m} value={m}>{m}</option>)}
+          {all.map(m => <option key={m} value={m}>{isRecommended(role, m) ? `${m} (recommended)` : m}</option>)}
         </select>
         <ChevronDown size={14} aria-hidden="true" />
       </span>
@@ -311,11 +313,11 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
         <OpenAIKeyRow status={status?.openai} save={saveKey} test={() => api.testOpenAI()}
           adopt={async () => { const r = await api.adoptOpenAI(); setProviders(r.providers); return r }}
           revert={async (undo) => { const r = await api.revertOpenAI(undo); setProviders(r.providers); return r }} />
-        <ModelSelect id="ole-transcribe-model" label="Transcription model" hint="Turns call audio into text."
+        <ModelSelect id="ole-transcribe-model" role="transcribe" label="Transcription model" hint="Turns call audio into text."
           value={providers?.openaiTranscribeModel ?? ''} options={models?.transcribe} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiTranscribeModel: v })} />
-        <ModelSelect id="ole-prepare-model" label="Prepare model" hint="Writes the briefing before a call. A larger model picks tools and writes better."
+        <ModelSelect id="ole-prepare-model" role="prepare" label="Prepare model" hint="Writes the briefing before a call."
           value={providers?.openaiPrepareModel ?? ''} options={models?.chat} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiPrepareModel: v })} />
-        <ModelSelect id="ole-chat-model" label="Live bullets and summaries model" hint="Runs during the call and after it. A fast model keeps bullets on topic."
+        <ModelSelect id="ole-chat-model" role="live" label="Live bullets and summaries model" hint="Runs during the call and after it."
           value={providers?.openaiChatModel ?? ''} options={models?.chat} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiChatModel: v })} />
       </div>
       <h3 className="settings-section-heading">MCP servers</h3>
