@@ -168,7 +168,7 @@ export function hookOle(d: Deps): {
     call = (name, argsJson) => runner.call(name, argsJson)
   }
 
-  async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string }): Promise<OleLiveState> {
+  async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string; startsAt?: number | null }): Promise<OleLiveState> {
     // enforced here, not only in the panel: Assistant = Local (without local Prepare) never reaches OpenAI or an MCP server
     if (blocked()) { error = null; send(); return state() }
     if (!serversOf(loadSettings(d.file)).some(s => s.enabled)) { error = 'Add an MCP server in Settings'; send(); return state() }
@@ -184,7 +184,7 @@ export function hookOle(d: Deps): {
       const serverPrompts = await collectWarmupPrompts(enabledServers(), { meetingTitle, focus })
       // on this Mac (#5) the notes queue runs it, so it never overlaps a summary
       const onMac = providersOf(loadSettings(d.file)).prepareOn === 'local' && local
-      const raw = await prepareContext({ chat: onMac ? createLocalChat(onMac) : prepareChat, tools, call, meetingTitle, focus, instructions, serverPrompts })
+      const raw = await prepareContext({ chat: onMac ? createLocalChat(onMac) : prepareChat, tools, call, meetingTitle, focus, startsAt: o.startsAt ?? null, instructions, serverPrompts })
       // text posing as a mid-call section never reaches the briefing as one (#86): only the enricher adds those
       const result = { ...raw, text: stripMentioned(raw.text) }
       if (seq !== prepareSeq) return state()
@@ -218,10 +218,10 @@ export function hookOle(d: Deps): {
   const every = d.checkEveryMs ?? 10 * 60_000
   if (every > 0) { setTimeout(() => void checkServers(), 5_000).unref?.(); setInterval(() => void checkServers(), every).unref?.() }
 
-  /** the calendar event on now, for a call with a default title (#56) */
-  async function calendarTitle(): Promise<string | null> {
+  /** the calendar event on now, for a call with a default title (#56); its start goes to a meeting-context tool (#93) */
+  async function calendarEvent(): Promise<Upcoming | null> {
     if (!d.upcoming) return null
-    try { const now = Date.now(); return eventNow(await d.upcoming(now - 12 * 60 * 60_000, now + 60 * 60_000), now)?.title ?? null }
+    try { const now = Date.now(); return eventNow(await d.upcoming(now - 12 * 60 * 60_000, now + 60 * 60_000), now) }
     catch (e) { console.warn('reading the calendar failed', e); return null }
   }
 
@@ -234,7 +234,7 @@ export function hookOle(d: Deps): {
     try { next = pickAutoPrepare(await d.upcoming(now, now + lead), now, lead, autoDone) } catch (e) { console.warn('reading the calendar failed', e); return }
     if (!next) return
     autoDone.add(next.id)
-    await prepare({ meetingTitle: next.title })
+    await prepare({ meetingTitle: next.title, startsAt: next.start })
     if (prepared?.meetingTitle === next.title && !error) {
       autoTitle = next.title
       d.notify?.('Your briefing is ready', next.title)
@@ -353,9 +353,10 @@ export function hookOle(d: Deps): {
       if (prepareNow) {
         // "Meeting", "Zoom call", "Untitled": a default title says nothing, so the calendar event on now names it (#44, #56)
         void (async () => {
-          const title = named ?? await calendarTitle()
+          const event = named ? null : await calendarEvent()
+          const title = named ?? event?.title ?? null
           preparedFromDefault = !title
-          await prepare({ meetingTitle: title, forMeeting: m.id })
+          await prepare({ meetingTitle: title, forMeeting: m.id, startsAt: event?.start ?? null })
         })()
       } else {
         preparedFromDefault = false

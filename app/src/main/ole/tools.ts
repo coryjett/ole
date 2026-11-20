@@ -164,6 +164,12 @@ export async function collectWarmupPrompts(servers: ToolServer[], o: { meetingTi
   return found.filter((p): p is WarmupPrompt => !!p)
 }
 
+/**
+ * A server tool Prepare calls itself, before the model's first turn (#93): read-only, named exactly this, taking
+ * optional `meeting_title`, `focus` and `starts_at` (ISO 8601). Its result reaches the model as the first tool result.
+ */
+export const MEETING_CONTEXT_TOOL = 'get_meeting_context'
+
 /** the meta-tool Prepare offers when it starts with a server's short list: the rest of the read-only tools (#15) */
 export const MORE_TOOLS = 'more_tools'
 export const MORE_TOOLS_DEF = {
