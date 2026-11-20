@@ -242,6 +242,7 @@ const api: YogurtApi = {
     getServers: () => ipcRenderer.invoke('ole:servers:get'),
     setServers: (list) => ipcRenderer.invoke('ole:servers:set', list),
     testServer: (id) => ipcRenderer.invoke('ole:servers:test', id),
+    testOpenAI: () => ipcRenderer.invoke('ole:openai:test'),
     state: () => ipcRenderer.invoke('ole:state'),
     onState: (cb) => { const f = (_e: unknown, s: OleLiveState) => cb(s); ipcRenderer.on('ole:state', f); return () => { ipcRenderer.off('ole:state', f) } },
     prepare: (o) => ipcRenderer.invoke('ole:prepare', o ?? {}),

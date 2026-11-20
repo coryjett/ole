@@ -13,7 +13,7 @@ const status: SecretStatus = { openai: { set: true, masked: 'sk-…3456' }, 'mcp
 const api = (): OleSettingsApi => ({
   getProviders: vi.fn(async () => providers), setProviders: vi.fn(async () => providers),
   setSecret: vi.fn(async () => status), secretStatus: vi.fn(async () => status),
-  getServers: vi.fn(async () => servers), setServers: vi.fn(async () => servers), testServer: vi.fn(async () => ({ ok: true, tools: 4 })),
+  getServers: vi.fn(async () => servers), setServers: vi.fn(async () => servers), testServer: vi.fn(async () => ({ ok: true, tools: 4 })), testOpenAI: vi.fn(async () => ({ ok: true })),
 })
 const render = (p: Partial<{ initialServers: McpServerConfig[]; initialProviders: typeof providers }> = {}) =>
   renderToStaticMarkup(createElement(OleSettings, { api: api(), initialProviders: providers, initialStatus: status, initialServers: servers, ...p }))

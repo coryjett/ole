@@ -31,7 +31,7 @@ const needKey = (key: string | null | undefined): string => {
 }
 
 /** the server's own reason, short, with anything key-shaped taken out (a 401 can echo part of the key) */
-const reason = async (res: Response, key: string): Promise<string> => {
+export const reason = async (res: Response, key: string): Promise<string> => {
   try {
     const m = (await res.json())?.error?.message
     if (typeof m !== 'string') return ''

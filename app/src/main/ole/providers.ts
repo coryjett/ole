@@ -2,6 +2,8 @@
 import { ipcMain } from 'electron'
 import { loadSettings, updateSettings, type Settings } from '../settings'
 import type { OleProviders, ProviderChoice } from './types'
+import { readSecret } from './secrets'
+import { testOpenAI } from './openaiTest'
 
 type OleProviderSettings = Settings & {
   oleTranscription?: string
@@ -88,4 +90,9 @@ export function hookOleProviders(d: { file: string }): void {
   ipcMain.handle('ole:providers:get', () => providersOf(loadSettings(d.file)))
 
   ipcMain.handle('ole:providers:set', (_e, patch: unknown) => setProviders(d.file, patch))
+
+  ipcMain.handle('ole:openai:test', () => {
+    const p = providersOf(loadSettings(d.file))
+    return testOpenAI({ key: readSecret(d.file, 'openai'), chatModel: p.openaiChatModel, transcribeModel: p.openaiTranscribeModel })
+  })
 }
