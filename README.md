@@ -14,7 +14,7 @@
 
 <p align="center">
   <sub>macOS 14.4+ (Apple Silicon) · MCP server + key · OpenAI key (optional)</sub><br><br>
-  <a href="#install">Install</a> · <a href="#set-up">Set up</a> · <a href="#privacy">Privacy</a> · <a href="OLE.md">Fork notes</a> · <a href="LICENSE">MIT license</a><br><br>
+  <a href="docs/getting-started.md"><b>Getting started</b></a> · <a href="#install">Install</a> · <a href="#set-up">Set up</a> · <a href="#privacy">Privacy</a> · <a href="OLE.md">Fork notes</a> · <a href="LICENSE">MIT license</a><br><br>
   A fork of <a href="https://github.com/FrigadeHQ/yogurt">Yogurt</a> by Frigade.
 </p>
 
