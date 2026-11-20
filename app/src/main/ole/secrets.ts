@@ -10,9 +10,9 @@ export type SecretStatus = Partial<Record<SecretName, { set: boolean; masked: st
 /** an MCP server id: lowercase letters, digits and dashes, 1 to 40 characters */
 export const SERVER_ID = /^[a-z0-9-]{1,40}$/
 
-/** 'openai', or `mcp:<id>` for an MCP server's key */
+/** 'openai', 'custom' (the Custom server's key, #17), or `mcp:<id>` for an MCP server's key */
 export function isSecretName(name: unknown): name is SecretName {
-  if (name === 'openai') return true
+  if (name === 'openai' || name === 'custom') return true
   return typeof name === 'string' && name.startsWith('mcp:') && SERVER_ID.test(name.slice(4))
 }
 

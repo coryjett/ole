@@ -2,7 +2,7 @@
 import { MODEL_ADVICE, isRecommended, type ModelRole } from './modelAdvice'
 import { useEffect, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import type { McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/types'
+import type { AssistantChoice, McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/types'
 
 export type SecretStatus = Partial<Record<SecretName, { set: boolean; masked: string }>>
 export type ServerTestResult = { ok: boolean; tools: number; error?: string; toolList?: Array<{ name: string; description: string }> }
@@ -20,12 +20,16 @@ export type OleSettingsApi = {
   /** the models the saved key can use (#8) */
   openaiModels(): Promise<import('../../../main/ole/openaiTest').OpenAIModels>
   /** after a working key is saved: Local providers the person never chose become OpenAI (#10) */
+  /** the Custom server's models and a reachability and key check (#17) */
+  customModels(): Promise<import('../../../main/ole/openaiTest').OpenAIModels>
+  testCustom(): Promise<import('../../../main/ole/openaiTest').OpenAITestResult>
   adoptOpenAI(): Promise<{ switched: Array<'transcription' | 'assistant'>; providers: OleProviders }>
   /** undo the switch (undo: true also keeps Local as the person's choice), or put it back when the key is removed */
   revertOpenAI(undo: boolean): Promise<{ reverted: Array<'transcription' | 'assistant'>; providers: OleProviders }>
 }
 
 const CHOICES: Array<[ProviderChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI']]
+const ASSISTANT_CHOICES: Array<[AssistantChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI'], ['custom', 'Custom server']]
 const MAX_SERVERS = 10
 
 /** a secret name made safe for an element id: `mcp:abc` becomes `mcp-abc` */
@@ -192,7 +196,7 @@ function AddServer({ disabled, onAdd }: { disabled: boolean; onAdd: (name: strin
   )
 }
 
-function ChoiceRow({ id, label, description, value, disabled, onChange }: { id: string; label: string; description: string; value: ProviderChoice; disabled: boolean; onChange: (v: ProviderChoice) => void }) {
+function ChoiceRow<T extends string>({ id, label, description, value, disabled, onChange, choices = CHOICES as unknown as Array<[T, string]> }: { id: string; label: string; description: string; value: T; disabled: boolean; onChange: (v: T) => void; choices?: Array<[T, string]> }) {
   return (
     <div className="settings-row">
       <div className="settings-row-copy">
@@ -200,8 +204,8 @@ function ChoiceRow({ id, label, description, value, disabled, onChange }: { id: 
         <p className="settings-description">{description}</p>
       </div>
       <span className="settings-select-wrap">
-        <select id={id} data-testid={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as ProviderChoice)} className="settings-select">
-          {CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        <select id={id} data-testid={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as T)} className="settings-select">
+          {choices.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         <ChevronDown size={14} aria-hidden="true" />
       </span>
@@ -210,6 +214,62 @@ function ChoiceRow({ id, label, description, value, disabled, onChange }: { id: 
 }
 
 type OpenAIModelList = Awaited<ReturnType<OleSettingsApi['openaiModels']>>
+
+/** Assistant = Custom server (#17): any OpenAI-compatible server the person runs: its address, key, model and a Test */
+export function CustomServerRows({ api, providers, status, saveKey, disabled, patch }: {
+  api: Pick<OleSettingsApi, 'customModels' | 'testCustom'>; providers: OleProviders; status?: { set: boolean; masked: string }
+  saveKey: (name: SecretName, value: string) => Promise<boolean>; disabled: boolean; patch: (p: Partial<OleProviders>) => void
+}) {
+  const [url, setUrl] = useState(providers.customBaseUrl)
+  const [models, setModels] = useState<OpenAIModelList | null>(null)
+  const [result, setResult] = useState<OpenAITest | null>(null)
+  const [testing, setTesting] = useState(false)
+  useEffect(() => setUrl(providers.customBaseUrl), [providers.customBaseUrl])
+  useEffect(() => { if (providers.customBaseUrl) void api.customModels().then(setModels, () => setModels(null)) }, [providers.customBaseUrl, status?.set, status?.masked])
+  const run = async () => {
+    setTesting(true); setResult(null)
+    try { setResult(await api.testCustom()) } catch { setResult({ ok: false, error: 'Test failed' }) } finally { setTesting(false) }
+  }
+  const options = models?.ok ? ['', ...models.chat] : ['']
+  const value = options.includes(providers.customModel) ? providers.customModel : providers.customModel
+  return <>
+    <div className="settings-row">
+      <div className="settings-row-copy" style={{ flex: 1, minWidth: 0 }}>
+        <label htmlFor="ole-custom-url" className="settings-label">Custom server address</label>
+        <p className="settings-description">An OpenAI-compatible endpoint you run, ending at /v1 (https). Used for Prepare, live context and summaries; transcription stays Local or OpenAI.</p>
+        <input id="ole-custom-url" data-testid="ole-custom-url" value={url} disabled={disabled} spellCheck={false} maxLength={300} placeholder="https://models.example.com/v1"
+          onChange={(e) => setUrl(e.target.value)} onBlur={() => { if (url.trim() !== providers.customBaseUrl) patch({ customBaseUrl: url.trim() }) }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          style={{ display: 'block', width: '100%', height: 32, marginTop: 8, padding: '0 10px', boxSizing: 'border-box', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg)', color: 'var(--ink)', fontSize: 13 }} />
+        {url.trim() && !/^https:\/\/[^\s]+$/.test(url.trim()) && <p role="alert" className="settings-description" style={{ color: '#ff6b6b' }}>Use an https address.</p>}
+      </div>
+    </div>
+    <div className="settings-row">
+      <div className="settings-row-copy">
+        <label htmlFor="ole-key-custom" className="settings-label">Custom server key</label>
+        <p data-testid="ole-key-custom-status" className="settings-description">{status?.set ? `Saved: ${status.masked}` : 'Not set (fine if your server needs none)'}</p>
+        {result && <TestBadge testId="ole-custom-result" ok={!!result.ok} text={result.ok ? `Connected${models?.ok ? `: ${models.chat.length} ${models.chat.length === 1 ? 'model' : 'models'}` : ''}` : (result.error || 'Test failed')} />}
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <KeyFields name="custom" label="Custom server key" status={status} save={saveKey} />
+        <button data-testid="ole-custom-test" className="workspace-button" disabled={testing || !providers.customBaseUrl} onClick={() => void run()}>{testing ? 'Testing…' : 'Test'}</button>
+      </div>
+    </div>
+    <div className="settings-row">
+      <div className="settings-row-copy">
+        <label htmlFor="ole-custom-model" className="settings-label">Custom server model</label>
+        <p className="settings-description">Leave on "Server default" for a server that runs one model. It must support tool calls for Prepare and live context.</p>
+        {models && !models.ok && <p className="settings-description">{models.error}</p>}
+      </div>
+      <span className="settings-select-wrap">
+        <select id="ole-custom-model" data-testid="ole-custom-model" value={value} disabled={disabled} onChange={(e) => patch({ customModel: e.target.value })} className="settings-select">
+          {(options.includes(value) ? options : [value, ...options]).map(m => <option key={m || 'default'} value={m}>{m || 'Server default'}</option>)}
+        </select>
+        <ChevronDown size={14} aria-hidden="true" />
+      </span>
+    </div>
+  </>
+}
 
 /** a model dropdown filled from the key's model list; the saved value always stays selectable (#8) */
 export function ModelSelect({ id, label, hint, role, value, options, note, disabled, onChange }: {
@@ -308,8 +368,9 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
       <div data-testid="ole-settings" className="settings-group">
         <ChoiceRow id="ole-transcription" label="Transcription" description="Who turns meeting audio into text."
           value={providers?.transcription ?? 'local'} disabled={off} onChange={(v) => patch({ transcription: v })} />
-        <ChoiceRow id="ole-assistant" label="Assistant" description="Who writes notes and answers questions. Prepare and live context need OpenAI: with Local they are off and your MCP servers are not used. Anthropic and Vertex: coming later"
-          value={providers?.assistant ?? 'local'} disabled={off} onChange={(v) => patch({ assistant: v })} />
+        <ChoiceRow id="ole-assistant" label="Assistant" description="Who writes notes and answers questions. Prepare and live context need OpenAI or your own server: with Local they are off and your MCP servers are not used. Anthropic and Vertex: coming later"
+          choices={ASSISTANT_CHOICES} value={providers?.assistant ?? 'local'} disabled={off} onChange={(v) => patch({ assistant: v })} />
+        {providers?.assistant === 'custom' && <CustomServerRows api={api} providers={providers} status={status?.custom} saveKey={saveKey} disabled={off} patch={patch} />}
         <OpenAIKeyRow status={status?.openai} save={saveKey} test={() => api.testOpenAI()}
           adopt={async () => { const r = await api.adoptOpenAI(); setProviders(r.providers); return r }}
           revert={async (undo) => { const r = await api.revertOpenAI(undo); setProviders(r.providers); return r }} />

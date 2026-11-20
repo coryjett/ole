@@ -41,8 +41,10 @@ export function hookOle(d: Deps): {
 
   /** why Prepare and live context are off, or null when they can run: they need the Assistant on OpenAI and a key (#11) */
   const blocked = (): string | null => {
-    if (providersOf(loadSettings(d.file)).assistant !== 'openai') return 'Prepare and live context use OpenAI and your MCP servers. Set Assistant to OpenAI in Settings > Ole.'
-    if (!openaiKey()) return 'Add an OpenAI key in Settings > Ole to prepare for calls.'
+    const p = providersOf(loadSettings(d.file))
+    if (p.assistant === 'local') return 'Prepare and live context use OpenAI or your own server, with your MCP servers. Set Assistant to OpenAI or Custom server in Settings > Ole.'
+    if (p.assistant === 'openai' && !openaiKey()) return 'Add an OpenAI key in Settings > Ole to prepare for calls.'
+    if (p.assistant === 'custom' && !p.customBaseUrl) return 'Add the Custom server address in Settings > Ole to prepare for calls.'
     return null
   }
   const state = (): OleLiveState => ({
@@ -52,9 +54,15 @@ export function hookOle(d: Deps): {
   const send = () => d.send(state())
 
   const openaiKey = () => readSecret(d.file, 'openai')
-  const chat: ChatFn = (req) => openaiChat({ key: openaiKey(), model: providersOf(loadSettings(d.file)).openaiChatModel, ...req })
-  // the briefing picks tools and writes, so it gets its own (larger) model
-  const prepareChat: ChatFn = (req) => openaiChat({ key: openaiKey(), model: providersOf(loadSettings(d.file)).openaiPrepareModel, ...req })
+  /** where chat goes: OpenAI, or the person's OpenAI-compatible server (#17); read per request so Settings apply at once */
+  const endpoint = (role: 'live' | 'prepare') => {
+    const p = providersOf(loadSettings(d.file))
+    if (p.assistant === 'custom') return { key: readSecret(d.file, 'custom') ?? '', baseUrl: p.customBaseUrl, model: p.customModel || 'default' }
+    return { key: openaiKey(), model: role === 'prepare' ? p.openaiPrepareModel : p.openaiChatModel }
+  }
+  const chat: ChatFn = (req) => openaiChat({ ...endpoint('live'), ...req })
+  // the briefing picks tools and writes, so on OpenAI it gets its own (larger) model
+  const prepareChat: ChatFn = (req) => openaiChat({ ...endpoint('prepare'), ...req })
   const clientOf = (s: McpServerConfig) => createMcpClient({ key: readSecret(d.file, `mcp:${s.id}`) ?? undefined, url: s.url })
 
   /** the enabled servers' read-only tools, gathered again on each prepare and meeting start */

@@ -647,8 +647,14 @@ app.whenReady().then(() => {
   const memory = notesMemory(smallMac)
   const localModel = createNotesModel({ engine, modelPath: () => setup.notesPath(), onLoaded: path => setup.notesModelLoaded(path), contextSize: memory.contextSize, ...(memory.releaseSpeech ? { beforeLoad: releaseIdleSpeech } : {}) })
   // Ole: the notes model is OpenAI or the local one, chosen per job so a Settings change applies to the next one
-  const openaiModel = createOpenAIModel({ key: () => readSecret(settingsFile, 'openai'), model: () => oleProviders().openaiChatModel })
-  const onOpenAI = () => oleProviders().assistant === 'openai'
+  // OpenAI, or the person's OpenAI-compatible server (#17): key, address and model follow the Assistant choice per job
+  const custom = () => oleProviders().assistant === 'custom'
+  const openaiModel = createOpenAIModel({
+    key: () => custom() ? (readSecret(settingsFile, 'custom') ?? '') : readSecret(settingsFile, 'openai'),
+    model: () => custom() ? (oleProviders().customModel || 'default') : oleProviders().openaiChatModel,
+    baseUrl: () => custom() ? oleProviders().customBaseUrl : 'https://api.openai.com/v1',
+  })
+  const onOpenAI = () => oleProviders().assistant !== 'local'
   const model: typeof localModel = {
     llm: (...a) => (onOpenAI() ? openaiModel : localModel).llm(...a),
     unload: () => localModel.unload(),
