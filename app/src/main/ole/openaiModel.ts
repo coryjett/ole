@@ -151,17 +151,102 @@ export function createOpenAIModel(o: { key: () => string | null; model: () => st
   }
 }
 
+/** the first choice's message of a non-streamed answer */
+async function messageOf(res: Response): Promise<OpenAIMessage> {
+  const message = (await res.json())?.choices?.[0]?.message
+  if (!message) throw new OpenAIError('OpenAI returned no answer')
+  return message as OpenAIMessage
+}
+
 /**
- * One non-streaming chat completion; resolves with the first choice's message (content and any tool_calls).
- * For callers that want tools or a response_format, which the notes surface does not carry.
+ * Reads a streamed answer (#84) into the same message a non-streamed one gives: content, and tool_calls put together
+ * from their pieces. Each content piece goes to onDelta until a tool call starts (a reply that looks things up is not
+ * the answer). Throws when the stream breaks, carries an error or ends without saying it is done; null when it held
+ * no events at all.
+ */
+async function readMessageStream(res: Response, onDelta: (text: string) => void, signal?: AbortSignal): Promise<OpenAIMessage | null> {
+  if (!res.body) return null
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = '', content = '', events = 0, finished = false, calling = false
+  const calls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> = []
+  const line = (l: string) => {
+    const s = l.trim()
+    if (!s.startsWith('data:')) return
+    const data = s.slice(5).trim()
+    if (data === '[DONE]') { finished = true; return }
+    let event: { error?: unknown; choices?: Array<{ delta?: { content?: unknown; tool_calls?: unknown }; finish_reason?: unknown }> }
+    try { event = JSON.parse(data) } catch { return /* a keep-alive or a malformed event: skipped */ }
+    if (event?.error) throw new OpenAIError('OpenAI stopped the answer')
+    events++
+    const choice = event?.choices?.[0]
+    if (choice?.finish_reason) finished = true
+    const delta = choice?.delta
+    if (Array.isArray(delta?.tool_calls)) for (const raw of delta.tool_calls as Array<Record<string, unknown>>) {
+      calling = true
+      const i = typeof raw?.index === 'number' ? raw.index : calls.length
+      const fn = (raw?.function ?? {}) as { name?: unknown; arguments?: unknown }
+      const c = calls[i] ??= { id: '', type: 'function', function: { name: '', arguments: '' } }
+      if (typeof raw.id === 'string') c.id += raw.id
+      if (typeof fn.name === 'string') c.function.name += fn.name
+      if (typeof fn.arguments === 'string') c.function.arguments += fn.arguments
+    }
+    if (typeof delta?.content === 'string' && delta.content) {
+      content += delta.content
+      if (!calling) onDelta(delta.content)
+    }
+  }
+  try {
+    while (!finished) {
+      if (signal?.aborted) throw signal.reason ?? new Error('aborted')
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const l of lines) line(l)
+    }
+    if (!finished) line(buffer + decoder.decode())
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+  if (!events) return null
+  if (!finished) throw new OpenAIError('OpenAI stopped the answer')
+  const toolCalls = calls.filter(Boolean)
+  return { role: 'assistant', content: content || (toolCalls.length ? null : ''), ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }
+}
+
+/**
+ * One chat completion; resolves with the first choice's message (content and any tool_calls). For callers that want
+ * tools or a response_format, which the notes surface does not carry.
+ *
+ * With onDelta (#84) the answer is streamed and each content piece goes to onDelta as it arrives; the message it
+ * resolves with is the same as without. A server that ignores `stream` and answers whole is read as is. One that
+ * refuses it, breaks mid-stream or sends nothing usable is asked again without streaming, and that answer is the one
+ * returned (the caller must not show twice what it already took from the pieces).
  */
 export async function openaiChat(o: {
   key: string | null; model: string; messages: OpenAIMessage[]; tools?: unknown[]; response_format?: unknown
   maxTokens?: number; temperature?: number; signal?: AbortSignal; fetch?: typeof fetch; baseUrl?: string
+  onDelta?: (text: string) => void
 }): Promise<OpenAIMessage> {
+  const { onDelta, ...rest } = o
   const key = needKey(o.key, o.baseUrl)
-  const res = await postSampled({ ...o, key, stream: false })
-  const message = (await res.json())?.choices?.[0]?.message
-  if (!message) throw new OpenAIError('OpenAI returned no answer')
-  return message as OpenAIMessage
+  if (onDelta) {
+    let res: Response | null = null
+    try { res = await postSampled({ ...rest, key, stream: true }) } catch (e) {
+      // a server that does not take `stream` says so with a 400; anything else fails as it would without streaming
+      if (!(e instanceof OpenAIError) || e.status !== 400 || !/stream/i.test(e.message)) throw e
+    }
+    if (res) {
+      if (/application\/json/i.test(res.headers.get('content-type') ?? '')) return messageOf(res)
+      try {
+        const m = await readMessageStream(res, onDelta, o.signal)
+        if (m) return m
+      } catch (e) {
+        if (o.signal?.aborted) throw e
+      }
+    }
+  }
+  return messageOf(await postSampled({ ...rest, key, stream: false }))
 }

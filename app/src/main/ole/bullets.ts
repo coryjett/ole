@@ -1,11 +1,16 @@
 // Ole: live context bullets. Throttled model calls over the recent transcript and the prepared context.
 import type { OleBullet, OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
+import { createBulletStream } from './bulletStream'
 
 export type TranscriptLine = { speaker: string; text: string; startMs: number }
 export type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 export type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string }
-export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
+/**
+ * onDelta (#84): stream the answer, each content piece as it arrives. A ChatFn may ignore it and answer whole; the
+ * reply it resolves with is the whole message either way.
+ */
+export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; onDelta?: (text: string) => void }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
 export type CallToolFn = (name: string, argsJson: string) => Promise<string>
 export type BulletsEngine = {
   push(line: TranscriptLine): void; stop(): void; bullets(): OleBullet[]
@@ -157,24 +162,36 @@ export function readableSource(source: string): string {
   return source.split(/\s*;\s*/).map(p => p.replace(/^\[|\]$/g, '').replace(/^(?:get|list|search|find|lookup|read|query|fetch|describe)_([a-z0-9_]+)\s*:/i, (_m, rest: string) => `${rest.replace(/_/g, ' ')}:`).trim()).filter(Boolean).join('; ')
 }
 
-export function parseBullets(content: string | null): Array<{ text: string; source: string; heard?: string; quote?: string; url?: string }> {
+export type ParsedBullet = { text: string; source: string; heard?: string; quote?: string; url?: string }
+/** bullets read from one reply at most (whole or streamed) */
+const BULLETS_PER_REPLY = 3
+
+/** one element of a reply's "bullets", or null when it lacks text or a source; never throws */
+export function parseBulletItem(item: unknown): ParsedBullet | null {
+  const o = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+  const text = typeof o.text === 'string' ? o.text.trim() : ''
+  const source = typeof o.source === 'string' ? o.source.trim() : ''
+  if (!text || !source) return null
+  // backstop for a wordy model: a bullet is a headline (#40)
+  const short = clip(text.replace(/\s+/g, ' '), BULLET_MAX)
+  const heard = typeof o.heard === 'string' ? clip(o.heard.trim().replace(/^["“]|["”]$/g, ''), 100) : ''
+  const quote = typeof o.quote === 'string' ? clip(o.quote.trim().replace(/^["“]|["”]$/g, ''), 160) : ''
+  const url = typeof o.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(o.url.trim()) ? o.url.trim() : ''
+  return { text: short, source: readableSource(source), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) }
+}
+
+export function parseBullets(content: string | null): ParsedBullet[] {
   if (!content) return []
   const body = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   let parsed: unknown
   try { parsed = JSON.parse(body) } catch { return [] }
   const list = (parsed as { bullets?: unknown })?.bullets
   if (!Array.isArray(list)) return []
-  const out: Array<{ text: string; source: string; heard?: string; quote?: string; url?: string }> = []
+  const out: ParsedBullet[] = []
   for (const item of list) {
-    const text = typeof item?.text === 'string' ? item.text.trim() : ''
-    const source = typeof item?.source === 'string' ? item.source.trim() : ''
-    // backstop for a wordy model: a bullet is a headline (#40)
-    const short = clip(text.replace(/\s+/g, ' '), BULLET_MAX)
-    const heard = typeof item?.heard === 'string' ? clip(item.heard.trim().replace(/^["“]|["”]$/g, ''), 100) : ''
-    const quote = typeof item?.quote === 'string' ? clip(item.quote.trim().replace(/^["“]|["”]$/g, ''), 160) : ''
-    const url = typeof item?.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(item.url.trim()) ? item.url.trim() : ''
-    if (text && source) out.push({ text: short, source: readableSource(source), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
-    if (out.length === 3) break
+    const b = parseBulletItem(item)
+    if (b) out.push(b)
+    if (out.length === BULLETS_PER_REPLY) break
   }
   return out
 }
@@ -408,31 +425,19 @@ export function createBulletsEngine(opts: {
       const offered = opts.tools()
       const allowed = new Set(offered.map(t => t.name))
       const tools = offered.length ? { tools: toOpenAiTools(offered) } : {}
-      let reply = await opts.chat({ messages, ...tools, response_format: { type: 'json_object' } })
-      for (let round = 1; reply.tool_calls?.length; round++) {
-        if (stopped) return
-        messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
-        // a round's lookups are independent: they run together, answered in the order they were asked (#80)
-        const calls = reply.tool_calls
-        const answered = await Promise.all(calls.map(call => lookup(call, allowed)))
-        calls.forEach((call, i) => messages.push({ role: 'tool', tool_call_id: call.id, content: answered[i] }))
-        // The last round offers no tools, so the model has to answer.
-        reply = await opts.chat({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
-        if (round >= TOOL_ROUNDS) break
-      }
-      if (stopped) return
       const seen = new Set(list.map(b => normalise(b.text)))
       const shownTexts = list.map(b => b.text)
       const fresh: OleBullet[] = []
-      const headings = briefingHeadings(opts.context()?.text ?? '')
-      let dropped = 0, repeated = 0
-      const back = parseBullets(reply.content)
-      for (const b of back) {
+      let dropped = 0, repeated = 0, shownCount = 0
+      /** the bullets taken from the stream this turn, as parsed (#84) */
+      const streamed: string[] = []
+      /** each bullet gets exactly the same checks, streamed or not */
+      const consider = (b: ParsedBullet) => {
         // a briefing heading isn't a source you can check (#37)
-        if (onlyHeadings(b.source, headings)) { dropped++; continue }
+        if (onlyHeadings(b.source, briefingHeadings(opts.context()?.text ?? ''))) { dropped++; return }
         const key = normalise(b.text)
-        // the same words, or the same fact in other words, as a bullet already shown (#81)
-        if (seen.has(key) || nearDuplicate(b.text, shownTexts)) { repeated++; continue }
+        // the same words, or the same fact in other words, as a bullet already shown or earlier in this turn (#81)
+        if (seen.has(key) || nearDuplicate(b.text, shownTexts)) { repeated++; return }
         seen.add(key)
         shownTexts.push(b.text)
         // the excerpts are checked against what Ole actually has; one that doesn't match is left out, never shown (#39)
@@ -444,10 +449,53 @@ export function createBulletsEngine(opts: {
         const url = b.url && sources.includes(b.url) ? b.url : undefined
         fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
       }
+      /** this turn's bullets on top, in the model's order; a pin or rating made meanwhile is kept */
+      const show = () => {
+        const ids = new Set(fresh.map(b => b.id))
+        list = [...fresh, ...list.filter(b => !ids.has(b.id))]
+        shownCount = fresh.length
+        opts.onBullets([...list])
+      }
+      /** a model request whose answer streams (#84): each complete bullet is checked and shown as it arrives */
+      const ask = (req: Parameters<ChatFn>[0]) => {
+        let taken = 0
+        const reader = createBulletStream(item => {
+          if (stopped || taken >= BULLETS_PER_REPLY) return
+          const b = parseBulletItem(item)
+          if (!b) return
+          taken++
+          streamed.push(JSON.stringify(b))
+          consider(b)
+          if (fresh.length > shownCount) show()
+        })
+        return opts.chat({ ...req, onDelta: text => reader.push(text) })
+      }
+      let reply = await ask({ messages, ...tools, response_format: { type: 'json_object' } })
+      for (let round = 1; reply.tool_calls?.length; round++) {
+        if (stopped) return
+        messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
+        // a round's lookups are independent: they run together, answered in the order they were asked (#80)
+        const calls = reply.tool_calls
+        const answered = await Promise.all(calls.map(call => lookup(call, allowed)))
+        calls.forEach((call, i) => messages.push({ role: 'tool', tool_call_id: call.id, content: answered[i] }))
+        // The last round offers no tools, so the model has to answer.
+        reply = await ask({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
+        if (round >= TOOL_ROUNDS) break
+      }
+      if (stopped) return
+      // what is left of the reply: the whole-reply parse is the authority (#84); a bullet already taken from the
+      // stream is not taken again, and one the stream gave that the whole reply lacks still counts as back
+      const back = parseBullets(reply.content)
+      const left = [...streamed]
+      for (const b of back) {
+        const i = left.indexOf(JSON.stringify(b))
+        if (i > -1) left.splice(i, 1)
+        else consider(b)
+      }
       // never silent (#48, #59): every turn says what happened to its bullets
       const lookupsMade = messages.filter(m => m.role === 'tool').length
-      log(`ole bullets: ${back.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups${fast ? ', fast' : ''}`)
-      if (fresh.length) { list = [...fresh, ...list]; opts.onBullets([...list]) }
+      log(`ole bullets: ${back.length + left.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups${fast ? ', fast' : ''}`)
+      if (fresh.length > shownCount) show()
     } catch (e) {
       // the panel stays quiet and the next interval tries again; the log says why (#59)
       log(`ole bullets: turn failed: ${e instanceof Error ? e.message.slice(0, 200) : 'unknown error'}`)
