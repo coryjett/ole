@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { Note } from '../../src/renderer/src/screens/Note'
 import { OleQuickNote, OleTabLabel, OleTabPanels } from '../../src/renderer/src/ole/OleNoteTabs'
+import { OleAskColumn, OleAskPanel } from '../../src/renderer/src/ole/OleAsk'
 import { appendQuickNote, callElapsedMs, callTime, fitTab, oleTabs, quickNoteKey, unseenCount } from '../../src/renderer/src/ole/oleTabs'
 import type { MeetingView, NoteView, OleLiveState } from '../../src/shared/types'
 
@@ -73,6 +74,11 @@ vi.mock('react', async original => ({ ...await original<typeof import('react')>(
     hooks.effects[i] = { run, deps, cleanup: prev?.cleanup, pending: !prev || !deps || deps.some((dep, index) => dep !== prev.deps?.[index]) }
   },
 }))
+// the note view's width, as the Ask column's ResizeObserver would report it (#148)
+const view = vi.hoisted(() => ({ wide: false }))
+vi.mock('../../src/renderer/src/ole/oleAskColumn', async original => ({
+  ...await original<typeof import('../../src/renderer/src/ole/oleAskColumn')>(), useAskColumnWide: () => ({ ref: () => {}, wide: view.wide }),
+}))
 vi.mock('../../src/renderer/src/motion', async original => ({ ...await original<typeof import('../../src/renderer/src/motion')>(), useReducedMotion: () => true }))
 
 type El = ReactElement<Record<string, unknown>>
@@ -108,6 +114,7 @@ const bullet = (id: string, at: number) => ({ id, text: `Bullet ${id}`, source: 
 
 beforeEach(() => {
   vi.clearAllMocks()
+  view.wide = false
   mid = `m${++run}`
   meeting = { id: mid, title: 'Kickoff', startedAt: 1, endedAt: null, eventId: 'event', app: null, attendees: [], state: 'recording', language: null, titleSource: 'calendar' } as MeetingView
   notes = { meetingId: mid, mine: '', enhanced: null, edited: false, status: 'idle', draft: '', peopleChanged: false }
@@ -222,5 +229,37 @@ describe('the quick note (#108)', () => {
     await render()
     expect(setMine).not.toHaveBeenCalled()
     expect(byId('note-mine')?.props.markdown).toBe('Kept')
+  })
+})
+
+describe('Ask as a column on a wide note (#148)', () => {
+  it('narrow: the bottom dock, and the Live tab keeps its answers', async () => {
+    await settle()
+    expect(byType(OleAskPanel)?.props.docked).toBe(true)
+    expect(byType(OleAskColumn)).toBeUndefined()
+    expect(byType(OleTabPanels)?.props.askColumn).toBe(false)
+  })
+  it('wide: the column on every tab instead of the dock, and the Live tab leaves its answers to it', async () => {
+    view.wide = true
+    await settle()
+    expect(byType(OleAskColumn)?.props.meetingId).toBe(mid)
+    expect(byType(OleAskPanel)).toBeUndefined()
+    expect(byType(OleTabPanels)?.props.askColumn).toBe(true)
+    for (const tab of ['note-ole-briefing-tab', 'note-transcript-toggle', 'note-notes-tab']) {
+      await click(tab)
+      expect(byType(OleAskColumn)).toBeDefined()
+      expect(byType(OleAskPanel)).toBeUndefined()
+    }
+  })
+  it('wide but blocked, or after the call: no column, and the Live tab keeps its answers', async () => {
+    view.wide = true
+    oleState = { ...oleState, blocked: 'Add an OpenAI key' }
+    await settle()
+    expect(byType(OleAskColumn)).toBeUndefined()
+    expect(byType(OleTabPanels)?.props.askColumn).toBe(false)
+    unmount(); meeting = { ...meeting, state: 'done', endedAt: 2 }; saved = { ...saved, answers: [{ id: 'a', question: 'Q?', text: 'A.', at: 1 }] }
+    await settle()
+    expect(byType(OleAskColumn)).toBeUndefined()
+    expect(byType(OleAskPanel)).toBeUndefined()
   })
 })

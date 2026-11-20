@@ -1,6 +1,7 @@
 import { TranscriptionControl, TranscriptionNotice } from '../components/Transcription'
 import { OleQuickNote, OleTabLabel, OleTabPanels, useOleNote } from '../ole/OleNoteTabs'
-import { OleAskPanel } from '../ole/OleAsk'
+import { OleAskColumn, OleAskPanel } from '../ole/OleAsk'
+import { askColumnShown, useAskColumnWide } from '../ole/oleAskColumn'
 import { appendQuickNote, callElapsedMs, fitTab, isOleTab, type NoteTab, type OleTab } from '../ole/oleTabs'
 import { transcriptionBusy } from '../../../shared/transcription'
 import { citationTargetIndex } from '../../../shared/citations'
@@ -127,6 +128,9 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   const [primaryState, setPrimary] = useState<NoteTab>(() => readingViews.get(id)?.primary ?? 'notes')
   const recordingHere = m?.id === id && m.state === 'recording'
   const ole = useOleNote(id, recordingHere, primaryState === 'live')
+  // a wide note during its call shows Ask as a column on the right instead of the bottom dock (#148)
+  const askWide = useAskColumnWide()
+  const askColumn = askColumnShown({ wide: askWide.wide, recording: recordingHere, meetingId: id, state: ole.state })
   const primary = instantSummary ? 'notes' : fitTab(primaryState, ole.tabs)
   const readingScroll = useScrollMemory<HTMLElement>(`note/${id}/${view}`, !!m && !!notes && primary === 'notes')
   // kept as chosen, so a Context tab that loads a moment later is still the one shown (#108)
@@ -378,7 +382,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             onWriteAgain={(note) => { if (!generation || generation.reason) return; pickPrimary('notes'); pick('enhanced'); void writeAgain(note) }} recording={recording} savePending={m.stopSavePending} trashed={trashed} onRename={() => setRenaming(true)} onDelete={() => { void saveAll().then((saved) => { if (!saved) return; if (trashed) setDeleting(true); else void moveToTrash(id, `/note/${id}`) }) }}
             folders={(close) => <FolderPicker testId="note-menu-folders" meetingId={id} onNew={() => { close(); setNamingFolder(true) }} />} />
       </div>
-      <div className="note-layout relative flex min-w-0 flex-1 flex-col" data-tab-pointer={tabPointer}>
+      <div ref={askWide.ref} className="note-layout relative flex min-w-0 flex-1 flex-col" data-tab-pointer={tabPointer}>
         <header className="note-header note-page-width">
           <Title id={id} title={m.title} editing={renaming} onEdit={setRenaming} />
           <div className="note-meta-row">
@@ -462,11 +466,12 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             <Transcript notice={<>{(hasAudio&&(m.transcriptionPending||!hasTranscript)||m.transcriptionState==='waiting-model'||m.transcriptionState==='waiting-recording')&&<TranscriptionNotice state={m.transcriptionState} hasLines={hasTranscript} onContinue={()=>void runTranscript()} disabled={recording||!!m.stopSavePending}/>}
             {!hasAudio&&m.transcriptionState==='error'&&<InlineError testId="upload-preparation-failed"><span>{t("Yogurt couldn't read this audio file.")}</span><button className="text-action" onClick={()=>void openAudioUpload()}>{t('Upload a file')}</button></InlineError>}</>} id={id} processing={transcribing} replacing={!!m.transcriptionAgain} recording={recording} active={primary === 'transcript'} inline toolbar={transcriptToolbar} focus={at?.ms != null ? { ...at, ms: at.ms } : undefined} />
           </section>}
-          {ole.tabs.length > 0 && <OleTabPanels tab={isOleTab(primary) ? primary : null} meetingId={id} recording={recording} ole={ole} />}
+          {ole.tabs.length > 0 && <OleTabPanels tab={isOleTab(primary) ? primary : null} meetingId={id} recording={recording} ole={ole} askColumn={askColumn} />}
           </div>
+          {askColumn && ole.state && <OleAskColumn meetingId={id} state={ole.state} />}
         </div>
         <footer ref={setFooter} className="note-footer">
-          {recording && ole.state && <OleAskPanel docked meetingId={id} state={ole.state} />}
+          {recording && ole.state && !askColumn && <OleAskPanel docked meetingId={id} state={ole.state} />}
           {recording && primary !== 'notes' && <OleQuickNote onAdd={addQuickNote} />}
             {m.stopSavePending && (
               <div data-testid="note-stop-unsaved" role="alert" className="mt-5 flex flex-wrap items-start gap-3 rounded-xl border border-line bg-card px-4 py-3 text-[13px] leading-relaxed">

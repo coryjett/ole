@@ -1,6 +1,6 @@
 // Ole on the note page as tabs beside Transcript and My notes (#108). During a call: Live (the "Before you join"
 // strip, bullets with pin and rate, open questions and commitments, the call's answers) and Briefing. Questions go
-// to Ole's Ask panel docked at the bottom of the note (#122, OleAsk.tsx). On a saved meeting: Context
+// to Ole's Ask: a column on the right of a wide note (#148), else docked at the bottom (#122, OleAsk.tsx). On a saved meeting: Context
 // (what Ole kept) and Briefing, each only when Ole has something. Plus the quick-note bar shown during a call.
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, MessageSquareText, Radio } from 'lucide-react'
@@ -78,8 +78,11 @@ export function OleTabLabel({ tab, unseen = 0 }: { tab: OleTab; unseen?: number 
   </>
 }
 
-/** Live: Prepare and its warnings, the strip, the bullets, the call's lists, every answer from Ask (#122); the page scrolls, nothing is capped */
-export function OleLiveTab({ state }: { state: OleLiveState }) {
+/**
+ * Live: Prepare and its warnings, the strip, the bullets, the call's lists, every answer from Ask (#122); the page
+ * scrolls, nothing is capped. answersInColumn: the Ask column is on screen and lists them, so they aren't twice (#148).
+ */
+export function OleLiveTab({ state, answersInColumn = false }: { state: OleLiveState; answersInColumn?: boolean }) {
   const text = state.prepared?.text ?? ''
   return <div data-testid="ole-live-tab" className="flex flex-col gap-2">
     <OlePanelHeader state={state} />
@@ -87,7 +90,7 @@ export function OleLiveTab({ state }: { state: OleLiveState }) {
     <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight="none" header={false}
       onPin={(id, on) => void window.yogurt.ole.pinBullet(id, on)} onRate={(id, r) => void window.yogurt.ole.rateBullet(id, r)} />
     <OleCallLists openQuestions={state.openQuestions} commitments={state.commitments} />
-    <OleAnswers answers={state.answers ?? []} />
+    {!answersInColumn && <OleAnswers answers={state.answers ?? []} />}
   </div>
 }
 
@@ -98,16 +101,16 @@ function BriefingTab({ text, empty }: { text: string; empty: string }) {
 
 /**
  * The tab panel for Ole's tabs. It stays mounted while another tab shows (hidden), so a half-typed question or
- * focus is kept, the way the transcript keeps its place.
+ * focus is kept, the way the transcript keeps its place. askColumn: the Ask column is shown beside it (#148).
  */
-export function OleTabPanels({ tab, meetingId, recording, ole }: { tab: OleTab | null; meetingId: string; recording: boolean; ole: OleNote }) {
+export function OleTabPanels({ tab, meetingId, recording, ole, askColumn = false }: { tab: OleTab | null; meetingId: string; recording: boolean; ole: OleNote; askColumn?: boolean }) {
   const { state, saved } = ole
   const live = recording && !!state && state.meetingId === meetingId
   return <section data-testid="note-ole-panel" id="note-ole-panel" role="tabpanel" aria-labelledby={tab ? `note-ole-${tab}-tab` : undefined} hidden={!tab}
     className="note-content" style={{ overflowY: 'auto', overscrollBehavior: 'contain' }}>
     <div className="note-page-width" style={{ paddingBlock: '18px 40px' }}>
       {live && <>
-        <div hidden={tab !== 'live'}><OleLiveTab state={state} /></div>
+        <div hidden={tab !== 'live'}><OleLiveTab state={state} answersInColumn={askColumn} /></div>
         <div hidden={tab !== 'briefing'}><BriefingTab text={state.prepared?.text ?? ''} empty="No briefing for this call yet. Ole picks up who it's with from the conversation; choose a name on the Live tab to prepare now." /></div>
       </>}
       {!recording && saved && <>
