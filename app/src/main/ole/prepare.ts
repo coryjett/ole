@@ -2,7 +2,7 @@
 // meeting, then writes a compact briefing with sources that the live bullets work from.
 import type { OleTool, PreparedContext } from './types'
 import type { ChatMessage, ToolCall } from './bullets'
-import { toOpenAiTools, type WarmupPrompt } from './tools'
+import { MORE_TOOLS, MORE_TOOLS_DEF, narrowForPrepare, toOpenAiTools, type WarmupPrompt } from './tools'
 
 export const TOTAL_CAP = 24_000
 export const INSTRUCTIONS_CAP = 8000
@@ -73,16 +73,26 @@ export async function prepareContext(opts: {
     ...(guidance ? [{ role: 'user' as const, content: guidance }] : []),
     { role: 'user', content: ask },
   ]
-  const tools = toOpenAiTools(opts.tools)
+  // the server's prompt picks the first tools; more_tools adds the rest for this run (#15)
+  const narrowed = narrowForPrepare(opts.tools, opts.serverPrompts)
+  let offered = narrowed.first
+  let widened = !narrowed.rest.length
+  const toolsNow = () => [...toOpenAiTools(offered), ...(widened ? [] : [MORE_TOOLS_DEF])]
   const seen = new Map<string, Promise<string>>()
   let used = 0
 
   for (let round = 0; round < maxRounds && used < maxToolCalls; round++) {
-    const reply = await opts.chat({ messages, tools })
+    const reply = await opts.chat({ messages, tools: toolsNow() })
     if (!reply.tool_calls?.length) return done(reply.content ?? '')
     messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
     // every call gets an answer (the API requires it); calls past the budget are refused, the rest run in parallel
     const results = await Promise.all(reply.tool_calls.map(async c => {
+      if (c.function.name === MORE_TOOLS) {
+        if (widened) return 'All read-only tools are already offered.'
+        widened = true
+        offered = [...offered, ...narrowed.rest]
+        return `Added ${narrowed.rest.length} tools: ${narrowed.rest.map(t => t.name).join(', ')}`
+      }
       const key = `${c.function.name}\0${c.function.arguments}`
       const prior = seen.get(key)
       if (prior) return prior

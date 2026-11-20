@@ -154,7 +154,7 @@ describe('collectWarmupPrompts', () => {
     )
     expect(a.getPrompt).toHaveBeenCalledWith(WARMUP_PROMPT, { meeting_title: 'Acme sync', focus: '' }, expect.anything())
     expect(b.getPrompt).toHaveBeenCalledWith(WARMUP_PROMPT, {}, expect.anything())
-    expect(out).toEqual([{ serverName: 'Alpha', text: 'A says hi' }, { serverName: 'Beta', text: 'B says hi' }])
+    expect(out).toMatchObject([{ serverName: 'Alpha', text: 'A says hi' }, { serverName: 'Beta', text: 'B says hi' }])
   })
 
   it('passes an empty string for a required argument it cannot fill and skips unknown optional ones', async () => {
@@ -174,7 +174,7 @@ describe('collectWarmupPrompts', () => {
       { config: cfg('o', 'o', false), client: off },
       { config: cfg('g', 'Good'), client: good },
     ], { meetingTitle: null, focus: null })
-    expect(out).toEqual([{ serverName: 'Good', text: 'ok' }])
+    expect(out).toMatchObject([{ serverName: 'Good', text: 'ok' }])
     expect(none.getPrompt).not.toHaveBeenCalled()
     expect(off.listPrompts).not.toHaveBeenCalled()
   })

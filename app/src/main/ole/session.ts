@@ -9,7 +9,7 @@ import { providersOf } from './providers'
 import { serversOf } from './servers'
 import { openaiChat } from './openaiModel'
 import { createMcpClient, McpError } from './mcp'
-import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isReadOnly } from './tools'
+import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, isReadOnly } from './tools'
 import { prepareContext } from './prepare'
 import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
 
@@ -115,7 +115,8 @@ export function hookOle(d: Deps): {
       // bullets need the OpenAI key; without it the meeting records as Yogurt does
       engine = !blocked() ? createBulletsEngine({
         chat,
-        tools: () => tools,
+        // live bullets get the lookup-style tools only (#15)
+        tools: () => tools.filter(isLiveTool),
         callTool: (name, argsJson) => call(name, argsJson),
         context: () => prepared,
         onBullets: all => { bullets = all; send() },

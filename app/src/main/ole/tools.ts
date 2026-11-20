@@ -127,7 +127,7 @@ export function createToolRunner(servers: ToolServer[], tools: OleTool[]): ToolR
 
 /** the MCP prompt a server can offer to steer the warm-up */
 export const WARMUP_PROMPT = 'prepare_for_meeting'
-export type WarmupPrompt = { serverName: string; text: string }
+export type WarmupPrompt = { serverId?: string; serverName: string; text: string }
 
 /** each enabled server's WARMUP_PROMPT, filled with the arguments it declares; a server without one or that fails is skipped */
 export async function collectWarmupPrompts(servers: ToolServer[], o: { meetingTitle: string | null; focus: string | null }): Promise<WarmupPrompt[]> {
@@ -143,10 +143,43 @@ export async function collectWarmupPrompts(servers: ToolServer[], o: { meetingTi
         else if (a.required) args[a.name] = ''
       }
       const text = (await s.client.getPrompt(WARMUP_PROMPT, args, { timeoutMs: LIST_TIMEOUT_MS })).trim()
-      return text ? { serverName: s.config.name, text } : null
+      return text ? { serverId: s.config.id, serverName: s.config.name, text } : null
     } catch {
       return null
     }
   }))
   return found.filter((p): p is WarmupPrompt => !!p)
 }
+
+/** the meta-tool Prepare offers when it starts with a server's short list: the rest of the read-only tools (#15) */
+export const MORE_TOOLS = 'more_tools'
+export const MORE_TOOLS_DEF = {
+  type: 'function' as const,
+  function: {
+    name: MORE_TOOLS,
+    description: "Add the MCP servers' other read-only tools when the ones offered are not enough for the briefing. Takes no arguments.",
+    parameters: { type: 'object', properties: {} },
+  },
+}
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Prepare's first tools (#15): a server whose prepare_for_meeting prompt names some of its tools offers only those;
+ * a server without a prompt, or whose prompt names none, offers all of its read-only tools. `rest` is what more_tools adds.
+ */
+export function narrowForPrepare(tools: OleTool[], prompts: WarmupPrompt[] = []): { first: OleTool[]; rest: OleTool[] } {
+  const first: OleTool[] = [], rest: OleTool[] = []
+  const byServer = new Map<string, OleTool[]>()
+  for (const t of tools) byServer.set(t.serverId, [...(byServer.get(t.serverId) ?? []), t])
+  for (const [serverId, list] of byServer) {
+    const text = prompts.filter(p => p.serverId === serverId || (!p.serverId && p.serverName === list[0].serverName)).map(p => p.text).join('\n')
+    const named = text ? list.filter(t => new RegExp(`(^|[^A-Za-z0-9_])${escape(t.tool)}([^A-Za-z0-9_]|$)`).test(text)) : []
+    if (named.length) { first.push(...named); rest.push(...list.filter(t => !named.includes(t))) }
+    else first.push(...list)
+  }
+  return { first, rest }
+}
+
+/** the lookup-style tools live bullets may call (#15): a name rule, so a new search or get tool is included by itself */
+export const isLiveTool = (t: Pick<OleTool, 'tool'>) => /^(search|get|find|lookup|list)(_|$)/i.test(t.tool)
