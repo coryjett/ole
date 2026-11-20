@@ -499,4 +499,9 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   ask(question: string): Promise<OleLiveState>
   /** a meeting's questions and answers; [] when none */
   answers(meetingId: string): Promise<import('../main/ole/types').OleAnswer[]>
+  /** writes a saved call as a replay fixture where the person picks (#70); anonymise unless it is false */
+  exportReplay(meetingId: string, o: { anonymise: boolean }): Promise<OleExportResult>
 }
+
+/** how an Export for replay went; turns: the recorded bullets turns in the file (0 for a call from before they were kept) */
+export type OleExportResult = { status: 'saved' | 'cancelled'; turns: number } | { status: 'failed'; error: string }

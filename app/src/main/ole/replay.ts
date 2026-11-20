@@ -3,30 +3,10 @@
 import { callKey, createBulletsEngine, generalTools, hasCustomerAccount, parseBullets, type CallToolFn, type ChatFn, type ChatMessage, type ToolCall, type TranscriptLine } from './bullets'
 import { isLiveTool } from './tools'
 import type { OleBullet, OleTool, PreparedContext } from './types'
+import { classifyFailure, type FailureKind, type ReplayFixture } from './replayFormat'
 
-/** one lookup the model asked for, and what the server answered when the call was recorded */
-export type ReplayToolCall = { name: string; arguments?: Record<string, unknown>; result?: string }
-/** one model reply: final bullets (as `bullets` or raw `content`), lookups, or a failure; latencyMs is how long it took */
-export type ReplayReply = { content?: string | null; bullets?: unknown[]; toolCalls?: ReplayToolCall[]; error?: string; latencyMs?: number }
-/** the model replies of one bullets turn, in order: lookups first (if any), then the answer */
-export type ReplayTurn = { replies: ReplayReply[] }
-
-export type ReplayFixture = {
-  name: string
-  /** the prepared briefing the call had */
-  briefing: { meetingTitle?: string | null; focus?: string | null; text: string }
-  /** tool names offered to the model, as `<server>__<tool>` */
-  tools?: string[]
-  /** startMs from the start of the call */
-  transcript: TranscriptLine[]
-  turns: ReplayTurn[]
-  /** when the recording stopped; default 5 s after the last line starts */
-  endMs?: number
-  /** model latency for replies that do not give their own; default 0 */
-  latencyMs?: number
-  /** engine settings for this replay; defaults are the app's */
-  settings?: { minIntervalMs?: number; windowMs?: number; maxLookupsPerMinute?: number }
-}
+// the fixture format lives in replayFormat.ts, so the app's export (#70) can build fixtures without importing the harness
+export { classifyFailure, type FailureKind, type ReplayFixture, type ReplayReply, type ReplayToolCall, type ReplayTurn } from './replayFormat'
 
 export type TurnReport = { atMs: number; back: number; shown: number; withoutSource: number; repeated: number; lookups: number; failed?: FailureKind }
 export type ShownBullet = { atMs: number; text: string; source: string; words: number; heard: boolean; quote: boolean; url: boolean }
@@ -56,22 +36,6 @@ export function parseTurnLog(line: string): Omit<TurnReport, 'atMs'> | null {
   }
   const failed = line.match(/^ole bullets: turn failed: (.*)$/)
   return failed ? { back: 0, shown: 0, withoutSource: 0, repeated: 0, lookups: 0, failed: classifyFailure(failed[1]) } : null
-}
-
-export type FailureKind = `http ${number}` | 'timeout' | 'network' | 'parse' | 'error'
-
-/**
- * A failed turn as a coarse kind, never its text: the engine's error message can carry a server's words, a URL or
- * part of a key, so the report keeps only an HTTP status or one of timeout, network, parse, error.
- */
-export function classifyFailure(reason: string): FailureKind {
-  const status = reason.match(/\((\d{3})\)/)?.[1] ?? reason.match(/(?:^|\b(?:status|http|code)\s*:?\s*)([45]\d\d)\b/i)?.[1]
-  if (status) return `http ${Number(status)}`
-  if (/rejected the api key|unauthori[sz]ed/i.test(reason)) return 'http 401'
-  if (/time[d ]?\s?out|abort/i.test(reason)) return 'timeout'
-  if (/fetch failed|network|socket|ECONN\w*|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|getaddrinfo/i.test(reason)) return /ETIMEDOUT/.test(reason) ? 'timeout' : 'network'
-  if (/json|parse|unexpected token/i.test(reason)) return 'parse'
-  return 'error'
 }
 
 /**

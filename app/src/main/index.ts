@@ -42,6 +42,7 @@ import { hookOleSecrets, readSecret } from './ole/secrets'
 import { hookOleProviders, providersOf } from './ole/providers'
 import { createOpenAIModel } from './ole/openaiModel'
 import { hookOle, testServer } from './ole/session'
+import { parseRecordedCall } from './ole/turnRecorder'
 import type { OleAnswer } from './ole/types'
 import type { Llm } from './notes/enhance'
 import { hookOleServers } from './ole/servers'
@@ -581,6 +582,23 @@ app.whenReady().then(() => {
     upcoming: async (from, to) => (await readCalendar(from, to)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end })),
     saveBriefing: (id, text) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-briefing.md'), text),
     loadBriefing: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-briefing.md'); return existsSync(p) ? readFileSync(p, 'utf8').slice(0, 50_000) : '' },
+    // the call's bullets turns, for Export for replay (#70): on this Mac only
+    saveTurns: (id, call) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-turns.json'), JSON.stringify(call), { mode: 0o600 }),
+    loadTurns: (id) => {
+      const path = join(userDataDir(), 'meetings', id, 'ole-turns.json')
+      return existsSync(path) ? parseRecordedCall(JSON.parse(readFileSync(path, 'utf8'))) : null
+    },
+    meetingForExport: (id) => {
+      const m = store.meeting(id)
+      return m ? { title: m.title, startedAt: m.startedAt, attendees: m.attendees, segments: store.segments(id) } : null
+    },
+    saveExport: async (name, content) => {
+      const opts = { title: 'Export for replay', defaultPath: join(app.getPath('documents'), name), filters: [{ name: 'JSON', extensions: ['json'] }] }
+      const r = win && !win.isDestroyed() ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
+      if (r.canceled || !r.filePath) return 'cancelled'
+      writeFileSync(r.filePath, content, { mode: 0o600 })
+      return 'saved'
+    },
     load: (id) => {
       const path = join(userDataDir(), 'meetings', id, 'ole-bullets.json')
       if (!existsSync(path)) return []
