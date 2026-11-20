@@ -188,6 +188,25 @@ const clip = (s: string, n: number) => {
   return `${(space > n * 0.6 ? cut.slice(0, space) : cut).replace(/[;,:\s]+$/, '')}…`
 }
 
+/** a short label for a web-address source: the site and the last part of the path ("docs.example.com › jwt") (#102) */
+export function sourceLabel(address: string): string {
+  try {
+    const u = new URL(address)
+    const last = u.pathname.split('/').filter(Boolean).at(-1)
+    return last ? `${u.host} › ${decodeURIComponent(last).replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[-_]+/g, ' ')}` : u.host
+  } catch { return address.slice(0, 60) }
+}
+
+/**
+ * A source that is itself a web address (#102): shown as a short label, and used as the link only when Ole received
+ * that exact address (#42). null when the source isn't an address.
+ */
+export function urlSource(source: string, material: string): { source: string; url?: string } | null {
+  const address = source.trim().replace(/[.,;:)\]]+$/, '')
+  if (!/^https?:\/\/[^\s"<>]{3,500}$/i.test(address)) return null
+  return { source: sourceLabel(address), ...(/^https:/i.test(address) && material.includes(address) ? { url: address } : {}) }
+}
+
 /** "[get_account_details: Acme]" reads as "account details: Acme" (#48) */
 export function readableSource(source: string): string {
   return source.split(/\s*;\s*/).map(p => p.replace(/^\[|\]$/g, '').replace(/^(?:get|list|search|find|lookup|read|query|fetch|describe)_([a-z0-9_]+)\s*:/i, (_m, rest: string) => `${rest.replace(/_/g, ' ')}:`).trim()).filter(Boolean).join('; ')
@@ -506,8 +525,12 @@ export function createBulletsEngine(opts: {
         const heard = b.heard && overlap(b.heard, spoken) >= EXCERPT_MATCH ? b.heard : undefined
         const quote = b.quote && overlap(b.quote, sources) >= EXCERPT_MATCH ? b.quote : undefined
         // a link is kept only if Ole has it: models invent plausible URLs (#42)
-        const url = b.url && sources.includes(b.url) ? b.url : undefined
-        fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
+        const given = b.url && sources.includes(b.url) ? b.url : undefined
+        // a source that is a bare web address becomes a short label, and the link if Ole received it (#102)
+        const asAddress = urlSource(b.source, sources)
+        const url = given ?? asAddress?.url
+        const source = asAddress?.source ?? b.source
+        fresh.push({ id: `b${++seq}`, text: b.text, source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
       }
       /** this turn's bullets on top, in the model's order; a pin or rating made meanwhile is kept */
       const show = () => {
