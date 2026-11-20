@@ -449,7 +449,11 @@ export type LibrarySource = {
 /** One question across meetings and its answer as it is written; sources: what [1], [2]… in the answer point to */
 /** what an answer is doing before its first words: the model loading, searching meetings, or reading what it found */
 export type AskStep = { kind: 'loading' | 'searching' | 'reading'; title?: string; meetings?: number }
-export type ConversationTurn = { id: number; question: string; answer: string; scope?: ContextTarget[]; status: ChatTurn['status']; sources: LibrarySource[]; step?: AskStep }
+export type ConversationTurn = {
+  id: number; question: string; answer: string; scope?: ContextTarget[]; status: ChatTurn['status']; sources: LibrarySource[]; step?: AskStep
+  /** Ole: the answer came from the call (#118); where it came from, its link already checked by Ole */
+  oleSource?: { source: string; url?: string }
+}
 export type ConversationView = {
   id: string; title: string; chips: ContextTarget[]; draft: string; draftChips: ContextTarget[]; firstChips: ContextTarget[] | null; turns: ConversationTurn[]
   /** a Mac with little memory is recording: answers wait for the meeting to end */

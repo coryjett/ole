@@ -21,6 +21,12 @@ export function SourceName({ b }: { b: Pick<OleBullet, 'source' | 'url'> }) {
   return href ? <a data-testid="ole-bullet-link" href={href} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'inherit' }}>{label}</a> : <>{label}</>
 }
 
+/** One Ask (#118): under an answer from the call in the Ask panel, where it came from, linked the same way */
+export function OleAnswerSource({ source }: { source?: { source: string; url?: string } }) {
+  if (!source?.source) return null
+  return <p data-testid="chat-ole-source" className="text-xs text-muted" dir="auto">Source: <SourceName b={source} /></p>
+}
+
 /** pin (#54) and thumbs (#55): small text buttons that say when they are on */
 function BulletControls({ b, onPin, onRate }: { b: OleBullet; onPin: (id: string, on: boolean) => void; onRate: (id: string, r: 'up' | 'down' | null) => void }) {
   const btn = (on: boolean) => `text-[12px] leading-none ${on ? 'opacity-100' : 'opacity-50 hover:opacity-90'}`

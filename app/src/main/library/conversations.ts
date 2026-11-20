@@ -39,6 +39,11 @@ type Deps = {
   /** reading a meeting in ahead of a question is fine now (no recording that needs the room) */
   warmAllowed?: () => boolean
   now?: () => number
+  /**
+   * Ole (#118): a question about one meeting is offered here first. `call`: the answer, shown as it is with its source;
+   * `library`: answered here as before, with `note` as its first line when there is one.
+   */
+  answerFirst?: (meetingId: string, question: string) => Promise<{ route: 'call'; text: string; source?: string; url?: string } | { route: 'library'; note?: string }>
 }
 
 /**
@@ -55,7 +60,7 @@ export function hookConversations(p: Deps) {
     if (!list) {
       // Only a question that was waiting for the download resumes after a restart.
       list = p.library.turns(id)
-        .map((t) => ({ id: t.id, question: t.question, answer: t.answer, scope: t.scope, status: t.waitingModel ? 'waiting' as const : t.stopped || !t.answer ? 'stopped' as const : 'done' as const, sources: t.sources }))
+        .map((t) => ({ id: t.id, question: t.question, answer: t.answer, scope: t.scope, status: t.waitingModel ? 'waiting' as const : t.stopped || !t.answer ? 'stopped' as const : 'done' as const, sources: t.sources, ...(t.oleSource ? { oleSource: t.oleSource } : {}) }))
       open.set(id, list)
     }
     return list
@@ -137,14 +142,16 @@ export function hookConversations(p: Deps) {
       if (wait <= 0) flush(); else timer = setTimeout(flush, wait)
     }
     let written = '', completed: string | undefined
-    const job = single ? (async () => {
+    /** Ole (#118): the line before an answer the call Ask couldn't give */
+    let note = ''
+    const library = () => single ? (async () => {
       for await (const text of askMeeting(p, single, question, history, {
         signal: ac.signal,
         onStart: () => { p.library.startTurn(turn.id); turn.status = 'answering'; later() },
         onStep: (step) => { turn.step = step; later() },
         onRestart: () => { written = ''; completed = undefined; turn.answer = ''; turn.status = 'waiting'; turn.step = undefined; later() },
         onComplete: answer => { completed = answer },
-      })) { written += text; turn.answer = withoutPreamble(written, { streaming: true }); later() }
+      })) { written += text; turn.answer = note + withoutPreamble(written, { streaming: true }); later() }
     })() : p.queue.enqueue(async (stop) => {
       if (ac.signal.aborted) return
       const signal = AbortSignal.any([stop, ac.signal])
@@ -186,6 +193,20 @@ export function hookConversations(p: Deps) {
         if (stop.aborted && !ac.signal.aborted) { written = ''; completed = undefined; turn.answer = ''; turn.sources = []; turn.status = 'waiting'; turn.step = undefined; later() }
       }
     }, 'chat')
+    // Ole (#118): a question about the meeting on a call goes to the call Ask first
+    const first = p.answerFirst
+    const job = single && first && resume === undefined ? (async () => {
+      p.library.startTurn(turn.id); turn.status = 'answering'; later()
+      const got = await first(single, question).catch((e): { route: 'library'; note?: string } => { console.error('the call Ask failed', e); return { route: 'library' } })
+      if (ac.signal.aborted) return
+      if (got.route === 'call') {
+        written = completed = got.text
+        if (got.source) turn.oleSource = { source: got.source, ...(got.url ? { url: got.url } : {}) }
+        return
+      }
+      if (got.note) note = got.note + '\n\n'
+      await library()
+    })() : library()
     // a stop ends it at once, even while it still waits in the queue (the job then does nothing when its turn comes)
     const stopped = new Promise<void>((r) => ac.signal.addEventListener('abort', () => r(), { once: true }))
 
@@ -193,11 +214,11 @@ export function hookConversations(p: Deps) {
       try {
         await Promise.race([job, stopped])
         const answer = withoutPreamble((completed ?? written).trim())
-        turn.answer = single ? answer : tidyCitations(answer, turn.sources)
+        turn.answer = single ? (answer ? note + answer : answer) : tidyCitations(answer, turn.sources)
         turn.status = ac.signal.aborted ? 'stopped' : 'done'
         turn.step = undefined
         const cited = new Set(citedIn(turn.answer))
-        p.library.setTurn(turn.id, turn.answer, turn.status === 'stopped', turn.sources.filter((s) => cited.has(s.n)))
+        p.library.setTurn(turn.id, turn.answer, turn.status === 'stopped', turn.sources.filter((s) => cited.has(s.n)), turn.oleSource)
       } catch (e) {
         console.error('answering a question across meetings failed', e)
         turn.status = 'failed'
