@@ -61,7 +61,7 @@ In **Settings > Ole**:
 | Setting | What to put there |
 |---|---|
 | **OpenAI key** | A platform key from platform.openai.com. Needed for the briefing and live bullets, and for OpenAI transcription or summaries. |
-| **MCP servers** | Add each server's name, URL (https, usually ending in `/mcp`) and key, then **Test** to see how many read-only tools Ole can use. If a server is behind a VPN, connect first. |
+| **MCP servers** | Add each server's name, URL (https, usually ending in `/mcp`) and key, then **Test** to see how many read-only tools Ole can use. |
 | **Warm-up instructions** | Optional. How you want Ole to prepare, e.g. "Look up the account, its open deals and stage, open support issues and the last two calls. Lead with risks." |
 | **Transcription** | *Local* (whisper.cpp on your Mac) or *OpenAI*. |
 | **Assistant** | *Local* (a model on your Mac, summaries only), *OpenAI*, or *Custom server*: any OpenAI-compatible server you run (address ending at `/v1`, optional key, model). Prepare and live context need OpenAI or a Custom server. |

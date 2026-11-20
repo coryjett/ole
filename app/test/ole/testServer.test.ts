@@ -12,12 +12,12 @@ describe("Settings' Test button", () => {
   it('says the key was rejected when one is saved', async () => {
     expect((await testServer(server, 'k-123456', { fetch: status(401) })).error).toBe('The server rejected the key')
   })
-  it('gives up quickly on a server that never answers (VPN off)', async () => {
+  it('gives up quickly on a server that never answers (unreachable)', async () => {
     const hang = vi.fn<typeof fetch>((_u, init) => new Promise((_r, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))))
     const started = Date.now()
     const r = await testServer(server, 'k-123456', { fetch: hang, timeoutMs: 50 })
     expect(r.ok).toBe(false)
-    expect(r.error).toMatch(/Couldn't reach the server in \d+ s\. VPN on\?/)
+    expect(r.error).toMatch(/Couldn't reach the server in \d+ s\. Check its address\./)
     expect(Date.now() - started).toBeLessThan(2000)
   })
 })

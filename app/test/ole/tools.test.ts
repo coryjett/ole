@@ -67,7 +67,7 @@ describe('collectTools', () => {
 
   it('skips a failing server and keeps the others', async () => {
     const tools = await collectTools([
-      { config: cfg('bad'), client: client(new McpError('MCP server unreachable (VPN?)', 'unreachable')) },
+      { config: cfg('bad'), client: client(new McpError('MCP server unreachable', 'unreachable')) },
       { config: cfg('good'), client: client([{ name: 'get_z' }]) },
     ])
     expect(tools.map(t => t.name)).toEqual(['good__get_z'])
@@ -165,7 +165,7 @@ describe('collectWarmupPrompts', () => {
 
   it('skips servers without the prompt, failing servers and disabled servers', async () => {
     const none = withPrompt([{ name: 'something_else' }])
-    const broken = withPrompt(new McpError('MCP server unreachable (VPN?)', 'unreachable'))
+    const broken = withPrompt(new McpError('MCP server unreachable', 'unreachable'))
     const off = withPrompt([{ name: WARMUP_PROMPT }])
     const good = withPrompt([{ name: WARMUP_PROMPT }], 'ok')
     const out = await collectWarmupPrompts([

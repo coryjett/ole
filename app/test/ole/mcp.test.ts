@@ -169,7 +169,7 @@ describe('errors', () => {
     const fetch = vi.fn(async () => { throw new TypeError('network down') })
     const err = await fail(createMcpClient({ key, url, fetch: fetch as unknown as typeof globalThis.fetch }).callTool('x'))
     expect(err.kind).toBe('unreachable')
-    expect(err.message).toBe('MCP server unreachable (VPN?)')
+    expect(err.message).toBe('MCP server unreachable')
   })
 
   it('isError result throws tool error with text', async () => {
