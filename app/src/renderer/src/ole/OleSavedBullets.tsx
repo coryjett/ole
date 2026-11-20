@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import type { OleBullet } from '../../../main/ole/types'
 import { OleBriefing } from './OleBriefing'
+import { SourceName } from './OleBullets'
 
 export function OleSavedBulletsView({ bullets }: { bullets: OleBullet[] }) {
   const [open, setOpen] = useState(true)
@@ -15,7 +16,7 @@ export function OleSavedBulletsView({ bullets }: { bullets: OleBullet[] }) {
       {sorted.map(b => <li key={b.id} data-testid="ole-saved-bullet" className="text-[13px] leading-[18px]" dir="auto">
         <span>{b.text}</span>
         {b.heard && <span className="block text-[11px] leading-[16px]" style={{ color: 'var(--muted)' }}>Heard: “{b.heard}”</span>}
-        <span className="block text-[11px] leading-[16px]" style={{ color: 'var(--muted)' }}>{b.quote ? `From ${b.source}: “${b.quote}”` : b.source}</span>
+        <span className="block text-[11px] leading-[16px]" style={{ color: 'var(--muted)' }}>{b.quote ? <>From <SourceName b={b} />: “{b.quote}”</> : <SourceName b={b} />}</span>
       </li>)}
     </ul>}
   </section>

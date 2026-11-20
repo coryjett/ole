@@ -29,7 +29,7 @@ export type OleProviders = {
 export type McpServerConfig = { id: string; name: string; url: string; enabled: boolean };
 
 /** heard: the words from the call it answers; quote: a short excerpt of its source (#39). Both checked against what Ole has. */
-export type OleBullet = { id: string; text: string; source: string; at: number; heard?: string; quote?: string };
+export type OleBullet = { id: string; text: string; source: string; at: number; heard?: string; quote?: string; url?: string };
 
 /** a tool offered to the model: name is the OpenAI function name (`<serverId>__<tool>`, [A-Za-z0-9_-], max 64) */
 export type OleTool = { name: string; serverId: string; serverName: string; tool: string; description: string; parameters: Record<string, unknown> };

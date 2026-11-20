@@ -12,6 +12,7 @@ export type PrepareChatFn = (req: { messages: ChatMessage[]; tools?: unknown[] }
 export type PrepareCallFn = (name: string, argsJson: string) => Promise<string>
 
 export const PREPARE_SYSTEM = [
+  'Keep each source\'s web address (issue, docs page, tracker or record link) next to it when the tool result gives one, as a markdown link. Never make up a link.',
   'You prepare a salesperson or engineer for an upcoming call.',
   'Use the tools to gather the most useful facts about the meeting and the company and people in it: upcoming meetings, the account, open deals, open issues, recent calls, competitors, or whatever else the tools offer.',
   'Find the meeting first when it helps, then look up what it is about. Call several tools at once when they do not depend on each other. Do not call the same tool with the same arguments twice.',

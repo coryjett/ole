@@ -28,6 +28,7 @@ const clock = (ms: number) => {
 export const BULLETS_SYSTEM = [
   'You help a sales engineer during a live customer call by surfacing short context bullets they can glance at.',
   'Reply with JSON only: {"bullets":[{"text":"...","source":"...","heard":"...","quote":"..."}]}.',
+  '"url": the source\'s web address exactly as it appears in the prepared context or a tool result (an issue, docs page, tracker or record); leave it out when there is none. Never make one up.',
   '"heard": the few words from the conversation this bullet answers, copied exactly (under 12 words). "quote": a short excerpt copied exactly from the prepared context or tool result the fact came from (under 25 words).',
   'Give 0 to 2 NEW bullets. Fewer is better: only what the people on the call do not already know.',
   'Each bullet is a headline the user can read mid-sentence: 10 words at most, the fact first, no advice verbs (assess, consider, relate, connect, note that). Good: "Same 429s at a fintech, fixed in 2.3". Bad: "Consider relating the rate limiting discussion to the earlier fintech case". Detail belongs in heard and quote.',
@@ -98,14 +99,14 @@ const clip = (s: string, n: number) => {
   return `${(space > n * 0.6 ? cut.slice(0, space) : cut).replace(/[;,:\s]+$/, '')}…`
 }
 
-export function parseBullets(content: string | null): Array<{ text: string; source: string; heard?: string; quote?: string }> {
+export function parseBullets(content: string | null): Array<{ text: string; source: string; heard?: string; quote?: string; url?: string }> {
   if (!content) return []
   const body = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   let parsed: unknown
   try { parsed = JSON.parse(body) } catch { return [] }
   const list = (parsed as { bullets?: unknown })?.bullets
   if (!Array.isArray(list)) return []
-  const out: Array<{ text: string; source: string; heard?: string; quote?: string }> = []
+  const out: Array<{ text: string; source: string; heard?: string; quote?: string; url?: string }> = []
   for (const item of list) {
     const text = typeof item?.text === 'string' ? item.text.trim() : ''
     const source = typeof item?.source === 'string' ? item.source.trim() : ''
@@ -113,7 +114,8 @@ export function parseBullets(content: string | null): Array<{ text: string; sour
     const short = clip(text.replace(/\s+/g, ' '), BULLET_MAX)
     const heard = typeof item?.heard === 'string' ? clip(item.heard.trim().replace(/^["“]|["”]$/g, ''), 100) : ''
     const quote = typeof item?.quote === 'string' ? clip(item.quote.trim().replace(/^["“]|["”]$/g, ''), 160) : ''
-    if (text && source) out.push({ text: short, source, ...(heard ? { heard } : {}), ...(quote ? { quote } : {}) })
+    const url = typeof item?.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(item.url.trim()) ? item.url.trim() : ''
+    if (text && source) out.push({ text: short, source, ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
     if (out.length === 3) break
   }
   return out
@@ -210,7 +212,9 @@ export function createBulletsEngine(opts: {
         const spoken = recentWindow(lines, windowMs).map(l => l.text).join(' ')
         const heard = b.heard && overlap(b.heard, spoken) >= EXCERPT_MATCH ? b.heard : undefined
         const quote = b.quote && overlap(b.quote, sources) >= EXCERPT_MATCH ? b.quote : undefined
-        fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}) })
+        // a link is kept only if Ole has it: models invent plausible URLs (#42)
+        const url = b.url && sources.includes(b.url) ? b.url : undefined
+        fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
       }
       if (fresh.length) { list = [...fresh, ...list]; opts.onBullets([...list]) }
     } catch {

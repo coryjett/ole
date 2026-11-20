@@ -10,6 +10,11 @@ export const BULLETS_OPEN = 4
 /** how long a new bullet stays highlighted */
 export const NEW_MS = 8000
 
+/** the source, as a link when Ole has a verified one (#42); links open in the browser */
+export function SourceName({ b }: { b: Pick<OleBullet, 'source' | 'url'> }) {
+  return b.url ? <a data-testid="ole-bullet-link" href={b.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'inherit' }}>{b.source}</a> : <>{b.source}</>
+}
+
 export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now() }: { bullets: OleBullet[]; prepared: OlePrepared | null; maxHeight?: number; now?: number }) {
   const [all, setAll] = useState(false)
   const header = !prepared ? 'Not prepared yet'
@@ -28,8 +33,8 @@ export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(
             <span>{b.text}</span>
             {b.heard && <span data-testid="ole-bullet-heard" className="block text-[11px] leading-[16px] text-[#B8B8C0]">Heard: “{b.heard}”</span>}
             {b.quote
-              ? <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]">From {b.source}: “{b.quote}”</span>
-              : <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]">{b.source}</span>}
+              ? <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]">From <SourceName b={b} />: “{b.quote}”</span>
+              : <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]"><SourceName b={b} /></span>}
           </li>)}
         </ul>
         {(folded > 0 || all) && sorted.length > BULLETS_OPEN && <button data-testid="ole-bullets-more" className="text-action mt-1 text-[12px]" onClick={() => setAll(v => !v)}>
