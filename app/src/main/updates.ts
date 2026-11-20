@@ -1,11 +1,14 @@
-import { app, BrowserWindow, ipcMain, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, powerMonitor } from 'electron'
 import type { AppUpdater } from 'electron-updater'
 import { t } from '../shared/i18n'
 import type { UpdateStatus } from '../shared/types'
 import { autoUpdateOn, loadSettings, updateSettings } from './settings'
 
-/** checking again while Yogurt stays open for days */
-const EVERY_MS = 4 * 60 * 60 * 1000
+/**
+ * Checking again while the app stays open for days. Ole: a pre-release build (a version like 0.1.0-alpha.27) checks
+ * every 15 minutes while it is under heavy development; a release build every 4 hours (#101).
+ */
+export const checkEveryMs = (version: string): number => (/-/.test(version) ? 15 * 60_000 : 4 * 60 * 60 * 1000)
 
 /**
  * Installed copies update themselves from GitHub Releases (latest-mac.yml, latest.yml for the Windows installer,
@@ -42,7 +45,10 @@ export async function hookUpdates(d: { file: string; available: boolean; recordi
     const on = autoUpdateOn(loadSettings(d.file))
     return { version: app.getVersion(), available: d.available || !!d.fake, on, state, next, dismissed: !!next && next === dismissedVersion }
   }
-  const set = (s: UpdateStatus['state'], version?: string) => {
+  const set = (s: UpdateStatus['state'], version?: string, o: { restarted?: boolean } = {}) => {
+    // Ole: once a version is ready, checking, "nothing newer", a failed check or a newer one downloading never hides it;
+    // only a newer download replaces it, or a restart into it (#101)
+    if (state === 'ready' && s !== 'ready' && !o.restarted) return
     state = s
     if (version) next = version
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('updates:status', status())
@@ -66,12 +72,13 @@ export async function hookUpdates(d: { file: string; available: boolean; recordi
   ipcMain.handle('updates:restart', () => {
     if (state !== 'ready' || d.recording()) return false
     // fake mode: as if Yogurt came back on the new version
-    if (d.fake) { d.fake.restarted(); set('latest'); return true }
+    if (d.fake) { d.fake.restarted(); set('latest', undefined, { restarted: true }); return true }
     installOnQuit = true
     app.quit()
     return true
   })
-  const check = () => { if (!d.fake && updater && autoUpdateOn(loadSettings(d.file)) && state !== 'ready') updater.checkForUpdates().catch(() => {}) }
+  // Ole: keeps checking after a version is ready, so a newer release replaces the one waiting (#101)
+  const check = () => { if (!d.fake && updater && autoUpdateOn(loadSettings(d.file))) updater.checkForUpdates().catch(() => {}) }
   if (d.fake) { set('ready', d.fake.version); return }
   if (!d.available) return
 
@@ -93,5 +100,7 @@ export async function hookUpdates(d: { file: string; available: boolean; recordi
     set('error')
   })
   setTimeout(check, 30_000)
-  setInterval(check, EVERY_MS)
+  setInterval(check, checkEveryMs(app.getVersion()))
+  // Ole: a Mac that slept may have missed a release (#101)
+  powerMonitor?.on?.('resume', check)
 }

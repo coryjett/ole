@@ -11,8 +11,15 @@ export const BULLETS_OPEN = 4
 export const NEW_MS = 8000
 
 /** the source, as a link when Ole has a verified one (#42); links open in the browser */
+/** a saved source that is a bare web address reads as "site › page" (#102) */
+const shortSource = (source: string) => {
+  if (!/^https?:\/\/\S+$/i.test(source.trim())) return source
+  try { const u = new URL(source.trim()); const last = u.pathname.split('/').filter(Boolean).at(-1); return last ? `${u.host} › ${decodeURIComponent(last).replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[-_]+/g, ' ')}` : u.host } catch { return source }
+}
+
 export function SourceName({ b }: { b: Pick<OleBullet, 'source' | 'url'> }) {
-  return b.url ? <a data-testid="ole-bullet-link" href={b.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'inherit' }}>{b.source}</a> : <>{b.source}</>
+  const label = shortSource(b.source)
+  return b.url ? <a data-testid="ole-bullet-link" href={b.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'inherit' }}>{label}</a> : <>{label}</>
 }
 
 /** pin (#54) and thumbs (#55): small text buttons that say when they are on */

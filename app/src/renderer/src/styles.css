@@ -934,6 +934,12 @@ html:not(.widget) button:focus-visible, html:not(.widget) input:focus-visible { 
 
 /* The update shares the download status pattern, without a progress indicator. */
 .update-ready-status { max-width:35%; }
+/* Ole: the waiting update stands out in both themes (#101) */
+.notes-download-trigger.update-ready-trigger { color:var(--accent-ink);background:var(--accent);border-color:var(--accent);border-radius:999px;font-weight:550; }
+.notes-download-trigger.update-ready-trigger:is(:hover,[aria-expanded=true]) { color:var(--accent-ink);background:var(--accent);border-color:var(--accent);filter:brightness(1.08); }
+.update-ready-dot { flex:none;width:6px;height:6px;border-radius:999px;background:var(--accent-ink);animation:update-ready-pulse 2s ease-in-out 3; }
+@keyframes update-ready-pulse { 50% { opacity:.35; } }
+@media (prefers-reduced-motion: reduce) { .update-ready-dot { animation:none; } }
 .update-ready-menu { width:max-content;min-width:286px;max-width:calc(100vw - 24px); }
 .update-ready-menu h2 { font-size:12px;font-weight:550;line-height:18px; }
 .update-ready-menu .update-ready-description { margin:6px 0 15px;color:var(--muted);font-size:11px;white-space:nowrap;text-wrap:nowrap;overflow:hidden;text-overflow:ellipsis; }
