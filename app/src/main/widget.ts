@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, Notification, screen } from 'electron'
+import { BrowserWindow, ipcMain, Notification, screen, shell } from 'electron'
 import { join } from 'node:path'
 import type { Meeting } from './store'
 import { WidgetModel } from './widgetModel'
@@ -41,6 +41,9 @@ function createWindow(os = 'darwin'): BrowserWindow {
     webPreferences: { preload: join(__dirname, '../preload/index.cjs'), sandbox: false, backgroundThrottling: false },
   })
   floatOverFullScreen(w)
+  // Ole: a source link clicked in the widget opens in the browser; nothing opens or navigates inside Ole (#42)
+  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) void shell.openExternal(url); return { action: 'deny' } })
+  w.webContents.on('will-navigate', (e) => e.preventDefault())
   w.setIgnoreMouseEvents(true, { forward: true })
   const hash = 'widget'
   if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`)

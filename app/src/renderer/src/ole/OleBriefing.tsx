@@ -2,8 +2,13 @@
 // A small markdown reader (headings, bullets, bold) rather than a dependency: the briefing is plain model output.
 import { useState, type ReactNode } from 'react'
 
-const inline = (text: string): ReactNode[] => text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-  /^\*\*[^*]+\*\*$/.test(part) ? <strong key={i}>{part.slice(2, -2)}</strong> : <span key={i}>{part.replace(/(^|\s)_([^_]+)_(?=\s|$)/g, '$1$2')}</span>)
+/** bold, markdown links (https only, opened in the browser) and plain text (#42) */
+const inline = (text: string): ReactNode[] => text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\(https:\/\/[^)\s]+\))/g).map((part, i) => {
+  if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={i}>{part.slice(2, -2)}</strong>
+  const link = part.match(/^\[([^\]]+)\]\((https:\/\/[^)\s]+)\)$/)
+  if (link) return <a key={i} href={link[2]} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>{link[1]}</a>
+  return <span key={i}>{part.replace(/(^|\s)_([^_]+)_(?=\s|$)/g, '$1$2')}</span>
+})
 
 export function BriefingText({ text }: { text: string }) {
   const lines = text.split('\n')
