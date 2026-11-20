@@ -48,6 +48,21 @@ Installed copies only accept an update signed by the same certificate as the one
 
 Restore on another Mac with `security import ole-local-signing.p12 -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign`, then trust it for code signing (Keychain Access › the certificate › Trust › Code Signing: Always Trust).
 
+## Measuring live bullets (replay)
+
+Change a bullets prompt or filter, then replay saved calls to see whether the bullets got better or worse (#66). Dev only: `app/src/main/ole/replay.ts` and `app/scripts/ole-replay.mjs` are never imported by the app (a test pins that).
+
+```bash
+cd app
+node scripts/ole-replay.mjs test/ole/fixtures/replay/*.json          # a short summary per call
+node scripts/ole-replay.mjs --json test/ole/fixtures/replay/steady-call.json   # the full report
+OLE_REPLAY_API_KEY=... node scripts/ole-replay.mjs --live my-call.json  # a real model instead of the recorded replies
+```
+
+A fixture holds the transcript lines (`speaker`, `text`, `startMs`), the briefing, the tools offered, and per turn the model's recorded replies (`bullets` or raw `content`, `toolCalls` with their `result`, `error`, `latencyMs`). The engine runs on a virtual clock at the call's own pace, so a replay is instant and deterministic and needs no network or keys. `--live` sends the fixture's transcript and briefing to the model (it says where on stderr) and reads only `OLE_REPLAY_API_KEY` (required), `OLE_REPLAY_BASE_URL` (https only) and `OLE_REPLAY_MODEL`; lookups still answer from the fixture. As in the app, only lookup-style tools are offered, and none for customer records on a call without an account (#57). A fixture's `settings` may set only `minIntervalMs`, `windowMs` and `maxLookupsPerMinute` (clamped), a failed turn is reported only as its kind (`http 429`, `timeout`, `network`, `parse` or `error`), never its text, and the live key is scrubbed from anything printed.
+
+The report counts turns (failed, and unrecorded ones that answered empty), bullets back, shown, without a source and repeated, excerpts given against verified (heard, quote) and links kept, headline word and length stats, the longest stretch with nothing new shown, and lookups asked, made and refused, plus a per-turn timeline and every bullet shown. Recorded replies are matched to turns by order, so a change to the throttle shifts them: compare such a change with `--live`. Fixtures are synthetic: no real call content, no real company names, `example.com` links only.
+
 ## Seams (Yogurt files Ole edits)
 
 - `app/electron-builder.yml`: app id, names, usage strings, publish to `coryjett/ole`

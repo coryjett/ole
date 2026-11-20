@@ -189,11 +189,14 @@ export function createBulletsEngine(opts: {
   /** one line per turn, counts only, never transcript or bullet text (#59) */
   log?: (line: string) => void
   now?: () => number
+  /** the timer the throttle waits on; the replay harness (#66) passes a virtual one so a call replays at its own pace */
+  timers?: { set: (fn: () => void, ms: number) => unknown; clear: (handle: unknown) => void }
   minIntervalMs?: number
   maxLookupsPerMinute?: number
   windowMs?: number
 }): BulletsEngine {
   const now = opts.now ?? Date.now
+  const timers = opts.timers ?? { set: (fn: () => void, ms: number): unknown => setTimeout(fn, ms), clear: (h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>) }
   const log = opts.log ?? ((line: string) => console.info(line))
   // about every 45 s of new conversation: enough to keep up, few enough to read (#38)
   const minIntervalMs = opts.minIntervalMs ?? 45_000
@@ -205,13 +208,13 @@ export function createBulletsEngine(opts: {
   const searched = new Set<string>()
   let lookups: number[] = []
   let stopped = false, running = false, dirty = false, lastRun = -Infinity, seq = 0
-  let timer: ReturnType<typeof setTimeout> | null = null
+  let timer: unknown = null
 
   const schedule = () => {
-    if (stopped || running || !dirty || timer) return
+    if (stopped || running || !dirty || timer !== null) return
     const wait = lastRun + minIntervalMs - now()
     if (wait <= 0) { void run(); return }
-    timer = setTimeout(() => { timer = null; schedule() }, wait)
+    timer = timers.set(() => { timer = null; schedule() }, wait)
   }
 
   const lookup = async (call: ToolCall, allowed: Set<string>): Promise<string> => {
@@ -292,7 +295,7 @@ export function createBulletsEngine(opts: {
     },
     stop() {
       stopped = true
-      if (timer) clearTimeout(timer)
+      if (timer !== null) timers.clear(timer)
       timer = null
     },
     bullets: () => [...list],

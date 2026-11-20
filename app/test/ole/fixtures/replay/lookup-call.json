@@ -1,0 +1,194 @@
+{
+  "name": "lookup-call",
+  "briefing": {
+    "meetingTitle": "Copperline Parcel: security review",
+    "focus": "mTLS and rate limits",
+    "text": "## Who and why\n- Sam Okafor, security architect, reviewing Beacon before a pilot (call brief, 9 Nov)\n## Deals\n- Pilot, 60k, stage Discover (opportunity: Gateway pilot)"
+  },
+  "tools": [
+    "docs__search_docs",
+    "crm__search_calls"
+  ],
+  "latencyMs": 4000,
+  "transcript": [
+    {
+      "speaker": "Me",
+      "text": "Thanks for joining, Sam.",
+      "startMs": 0
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "Sure. My main questions are about certificates.",
+      "startMs": 20000
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "How often does Beacon rotate the mutual TLS certificates?",
+      "startMs": 40000
+    },
+    {
+      "speaker": "Me",
+      "text": "Good question, let me pull that up.",
+      "startMs": 60000
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "We need rotation at least daily for our auditors.",
+      "startMs": 80000
+    },
+    {
+      "speaker": "Me",
+      "text": "Understood.",
+      "startMs": 100000
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "Second topic is rate limits under burst traffic.",
+      "startMs": 120000
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "Our parcel scanners send everything at shift change.",
+      "startMs": 140000
+    },
+    {
+      "speaker": "Me",
+      "text": "Have other logistics teams seen the same pattern?",
+      "startMs": 160000
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "I would love to know how they handled it.",
+      "startMs": 180000
+    },
+    {
+      "speaker": "Me",
+      "text": "I will check.",
+      "startMs": 200000
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "Also, do you log every denied request?",
+      "startMs": 220000
+    },
+    {
+      "speaker": "Me",
+      "text": "Yes, denied requests go to the access log.",
+      "startMs": 240000
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "Good. What about the admin port?",
+      "startMs": 260000
+    },
+    {
+      "speaker": "Me",
+      "text": "It binds to localhost by default.",
+      "startMs": 280000
+    },
+    {
+      "speaker": "Sam Okafor",
+      "text": "That works for us.",
+      "startMs": 300000
+    }
+  ],
+  "turns": [
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "toolCalls": [
+            {
+              "name": "docs__search_docs",
+              "arguments": {
+                "query": "mutual TLS certificate rotation"
+              },
+              "result": "Beacon rotates mTLS certificates every 24 hours by default; set rotation.interval to change it. (product docs: Certificate rotation, https://docs.example.com/beacon/mtls)"
+            }
+          ]
+        },
+        {
+          "bullets": [
+            {
+              "text": "Beacon rotates mTLS certs every 24h by default",
+              "source": "product docs: Certificate rotation",
+              "heard": "rotate the mutual TLS certificates",
+              "quote": "Beacon rotates mTLS certificates every 24 hours by default",
+              "url": "https://docs.example.com/beacon/mtls"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "error": "429 rate limited"
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "toolCalls": [
+            {
+              "name": "docs__search_docs",
+              "arguments": {
+                "query": "Mutual TLS certificate rotation"
+              }
+            },
+            {
+              "name": "crm__search_calls",
+              "arguments": {
+                "query": "logistics burst rate limits"
+              },
+              "result": "A mid-size logistics customer hit burst 429s at shift change and moved to token-bucket limits in Beacon 2.3. (call brief, 2 Oct)"
+            }
+          ]
+        },
+        {
+          "bullets": [
+            {
+              "text": "Mid-size logistics customer fixed burst 429s with token buckets",
+              "source": "call brief, 2 Oct",
+              "heard": "rate limits under burst traffic",
+              "quote": "moved to token-bucket limits in Beacon 2.3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": [
+            {
+              "text": "Denied requests are logged",
+              "source": "search_docs"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    }
+  ]
+}
