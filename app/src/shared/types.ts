@@ -465,24 +465,8 @@ export type McpStatus = { enabled: boolean; clients: string[]; command: string }
 /** Settings → Updates. available: this build updates itself (not in development or a preview); next: the version found */
 export type UpdateStatus = { version: string; available: boolean; on: boolean; state: 'idle' | 'checking' | 'latest' | 'downloading' | 'ready' | 'error'; next?: string; dismissed?: boolean }
 
-/** Ole: what the renderer sees of the live call companion (never a key) */
-export type OleLiveState = {
-  meetingId: string | null
-  preparing: boolean
-  /** the briefing, text included so it can be read from the start of the call (#35) */
-  prepared: { meetingTitle: string | null; focus: string | null; preparedAt: number; text: string } | null
-  error: string | null
-  bullets: import('../main/ole/core/types').OleBullet[]
-  /** questions asked during this call, newest first (#53) */
-  answers: import('../main/ole/core/types').OleAnswer[]
-  /** questions raised on the call and still open, and who said they will do what (#82); [] until the summary has them */
-  openQuestions: string[]
-  commitments: import('../main/ole/core/types').OleCommitment[]
-  /** why Prepare and live context are off (Assistant on Local, or no OpenAI key); null when they can run */
-  blocked: string | null
-  /** enabled MCP servers Ole couldn't use for this briefing or call, and why (#33) */
-  unavailable: Array<{ name: string; reason: string }>
-}
+/** Ole: what the renderer sees of the live call companion (never a key); defined in Ole's core */
+export type OleLiveState = import('../main/ole/core/types').OleLiveState
 export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & {
   state(): Promise<OleLiveState>
   onState(cb: (s: OleLiveState) => void): () => void
@@ -508,5 +492,5 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   exportReplay(meetingId: string, o: { anonymise: boolean }): Promise<OleExportResult>
 }
 
-/** how an Export for replay went; turns: the recorded bullets turns in the file (0 for a call from before they were kept) */
-export type OleExportResult = { status: 'saved' | 'cancelled'; turns: number } | { status: 'failed'; error: string }
+/** how an Export for replay went (#70); defined in Ole's core */
+export type OleExportResult = import('../main/ole/core/types').OleExportResult

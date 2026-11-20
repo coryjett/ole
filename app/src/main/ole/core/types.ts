@@ -60,3 +60,25 @@ export type PreparedContext = {
   text: string;
   preparedAt: number;
 };
+
+/** what the host's UI sees of the live call companion (never a key) */
+export type OleLiveState = {
+  meetingId: string | null
+  preparing: boolean
+  /** the briefing, text included so it can be read from the start of the call (#35) */
+  prepared: { meetingTitle: string | null; focus: string | null; preparedAt: number; text: string } | null
+  error: string | null
+  bullets: OleBullet[]
+  /** questions asked during this call, newest first (#53) */
+  answers: OleAnswer[]
+  /** questions raised on the call and still open, and who said they will do what (#82); [] until the summary has them */
+  openQuestions: string[]
+  commitments: OleCommitment[]
+  /** why Prepare and live context are off (Assistant on Local, or no OpenAI key); null when they can run */
+  blocked: string | null
+  /** enabled MCP servers Ole couldn't use for this briefing or call, and why (#33) */
+  unavailable: Array<{ name: string; reason: string }>
+}
+
+/** how an Export for replay went; turns: the recorded bullets turns in the file (0 for a call from before they were kept) */
+export type OleExportResult = { status: 'saved' | 'cancelled'; turns: number } | { status: 'failed'; error: string }

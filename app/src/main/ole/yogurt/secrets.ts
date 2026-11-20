@@ -1,25 +1,18 @@
-// Ole: API keys sealed with the system keychain (safeStorage). No plain fallback; the renderer only ever sees masked status.
+// Ole on Yogurt: API keys sealed with the system keychain (safeStorage) in Yogurt's settings file. No plain fallback; the
+// renderer only ever sees masked status. Names, masking and status are the core's (core/secrets.ts).
 import { ipcMain, safeStorage } from 'electron'
 import { loadSettings, updateSettings, type Settings } from '../../settings'
-import { serversOf } from './servers'
+import { defaultSecretNames as defaults, isSecretName, maskSecret, secretStatus as status, SERVER_ID, type SecretStatus } from '../core/secrets'
+import { secretHandlers } from '../core/settingsHandlers'
+import { fileSettings } from './settingsFile'
 import type { SecretName } from '../core/types'
 
+export { isSecretName, maskSecret, SERVER_ID, type SecretStatus }
+
 type OleSettings = Settings & { oleSecrets?: Partial<Record<SecretName, string>> }
-export type SecretStatus = Partial<Record<SecretName, { set: boolean; masked: string }>>
-
-/** an MCP server id: lowercase letters, digits and dashes, 1 to 40 characters */
-export const SERVER_ID = /^[a-z0-9-]{1,40}$/
-
-/** 'openai', 'custom' (the Custom server's key, #17), or `mcp:<id>` for an MCP server's key */
-export function isSecretName(name: unknown): name is SecretName {
-  if (name === 'openai' || name === 'custom') return true
-  return typeof name === 'string' && name.startsWith('mcp:') && SERVER_ID.test(name.slice(4))
-}
 
 /** the names Settings asks about by default: the OpenAI key and one per configured server */
-export function defaultSecretNames(file: string): SecretName[] {
-  return ['openai', ...serversOf(loadSettings(file)).map((s) => `mcp:${s.id}` as SecretName)]
-}
+export const defaultSecretNames = (file: string): SecretName[] => defaults(loadSettings(file))
 
 export function sealSecret(plain: string): string {
   if (!safeStorage.isEncryptionAvailable()) {
@@ -77,37 +70,10 @@ export function removeSecret(file: string, name: SecretName): void {
   updateSettings(file, { oleSecrets: Object.keys(oleSecrets).length ? oleSecrets : undefined } as Partial<OleSettings>)
 }
 
-export function maskSecret(plain: string): string {
-  if (plain === '') return ''
-  if (plain.length <= 8) return '…' + plain.slice(-2)
-  return plain.slice(0, 3) + '…' + plain.slice(-4)
-}
-
-export function secretStatus(file: string, names: SecretName[]): SecretStatus {
-  const status: SecretStatus = {}
-  for (const name of names) {
-    if (!isSecretName(name)) throw new Error('Invalid secret')
-    const plain = readSecret(file, name)
-    status[name] = plain ? { set: true, masked: maskSecret(plain) } : { set: false, masked: '' }
-  }
-  return status
-}
-
-/** names from the renderer: an array of valid names, at most 20; undefined means the defaults */
-function namesFrom(file: string, names: unknown): SecretName[] {
-  if (names === undefined || names === null) return defaultSecretNames(file)
-  if (!Array.isArray(names) || names.length > 20 || !names.every(isSecretName)) throw new Error('Invalid secret')
-  return [...new Set(names)]
-}
+export const secretStatus = (file: string, names: SecretName[]): SecretStatus => status((name) => readSecret(file, name), names)
 
 export function hookOleSecrets(d: { file: string }): void {
-  ipcMain.handle('ole:secret:set', (_e, name: unknown, value: unknown) => {
-    if (!isSecretName(name) || typeof value !== 'string') {
-      throw new Error('Invalid secret')
-    }
-    writeSecret(d.file, name, value)
-    return secretStatus(d.file, [...new Set([...defaultSecretNames(d.file), name])])
-  })
-
-  ipcMain.handle('ole:secret:status', (_e, names?: unknown) => secretStatus(d.file, namesFrom(d.file, names)))
+  const h = secretHandlers({ settings: fileSettings(d.file), secrets: { read: (n) => readSecret(d.file, n), write: (n, v) => writeSecret(d.file, n, v), remove: (n) => removeSecret(d.file, n) } })
+  ipcMain.handle('ole:secret:set', (_e, name: unknown, value: unknown) => h.set(name, value))
+  ipcMain.handle('ole:secret:status', (_e, names?: unknown) => h.status(names))
 }
