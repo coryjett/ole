@@ -88,5 +88,6 @@ export function hookOle(d: Deps): Omit<OleSession, 'handlers'> {
   ipcMain.handle('ole:export-replay', (_e, id: unknown, o: unknown) => h.exportReplay(id, o))
   ipcMain.handle('ole:prepare', (_e, o: unknown) => h.prepare(o))
   ipcMain.handle('ole:subject:choose', (_e, name: unknown) => h.chooseSubject(name))
+  ipcMain.handle('ole:prepared:clear', () => h.clearPrepared())
   return session
 }

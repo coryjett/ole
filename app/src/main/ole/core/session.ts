@@ -24,8 +24,8 @@ import { buildReplayFixture, exportFileName } from './replayExport'
 
 /** tools older than this are gathered again before the meeting source uses them (#98) */
 const TOOLS_FRESH_MS = 10 * 60_000
-/** a prepared briefing older than this is gathered again when a meeting starts */
-const STALE_MS = 2 * 60 * 60_000
+/** a briefing prepared by hand is this call's only when it is at most this old when the call starts (#128) */
+export const MANUAL_REUSE_MS = 15 * 60_000
 /** how far ahead Home looks for the next meeting (#126) */
 const NEXT_AHEAD_MS = 12 * 60 * 60_000
 /** one account search for a heard name may take this long (#126) */
@@ -101,6 +101,8 @@ export type OleHandlers = {
    * typed) and replace the call's briefing; the chosen record becomes the call's own record for anonymized sources
    */
   chooseSubject(name: unknown): Promise<OleLiveState>
+  /** ole:prepared:clear (#128): before a call, discard the prepared briefing so no call picks it up */
+  clearPrepared(): OleLiveState
 }
 
 export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleSession {
@@ -521,6 +523,19 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       if (!chosenName) return Promise.resolve(state())
       return chooseSubject(chosenName, false)
     },
+    clearPrepared: () => {
+      // during a call the briefing is the call's; Clear is for the one waiting for the next call (#128)
+      if (meetingId) return state()
+      prepareSeq++
+      preparing = false
+      prepared = null
+      preparedBy = null
+      preparedFromDefault = false
+      error = null
+      pickToken++
+      send()
+      return state()
+    },
   }
 
   return {
@@ -538,26 +553,41 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       chosen = false
       autoPicked = false
       subjectRecords.clear()
-      const by = preparedBy
+      // a briefing from before the call is this call's only when it belongs to it (#128): auto-prepared for this same
+      // calendar event, or prepared by hand in the last 15 minutes. Anything else is dropped, so the call starts
+      // unmatched (or prepares from its title) and the subject is picked up from the conversation (#126)
+      const before = prepared, by = preparedBy
       preparedBy = null
-      // an auto-prepared briefing for another meeting is not this call's (#52)
-      const otherMeeting = by?.kind === 'auto' && !!named && by.event.title !== named
-      // a local Prepare never runs during a call (#5): the bullets just get the tools
-      const prepareNow = (!prepared || host.clock.now() - prepared.preparedAt > STALE_MS || otherMeeting) && !local
-      if (prepareNow) {
+      const manualFresh = !!before && by?.kind === 'manual' && host.clock.now() - by.at <= MANUAL_REUSE_MS
+      const autoEvent = before && by?.kind === 'auto' ? by.event : null
+      if (before && !manualFresh && !autoEvent) prepared = null
+      const startedAt = host.clock.now()
+      void (async () => {
+        let event: Meeting | null = null, looked = false
+        let reuse = manualFresh
+        if (autoEvent) {
+          event = await calendarEvent(); looked = true
+          if (meetingId !== m.id) return
+          reuse = sameEvent(event, autoEvent) || (!event && !!named && named === autoEvent.title && startedAt < autoEvent.end)
+          if (reuse) callStartsAt = autoEvent.start
+          else if (prepared === before) { prepared = null; send() }
+        }
+        // a local Prepare never runs during a call (#5): the bullets just get the tools
+        if (reuse || local) {
+          preparedFromDefault = false
+          try { await loadTools() } catch (e) { host.log.warn('loading the MCP tools failed', e) }
+          send()
+          return
+        }
         // "Meeting", "Zoom call", "Untitled": a default title says nothing, so the calendar event on now names it (#44, #56)
-        void (async () => {
-          const event = named ? null : await calendarEvent()
-          const title = named ?? event?.title ?? null
-          callStartsAt = event?.start ?? null
-          preparedFromDefault = !title
-          await prepare({ meetingTitle: title, forMeeting: m.id, startsAt: event?.start ?? null, note: event?.note, noteSource: event?.source })
-        })()
-      } else {
-        preparedFromDefault = false
-        if (by?.kind === 'auto') callStartsAt = by.event.start
-        void loadTools().then(send, e => host.log.warn('loading the MCP tools failed', e))
-      }
+        if (!named && !looked) event = await calendarEvent()
+        if (meetingId !== m.id) return
+        const useEvent = named ? null : event
+        const title = named ?? useEvent?.title ?? null
+        callStartsAt = useEvent?.start ?? null
+        preparedFromDefault = !title
+        await prepare({ meetingTitle: title, forMeeting: m.id, startsAt: useEvent?.start ?? null, note: useEvent?.note, noteSource: useEvent?.source })
+      })()
       // each bullets turn is kept with the call, on this Mac, for Export for replay (#70)
       recorder = !liveBlocked() ? createTurnRecorder({ chat, callTool: (name, argsJson) => call(name, argsJson) }) : null
       // bullets need the OpenAI key; without it the meeting records as Yogurt does

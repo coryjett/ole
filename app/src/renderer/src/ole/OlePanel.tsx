@@ -97,26 +97,33 @@ export function OleSubject({ state }: { state: OleLiveState }) {
   </div>
 }
 
+/** clearing the "Prepare for…" input clears the briefing too when it was prepared with that name (#128) */
+export const clearsBriefing = (was: string, prepared: OleLiveState['prepared']) => !!was.trim() && prepared?.focus === was.trim()
+
 const STATE_LABEL = { ready: 'Briefing ready', preparing: 'Preparing…', none: 'No match yet' } as const
 const timeOf = (ms: number) => { try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) } catch { return '' } }
 
 /**
- * Home before a call (#126): the next meeting and its briefing's state, the prepared briefing, and a "Prepare for…"
- * link revealing the name input (empty: prepare for the next call).
+ * Home before a call (#126, #128): the next meeting and its briefing's state, the prepared briefing with a Clear, and
+ * a "Prepare for…" link revealing the name input (empty: prepare for the next call).
  */
 export function OleNextCall({ state }: { state: OleLiveState }) {
   const [open, setOpen] = useState(false)
   const next = state.nextMeeting ?? null
+  const clear = () => void window.yogurt.ole.clearPrepared()
   const prepareFor = (focus: string) => void window.yogurt.ole.prepare({ focus: focus || null, meetingTitle: next?.title ?? state.prepared?.meetingTitle ?? null })
   return <>
     {next && <p data-testid="ole-next" className="settings-description mt-2">Next: {next.title}{timeOf(next.start) ? ` · ${timeOf(next.start)}` : ''}{' '}
       <span data-testid="ole-next-state" className="font-semibold">{state.preparing ? STATE_LABEL.preparing : STATE_LABEL[next.briefing]}</span></p>}
     {!next && state.preparing && <p data-testid="ole-next-state" className="settings-description mt-2">Preparing…</p>}
-    {state.prepared && <p data-testid="ole-prepared" className="settings-description mt-2">Prepared for: {[state.prepared.meetingTitle, state.prepared.focus].filter(Boolean).join(' · ') || 'the next call'}</p>}
+    {state.prepared && <p data-testid="ole-prepared" className="settings-description mt-2 flex flex-wrap items-center gap-2">
+      <span>Prepared for: {[state.prepared.meetingTitle, state.prepared.focus].filter(Boolean).join(' · ') || 'the next call'}</span>
+      <button data-testid="ole-prepared-clear" className="workspace-button" onClick={clear}>Clear</button></p>}
     <div className="mt-2 flex flex-wrap items-center gap-2">
       {open
+        // clearing the name a briefing was prepared with clears that briefing too (#128)
         ? <NameInput testId="ole-prepare-for" label="Prepare for" placeholder="A company, person or topic (optional)" disabled={state.preparing || !!state.blocked}
-          onSubmit={prepareFor} submitLabel={v => v ? 'Prepare' : 'Prepare for next call'} />
+          onSubmit={prepareFor} onCleared={was => { if (clearsBriefing(was, state.prepared)) clear() }} submitLabel={v => v ? 'Prepare' : 'Prepare for next call'} />
         : <button data-testid="ole-prepare-for-link" className="text-action text-[12px]" onClick={() => setOpen(true)}>Prepare for…</button>}
     </div>
     {state.prepared?.text && <OleBriefing key={state.prepared.preparedAt} text={state.prepared.text} defaultOpen />}

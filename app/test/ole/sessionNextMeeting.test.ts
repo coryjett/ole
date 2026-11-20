@@ -67,6 +67,9 @@ describe('Home shows the next meeting and its briefing (#126)', () => {
     release()
     await auto
     expect(s.handlers.state().nextMeeting?.briefing).toBe('ready')
+    // cleared: no briefing for it any more
+    s.handlers.clearPrepared()
+    expect(s.handlers.state().nextMeeting?.briefing).toBe('none')
   })
 
   it('a briefing for it that matched nothing is not ready; none during a call', async () => {
