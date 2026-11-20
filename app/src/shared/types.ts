@@ -475,6 +475,9 @@ export type OleLiveState = {
   bullets: import('../main/ole/types').OleBullet[]
   /** questions asked during this call, newest first (#53) */
   answers: import('../main/ole/types').OleAnswer[]
+  /** questions raised on the call and still open, and who said they will do what (#82); [] until the summary has them */
+  openQuestions: string[]
+  commitments: import('../main/ole/types').OleCommitment[]
   /** why Prepare and live context are off (Assistant on Local, or no OpenAI key); null when they can run */
   blocked: string | null
   /** enabled MCP servers Ole couldn't use for this briefing or call, and why (#33) */
@@ -497,6 +500,8 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   rateBullet(id: string, rating: 'up' | 'down' | null): Promise<OleLiveState>
   /** ask a question during the call (#53) */
   ask(question: string): Promise<OleLiveState>
+  /** a meeting's summary, open questions and commitments from the call (#82); null when Ole kept none */
+  call(meetingId: string): Promise<import('../main/ole/types').OleCallMemory | null>
   /** a meeting's questions and answers; [] when none */
   answers(meetingId: string): Promise<import('../main/ole/types').OleAnswer[]>
   /** writes a saved call as a replay fixture where the person picks (#70); anonymise unless it is false */

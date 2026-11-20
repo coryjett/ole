@@ -1,7 +1,7 @@
 // Ole: the live call companion. Before the call, the model gathers a briefing from the MCP servers' read-only tools
 // (prepare.ts); during it, context bullets from the transcript, the briefing and throttled tool lookups (bullets.ts).
 import { ipcMain } from 'electron'
-import type { McpServerConfig, OleAnswer, OleBullet, OleTool, PreparedContext } from './types'
+import type { McpServerConfig, OleAnswer, OleBullet, OleCallMemory, OleTool, PreparedContext } from './types'
 import type { OleLiveState } from '../../shared/types'
 import { loadSettings } from '../settings'
 import { readSecret } from './secrets'
@@ -18,7 +18,7 @@ import { answerQuestion } from './ask'
 import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
 import { feedbackOf, recordRating } from './feedback'
 import { createTurnRecorder, type RecordedCall } from './turnRecorder'
-import { createCallSummarizer } from './callSummary'
+import { createCallSummarizer, EMPTY_MEMORY, isEmptyMemory } from './callSummary'
 import { buildReplayFixture, exportFileName, type ExportSegment } from './replayExport'
 import type { OleExportResult } from '../../shared/types'
 
@@ -32,6 +32,9 @@ type Deps = {
   /** the briefing a meeting had when it ended, saved with it and read back (#35) */
   saveBriefing?: (meetingId: string, text: string) => void
   loadBriefing?: (meetingId: string) => string
+  /** the call's summary, open questions and commitments (#82), saved with the meeting and read back */
+  saveCall?: (meetingId: string, memory: OleCallMemory) => void
+  loadCall?: (meetingId: string) => OleCallMemory | null
   /** a macOS notification, for a server that just stopped working (#33) */
   notify?: (title: string, body: string) => void
   /** how often the servers are checked in the background; 0 turns the background check off (tests) */
@@ -45,6 +48,8 @@ type Deps = {
   upcoming?: (fromMs: number, toMs: number) => Promise<Upcoming[]>
   /** the user's own notes for a meeting, read at each bullets turn and Ask (#77) */
   notes?: (meetingId: string) => string
+  /** how much new conversation updates the running summary; default 3 minutes, 0 updates on every line (tests) */
+  summaryEveryMs?: number
   /** how often auto-prepare looks at the calendar; 0 turns the timer off (tests) */
   autoEveryMs?: number
   /** the call's bullets turns (#70), saved with it on this Mac and read back for Export for replay */
@@ -101,6 +106,7 @@ export function hookOle(d: Deps): {
   const finishedAnswers = new Map<string, OleAnswer[]>()
   const finished = new Map<string, OleBullet[]>()
   const finishedBriefings = new Map<string, string>()
+  const finishedCalls = new Map<string, OleCallMemory>()
   /** the call's bullets turns as they happen (#70); kept in memory, saved with the meeting when it stops */
   let recorder: ReturnType<typeof createTurnRecorder> | null = null
   const finishedTurns = new Map<string, RecordedCall>()
@@ -122,10 +128,15 @@ export function hookOle(d: Deps): {
     if (meetingId) return 'Prepare on this Mac runs before a call, not during one.'
     return null
   }
-  const state = (): OleLiveState => ({
+  const state = (): OleLiveState => {
+    // open questions and commitments of the call on now (#82)
+    const memory = summarizer?.memory() ?? EMPTY_MEMORY
+    return {
     meetingId, preparing, error, bullets, answers, blocked: blocked(), unavailable,
+    openQuestions: memory.openQuestions, commitments: memory.commitments,
     prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt, text: prepared.text } : null,
-  })
+    }
+  }
   const send = () => d.send(state())
 
   const openaiKey = () => readSecret(d.file, 'openai')
@@ -272,6 +283,14 @@ export function hookOle(d: Deps): {
     send()
     return state()
   })
+  // a saved meeting's summary, open questions and commitments (#82); null when Ole kept none
+  ipcMain.handle('ole:call', (_e, id: unknown) => {
+    if (typeof id !== 'string' || !ID.test(id)) return null
+    if (id === meetingId) return summarizer?.memory() ?? null
+    const found = finishedCalls.get(id)
+    if (found) return found
+    try { return d.loadCall?.(id) ?? null } catch { return null }
+  })
   ipcMain.handle('ole:answers', (_e, id: unknown) => {
     if (typeof id !== 'string' || !ID.test(id)) return []
     if (id === meetingId) return answers
@@ -349,7 +368,8 @@ export function hookOle(d: Deps): {
         notes: () => notesNow(m.id),
       }) : null
       // the running summary updates in the background from the live model (#75)
-      summarizer = engine ? createCallSummarizer({ chat }) : null
+      // open questions and commitments show in the panel as they change (#82)
+      summarizer = engine ? createCallSummarizer({ chat, everyMs: d.summaryEveryMs, onChange: () => { if (meetingId === m.id) send() } }) : null
       send()
     },
     meetingRenamed(m) {
@@ -367,7 +387,10 @@ export function hookOle(d: Deps): {
       if (id !== meetingId) return
       engine?.stop()
       summarizer?.stop()
+      const memory = summarizer?.memory() ?? EMPTY_MEMORY
       summarizer = null
+      // the call's open questions and commitments stay with the meeting (#82)
+      if (!isEmptyMemory(memory)) { finishedCalls.set(id, memory); try { d.saveCall?.(id, memory) } catch (e) { console.warn('saving the call summary failed', e) } }
       finished.set(id, bullets)
       try { d.save?.(id, bullets) } catch (e) { console.warn('saving the context bullets failed', e) }
       // pinned bullets join the person's own notes, so the summary and the notes keep them (#54)
