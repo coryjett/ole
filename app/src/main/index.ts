@@ -578,6 +578,8 @@ app.whenReady().then(() => {
       const list: unknown = JSON.parse(readFileSync(path, 'utf8'))
       return Array.isArray(list) ? list.slice(0, 200).filter((a): a is OleAnswer => !!a && typeof a === 'object' && typeof a.id === 'string' && typeof a.question === 'string' && typeof a.text === 'string' && typeof a.at === 'number') : []
     },
+    // what the user types in their notes during the call reaches live bullets and Ask (#77); a local read
+    notes: (id) => store.notes(id).mine,
     // the calendar names a default-titled call (#56) and starts auto-prepare (#52)
     upcoming: async (from, to) => (await readCalendar(from, to)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end })),
     saveBriefing: (id, text) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-briefing.md'), text),

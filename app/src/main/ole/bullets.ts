@@ -21,6 +21,9 @@ const WINDOW_MS = 180_000
 const TOOL_ROUNDS = 2
 const PREVIOUS_IN_PROMPT = 30
 const MAX_LINES = 2000
+/** lookup results kept per call (#74); each is already capped by the tool runner */
+const MAX_KEPT_RESULTS = 60
+export const EARLIER_LOOKUP = '(looked up earlier in this call)'
 
 /** Lines from the last `windowMs` before the newest line. */
 export function recentWindow(lines: TranscriptLine[], windowMs = WINDOW_MS): TranscriptLine[] {
@@ -67,20 +70,38 @@ export function generalTools(tools: OleTool[]): OleTool[] {
 }
 
 /** The system and user messages for one bullets turn. */
-export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[]; feedback?: BulletFeedback }): ChatMessage[] {
-  const { context, lines, previous, feedback } = args
+/** the latest part of the user's notes that goes into a prompt (#77) */
+export const NOTES_IN_PROMPT = 1500
+/** the latest `max` characters, cut at a line where possible */
+export function latestNotes(notes: string, max = NOTES_IN_PROMPT): string {
+  const t = notes.trim()
+  if (t.length <= max) return t
+  const tail = t.slice(-max)
+  const nl = tail.indexOf('\n')
+  return `…${nl > -1 && nl < max / 3 ? tail.slice(nl + 1) : tail}`
+}
+
+/**
+ * The system and user messages for one bullets turn. What doesn't change during a call comes first (rules, briefing,
+ * past-call feedback) so prompt caching covers it; then what changes: the running summary (#75), the user's notes
+ * (#77), earlier bullets and the recent transcript.
+ */
+export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[]; feedback?: BulletFeedback; summary?: string; notes?: string }): ChatMessage[] {
+  const { context, lines, previous, feedback, summary, notes } = args
   const parts: string[] = []
   if (context?.text) {
     const about = [context.meetingTitle ? `meeting: ${context.meetingTitle}` : null, context.focus ? `focus: ${context.focus}` : null].filter(Boolean).join(', ')
     parts.push(`Prepared context${about ? ` (${about})` : ''}:\n${context.text}`)
   } else parts.push(`No context prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.focus ? ` Focus: ${context.focus}` : ''}`)
   if (!hasMatchedRecord(context)) parts.push(NO_RECORD_RULE)
-  const earlier = previous.slice(0, PREVIOUS_IN_PROMPT)
-  const mark = (b: OleBullet) => b.rating === 'down' ? ' (the user marked this not useful)' : b.rating === 'up' ? ' (the user marked this useful)' : ''
-  parts.push(earlier.length ? `Earlier bullets (do not repeat):\n${earlier.map(b => `- ${b.text}${mark(b)}`).join('\n')}` : 'Earlier bullets: none')
   // the person's thumbs from earlier calls tune what is worth surfacing (#55)
   if (feedback?.useful.length) parts.push(`Bullets the user found useful on earlier calls:\n${feedback.useful.map(t => `- ${t}`).join('\n')}`)
   if (feedback?.notUseful.length) parts.push(`Bullets the user found not useful on earlier calls (give none like these):\n${feedback.notUseful.map(t => `- ${t}`).join('\n')}`)
+  if (summary?.trim()) parts.push(`The call so far (summary):\n${summary.trim()}`)
+  if (notes?.trim()) parts.push(`The user's notes so far:\n${latestNotes(notes)}`)
+  const earlier = previous.slice(0, PREVIOUS_IN_PROMPT)
+  const mark = (b: OleBullet) => b.rating === 'down' ? ' (the user marked this not useful)' : b.rating === 'up' ? ' (the user marked this useful)' : ''
+  parts.push(earlier.length ? `Earlier bullets (do not repeat):\n${earlier.map(b => `- ${b.text}${mark(b)}`).join('\n')}` : 'Earlier bullets: none')
   parts.push(`Transcript (last few minutes):\n${lines.map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}`)
   return [{ role: 'system', content: BULLETS_SYSTEM }, { role: 'user', content: parts.join('\n\n') }]
 }
@@ -186,6 +207,9 @@ export function createBulletsEngine(opts: {
   context: () => PreparedContext | null
   onBullets: (all: OleBullet[]) => void
   feedback?: () => BulletFeedback
+  /** the running summary of the call (#75) and the user's notes (#77), read at each turn */
+  summary?: () => string
+  notes?: () => string
   /** one line per turn, counts only, never transcript or bullet text (#59) */
   log?: (line: string) => void
   now?: () => number
@@ -204,8 +228,8 @@ export function createBulletsEngine(opts: {
   const windowMs = opts.windowMs ?? WINDOW_MS
   const lines: TranscriptLine[] = []
   let list: OleBullet[] = []
-  // Live for the whole call: the spec says never the same question twice in one call.
-  const searched = new Set<string>()
+  // Live for the whole call: the same lookup never reaches the server twice; a repeat gets the kept result (#74).
+  const results = new Map<string, string>()
   let lookups: number[] = []
   let stopped = false, running = false, dirty = false, lastRun = -Infinity, seq = 0
   let timer: unknown = null
@@ -224,19 +248,23 @@ export function createBulletsEngine(opts: {
     try { args = call.function.arguments?.trim() ? JSON.parse(call.function.arguments) : {} } catch { return 'not allowed: invalid arguments' }
     if (!args || typeof args !== 'object' || Array.isArray(args)) return 'not allowed: invalid arguments'
     const key = callKey(name, args)
-    if (searched.has(key)) return 'not allowed: this lookup was already made during this call'
+    const kept = results.get(key)
+    if (kept !== undefined) return `${EARLIER_LOOKUP}\n${kept}`
     const at = now()
     lookups = lookups.filter(t => at - t < 60_000)
     if (lookups.length >= maxLookups) return 'not allowed: lookup limit reached, answer from what you have'
-    searched.add(key)
     lookups.push(at)
-    try { return await opts.callTool(name, JSON.stringify(args)) } catch { return 'lookup failed' }
+    let result: string
+    try { result = await opts.callTool(name, JSON.stringify(args)) } catch { result = 'lookup failed' }
+    if (results.size >= MAX_KEPT_RESULTS) results.delete(results.keys().next().value!)
+    results.set(key, result)
+    return result
   }
 
   const run = async () => {
     running = true; dirty = false; lastRun = now()
     try {
-      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.() })
+      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.() })
       const offered = opts.tools()
       const allowed = new Set(offered.map(t => t.name))
       const tools = offered.length ? { tools: toOpenAiTools(offered) } : {}

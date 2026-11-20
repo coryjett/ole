@@ -3,12 +3,14 @@
 import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
-import { hasMatchedRecord, NO_RECORD_RULE, readableSource } from './bullets'
+import { hasMatchedRecord, latestNotes, NO_RECORD_RULE, readableSource } from './bullets'
 
 /** lookup rounds before the model must answer */
 const TOOL_ROUNDS = 2
 /** the last part of the call the model sees */
 const RECENT_LINES = 40
+/** earlier questions and answers sent with a new one (#76) */
+const EARLIER_QUESTIONS = 3
 export const ANSWER_MAX = 400
 export const NO_ANSWER = "Couldn't find that in the briefing or your servers."
 
@@ -26,13 +28,18 @@ const clock = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); re
 
 export async function answerQuestion(o: {
   chat: ChatFn; question: string; context: PreparedContext | null; lines: TranscriptLine[]; tools: OleTool[]; call: CallToolFn
+  /** the running summary (#75), the user's notes (#77) and earlier questions in this call, oldest first (#76) */
+  summary?: string; notes?: string; earlier?: Array<{ question: string; text: string }>
 }): Promise<{ text: string; source?: string; url?: string }> {
-  const parts = [
-    o.context?.text ? `Briefing:\n${o.context.text}` : 'No briefing.',
-    o.lines.length ? `The call so far (latest):\n${o.lines.slice(-RECENT_LINES).map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}` : 'Nothing said yet.',
-    `Question: ${o.question}`,
-  ]
-  if (!hasMatchedRecord(o.context)) parts.splice(2, 0, NO_RECORD_RULE)
+  // what doesn't change during the call first, so prompt caching covers it (#77)
+  const parts = [o.context?.text ? `Briefing:\n${o.context.text}` : 'No briefing.']
+  if (!hasMatchedRecord(o.context)) parts.push(NO_RECORD_RULE)
+  if (o.summary?.trim()) parts.push(`The call so far (summary):\n${o.summary.trim()}`)
+  if (o.notes?.trim()) parts.push(`The user's notes so far:\n${latestNotes(o.notes)}`)
+  parts.push(o.lines.length ? `Recent lines (latest):\n${o.lines.slice(-RECENT_LINES).map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}` : 'Nothing said yet.')
+  const earlier = (o.earlier ?? []).slice(-EARLIER_QUESTIONS)
+  if (earlier.length) parts.push(`Earlier questions in this call:\n${earlier.map(e => `Q: ${e.question}\nA: ${e.text}`).join('\n')}`)
+  parts.push(`Question: ${o.question}`)
   const messages: ChatMessage[] = [{ role: 'system', content: ASK_SYSTEM }, { role: 'user', content: parts.join('\n\n') }]
   const allowed = new Set(o.tools.map(t => t.name))
   const tools = o.tools.length ? { tools: toOpenAiTools(o.tools) } : {}

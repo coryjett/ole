@@ -114,7 +114,7 @@ describe('bullets engine', () => {
 
     const byId = new Map(chat.mock.calls[1][0].messages.filter(m => m.role === 'tool').map(m => [m.tool_call_id, m.content]))
     expect(byId.get('a')).toBe('found')
-    expect(byId.get('b')).toMatch(/already/)
+    expect(byId.get('b')).toBe('(looked up earlier in this call)\nfound')
     expect(byId.get('c')).toBe('found')
     expect(byId.get('d')).toMatch(/unknown tool/)
     expect(byId.get('e')).toBe('found')
