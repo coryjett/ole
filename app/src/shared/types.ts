@@ -483,7 +483,7 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   /** thumbs up or down on a bullet; null takes it back (#55) */
   rateBullet(id: string, rating: 'up' | 'down' | null): Promise<OleLiveState>
   /** ask a question during the call (#53); requestId lets cancelAsk stop it (#122) */
-  ask(question: string, requestId?: string): Promise<OleLiveState>
+  ask(question: string, requestId?: string, meetingId?: string): Promise<OleLiveState>
   /** Stop on the Ask panel (#122): the pending answer is dropped */
   cancelAsk(requestId: string): Promise<OleLiveState>
   /** a meeting's summary, open questions and commitments from the call (#82); null when Ole kept none */

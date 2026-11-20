@@ -38,11 +38,13 @@ export function OleAskPanel({ state, docked = false, meetingId, defaultExpanded 
   const [expanded, setExpanded] = useState(defaultExpanded)
   const input = useRef<HTMLInputElement>(null)
   const blocked = !!state.blocked
+  // docked on a note, the panel belongs to that note's live call only (#125)
+  const mine = !docked || (!!meetingId && state.meetingId === meetingId)
   useEffect(() => {
-    if (!docked || !meetingId || blocked) return
+    if (!docked || !meetingId || blocked || !mine) return
     return registerOleAskDock(meetingId, () => { input.current?.focus(); input.current?.scrollIntoView?.({ block: 'nearest' }) })
-  }, [docked, meetingId, blocked])
-  if (docked && blocked) return null
+  }, [docked, meetingId, blocked, mine])
+  if (docked && (blocked || !mine)) return null
   const answers = state.answers ?? []
   const shown = shownAnswers(answers, expanded)
   const earlier = answers.length - 1
@@ -52,7 +54,7 @@ export function OleAskPanel({ state, docked = false, meetingId, defaultExpanded 
     const rid = newAskRequestId()
     setRunning(rid); setQ('')
     const done = () => setRunning(r => r === rid ? null : r)
-    try { void window.yogurt.ole.ask(question, rid).then(done, done) } catch { done() }
+    try { void window.yogurt.ole.ask(question, rid, meetingId ?? state.meetingId ?? undefined).then(done, done) } catch { done() }
   }
   const stop = () => {
     if (!running) return
