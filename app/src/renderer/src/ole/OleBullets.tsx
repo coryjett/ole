@@ -23,26 +23,36 @@ export function SourceName({ b }: { b: Pick<OleBullet, 'source' | 'url'> }) {
 }
 
 /** pin (#54) and thumbs (#55): small text buttons that say when they are on */
-function BulletControls({ b, onPin, onRate }: { b: OleBullet; onPin: (id: string, on: boolean) => void; onRate: (id: string, r: 'up' | 'down' | null) => void }) {
+function BulletControls({ b, onPin, onRate, onNote }: { b: OleBullet; onPin: (id: string, on: boolean) => void; onRate: (id: string, r: 'up' | 'down' | null) => void
+  /** open the note input (#174) */
+  onNote?: () => void }) {
   const btn = (on: boolean) => `text-[12px] leading-none ${on ? 'opacity-100' : 'opacity-50 hover:opacity-90'}`
   return <span className="ml-2 inline-flex gap-2 align-middle">
     <button data-testid="ole-bullet-pin" aria-pressed={!!b.pinned} title={b.pinned ? 'Unpin' : 'Pin: keep it in the notes and summary'} className={btn(!!b.pinned)} onClick={() => onPin(b.id, !b.pinned)}>📌</button>
     <button data-testid="ole-bullet-up" aria-pressed={b.rating === 'up'} title="Useful" className={btn(b.rating === 'up')} onClick={() => onRate(b.id, b.rating === 'up' ? null : 'up')}>👍</button>
-    <button data-testid="ole-bullet-down" aria-pressed={b.rating === 'down'} title="Not useful" className={btn(b.rating === 'down')} onClick={() => onRate(b.id, b.rating === 'down' ? null : 'down')}>👎</button>
+    <button data-testid="ole-bullet-down" aria-pressed={b.rating === 'down'} title="Not useful: nothing more on this topic this call, and fewer like it later" className={btn(b.rating === 'down')} onClick={() => onRate(b.id, b.rating === 'down' ? null : 'down')}>👎</button>
+    {onNote && <button data-testid="ole-bullet-note" title="Add a note: it goes into My notes and steers Ole" aria-label="Add a note" className={btn(!!b.note)} onClick={onNote}>📝</button>}
   </span>
 }
 
-export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate, header: showHeader = true, spotlight = false }: { bullets: OleBullet[]; prepared: OlePrepared | null; /** the Live tab (#172): act bullets as Right now cards, the rest folded under Earlier */ spotlight?: boolean; /** the "Prepared for" line; the Live tab says who the briefing is for instead (#138, #140) */ header?: boolean; /** 'none': no cap, the page around it scrolls (the note's Live tab, #108) */
+export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate, onNote, header: showHeader = true, spotlight = false }: { bullets: OleBullet[]; prepared: OlePrepared | null; /** live call only: a note on a bullet (#174) */ onNote?: (b: OleBullet, text: string) => void; /** the Live tab (#172): act bullets as Right now cards, the rest folded under Earlier */ spotlight?: boolean; /** the "Prepared for" line; the Live tab says who the briefing is for instead (#138, #140) */ header?: boolean; /** 'none': no cap, the page around it scrolls (the note's Live tab, #108) */
   maxHeight?: number | 'none'; now?: number
   /** live call only: pin (#54) and rate (#55); a saved meeting shows the marks without buttons */
   onPin?: (id: string, on: boolean) => void; onRate?: (id: string, r: 'up' | 'down' | null) => void }) {
   const [all, setAll] = useState(false)
+  const [noting, setNoting] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const saveNote = (b: OleBullet) => { const t = draft.trim(); if (t) onNote?.(b, t); setNoting(null); setDraft('') }
   const header = !prepared ? 'Not prepared yet'
     : `Prepared for: ${[prepared.meetingTitle, prepared.focus].filter(Boolean).join(' · ') || 'the next call'}`
   const item = (b: OleBullet, o: { className?: string; quiet?: boolean } = {}) => <li key={b.id} data-testid="ole-bullet" data-new={now - b.at < NEW_MS || undefined} className={o.className ?? 'widget-preview-bubble text-[13px] leading-[18px]'} dir="auto"
     style={{ ...(now - b.at < NEW_MS && !o.className ? { boxShadow: 'inset 3px 0 0 #6cc463' } : {}), ...(o.quiet ? { opacity: 0.7 } : {}) }}>
     <span>{b.pinned && !onPin && <span data-testid="ole-bullet-pinned" title="Pinned">📌 </span>}{b.text}</span>
-    {onPin && onRate && <BulletControls b={b} onPin={onPin} onRate={onRate} />}
+    {onPin && onRate && <BulletControls b={b} onPin={onPin} onRate={onRate} onNote={onNote ? () => { setNoting(b.id); setDraft(b.note ?? '') } : undefined} />}
+    {b.note && noting !== b.id && <span data-testid="ole-bullet-your-note" className="block text-[12px] leading-[17px]">📝 {b.note}</span>}
+    {noting === b.id && <input data-testid="ole-bullet-note-input" autoFocus className="settings-input mt-1 w-full text-[12px]" maxLength={200} placeholder="Your note: Enter to save, Esc to cancel"
+      aria-label="Note on this bullet" value={draft} onChange={e => setDraft(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); saveNote(b) } else if (e.key === 'Escape') { e.preventDefault(); setNoting(null); setDraft('') } }} />}
     {b.heard && <span data-testid="ole-bullet-heard" className="block text-[11px] leading-[16px] text-[#B8B8C0]">Heard: “{b.heard}”</span>}
     {b.quote
       ? <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]">From <SourceName b={b} />: “{b.quote}”</span>

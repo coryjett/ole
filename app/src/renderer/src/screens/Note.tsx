@@ -468,7 +468,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             <Transcript notice={<>{(hasAudio&&(m.transcriptionPending||!hasTranscript)||m.transcriptionState==='waiting-model'||m.transcriptionState==='waiting-recording')&&<TranscriptionNotice state={m.transcriptionState} hasLines={hasTranscript} onContinue={()=>void runTranscript()} disabled={recording||!!m.stopSavePending}/>}
             {!hasAudio&&m.transcriptionState==='error'&&<InlineError testId="upload-preparation-failed"><span>{t("Yogurt couldn't read this audio file.")}</span><button className="text-action" onClick={()=>void openAudioUpload()}>{t('Upload a file')}</button></InlineError>}</>} id={id} processing={transcribing} replacing={!!m.transcriptionAgain} recording={recording} active={primary === 'transcript'} inline toolbar={transcriptToolbar} focus={at?.ms != null ? { ...at, ms: at.ms } : undefined} />
           </section>}
-          {ole.tabs.length > 0 && <OleTabPanels tab={isOleTab(primary) ? primary : null} meetingId={id} recording={recording} ole={ole} askColumn={askColumn} />}
+          {ole.tabs.length > 0 && <OleTabPanels tab={isOleTab(primary) ? primary : null} meetingId={id} recording={recording} ole={ole} askColumn={askColumn} addNote={addQuickNote} />}
           </div>
           {askColumn && ole.state && <OleAskColumn meetingId={id} state={ole.state} />}
         </div>

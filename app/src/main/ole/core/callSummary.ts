@@ -2,6 +2,7 @@
 // minutes. Updated in the background from the previous state and only the lines since, never blocking a turn.
 // Structured (#82): the summary text, the questions raised and still open, and the commitments (who will do what),
 // each marked done once the call shows it carried out (#158).
+import { DIRECTIONS_MAX, steerLine } from './steer'
 import type { ChatFn, TranscriptLine } from './bullets'
 import type { OleAnswer, OleCallMemory, OleCommitment } from './types'
 
@@ -143,10 +144,11 @@ export function savedCallMemory(v: unknown): OleCallMemory | null {
     summary: typeof o.summary === 'string' ? o.summary.slice(0, SUMMARY_MAX) : '',
     openQuestions: Array.isArray(o.openQuestions) ? questions(o.openQuestions) : [],
     commitments: Array.isArray(o.commitments) ? commitments(o.commitments) : [],
+    ...(Array.isArray(o.directions) ? { directions: o.directions.map(d => steerLine(d)).filter(Boolean).slice(-DIRECTIONS_MAX) } : {}),
   }
 }
 
-export const isEmptyMemory = (m: OleCallMemory) => !m.summary.trim() && !m.openQuestions.length && !m.commitments.length
+export const isEmptyMemory = (m: OleCallMemory) => !m.summary.trim() && !m.openQuestions.length && !m.commitments.length && !m.directions?.length
 
 const commitmentLine = (c: OleCommitment) => c.who ? `${c.who}: ${c.what}` : c.what
 const open = (m: OleCallMemory) => m.commitments.filter(c => !c.done)
@@ -203,6 +205,9 @@ export function fromOleNotes(m: OleCallMemory, answers: OleAnswer[] = []): strin
   if (kept.length) parts.push(`**Done during the call**\n${kept.map(c => `- ${commitmentLine(c)}`).join('\n')}`)
   const asked = answers.filter(answered).sort((a, b) => a.at - b.at).map(a => ({ q: noteItem(a.question, NOTE_QUESTION_MAX), text: noteItem(a.text, NOTE_ANSWER_MAX), source: a.source ? noteItem(a.source) : '' })).filter(a => a.q && a.text)
   if (asked.length) parts.push(`**Asked during the call**\n${asked.map(a => `- ${a.q}: ${a.text}${a.source ? ` (${a.source})` : ''}`).join('\n')}`)
+  // what the person told Ole during the call (#176)
+  const told = (m.directions ?? []).map(d => noteItem(d)).filter(Boolean)
+  if (told.length) parts.push(`**Direction given during the call**\n${told.map(d => `- ${d}`).join('\n')}`)
   return parts.length ? `## From Ole\n${parts.join('\n\n')}` : ''
 }
 

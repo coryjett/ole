@@ -1,4 +1,5 @@
 // Ole: live context bullets. Throttled model calls over the recent transcript and the prepared context.
+import { directionsPart } from './steer'
 import type { OleBullet, OleTool, PreparedContext } from './types'
 import { noteLine } from './meetingSource'
 import { toOpenAiTools } from './tools'
@@ -19,7 +20,7 @@ export type CallToolFn = (name: string, argsJson: string, opts?: { signal?: Abor
 export type BulletsEngine = {
   push(line: TranscriptLine): void; stop(): void; bullets(): OleBullet[]
   /** pin (#54) or rate (#55) a bullet in place; null rating or false pin clears it. null: no such bullet */
-  update(id: string, patch: { pinned?: boolean; rating?: 'up' | 'down' | null }): OleBullet | null
+  update(id: string, patch: { pinned?: boolean; rating?: 'up' | 'down' | null; note?: string }): OleBullet | null
   /** the last part of the call, for Ask (#53) */
   recent(): TranscriptLine[]
   /** a bullets turn is running now (#86: background lookups wait for it) */
@@ -142,6 +143,8 @@ export function latestNotes(notes: string, max = NOTES_IN_PROMPT): string {
  * (#77), earlier bullets and the recent transcript.
  */
 export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[]; feedback?: BulletFeedback; summary?: string; notes?: string
+  /** what the person told Ole this call (#176) */
+  directions?: string[]
   /** the enricher added sections to the briefing this call (#86); from the session, never from the text */
   mentioned?: boolean }): ChatMessage[] {
   const { context, lines, previous, feedback, summary, notes } = args
@@ -158,8 +161,12 @@ export function buildBulletsPrompt(args: { context: PreparedContext | null; line
   if (feedback?.notUseful.length) parts.push(`Bullets the user found not useful on earlier calls (give none like these):\n${feedback.notUseful.map(t => `- ${t}`).join('\n')}`)
   if (summary?.trim()) parts.push(`The call so far (summary):\n${summary.trim()}`)
   if (notes?.trim()) parts.push(`The user's notes so far:\n${latestNotes(notes)}`)
+  const steer = directionsPart(args.directions)
+  if (steer) parts.push(steer)
   const earlier = previous.slice(0, PREVIOUS_IN_PROMPT)
-  const mark = (b: OleBullet) => b.rating === 'down' ? ' (the user marked this not useful)' : b.rating === 'up' ? ' (the user marked this useful)' : ''
+  // ratings (#55; thumbs down also mutes the topic for this call, #175) and the person's note on a bullet (#174)
+  const mark = (b: OleBullet) => (b.rating === 'down' ? ' (the user marked this not useful: give nothing more on its topic this call)' : b.rating === 'up' ? ' (the user marked this useful)' : '')
+    + (b.note ? ` (the user noted: "${b.note}")` : '')
   parts.push(earlier.length ? `Earlier bullets (do not repeat):\n${earlier.map(b => `- ${b.text}${mark(b)}`).join('\n')}` : 'Earlier bullets: none')
   parts.push(`Transcript (last few minutes):\n${lines.map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}`)
   return [{ role: 'system', content: BULLETS_SYSTEM }, { role: 'user', content: parts.join('\n\n') }]
@@ -424,6 +431,8 @@ export function createBulletsEngine(opts: {
   /** the running summary of the call (#75) and the user's notes (#77), read at each turn */
   summary?: () => string
   notes?: () => string
+  /** the directions the person gave this call (#176) */
+  directions?: () => string[]
   /** the enricher added sections to the briefing (#86), from the session's own state */
   mentioned?: () => boolean
   /** one line per turn, counts only, never transcript or bullet text (#59) */
@@ -509,7 +518,7 @@ export function createBulletsEngine(opts: {
     const fast = urgent && now() - lastRun < minIntervalMs
     running = true; dirty = false; urgent = false; lastRun = now()
     try {
-      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.(), mentioned: opts.mentioned?.() })
+      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.(), directions: opts.directions?.(), mentioned: opts.mentioned?.() })
       const offered = opts.tools()
       const allowed = new Set(offered.map(t => t.name))
       const tools = offered.length ? { tools: toOpenAiTools(offered) } : {}
@@ -630,6 +639,7 @@ export function createBulletsEngine(opts: {
       const next: OleBullet = { ...list[at] }
       if ('pinned' in patch) { if (patch.pinned) next.pinned = true; else delete next.pinned }
       if ('rating' in patch) { if (patch.rating === 'up' || patch.rating === 'down') next.rating = patch.rating; else delete next.rating }
+      if ('note' in patch) { if (patch.note) next.note = patch.note; else delete next.note }
       list = list.map((b, i) => i === at ? next : b)
       opts.onBullets([...list])
       return next

@@ -84,6 +84,8 @@ export function hookOle(d: Deps): Omit<OleSession, 'handlers'> {
   ipcMain.handle('ole:bullets', (_e, id: unknown) => h.bullets(id))
   ipcMain.handle('ole:bullet:pin', (_e, id: unknown, on: unknown) => h.pin(id, on))
   ipcMain.handle('ole:bullet:rate', (_e, id: unknown, rating: unknown) => h.rate(id, rating))
+  ipcMain.handle('ole:bullet:note', (_e, id: unknown, text: unknown) => h.noteBullet(id, text))
+  ipcMain.handle('ole:steer', (_e, text: unknown) => h.steer(text))
   ipcMain.handle('ole:ask', (_e, q: unknown, requestId: unknown, meetingId: unknown) => h.ask(q, requestId, meetingId))
   ipcMain.handle('ole:ask:cancel', (_e, requestId: unknown) => h.cancelAsk(requestId))
   ipcMain.handle('ole:call', (_e, id: unknown) => h.call(id))

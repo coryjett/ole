@@ -63,3 +63,10 @@ export function quickNoteKey(e: { key: string; shiftKey?: boolean; isComposing?:
   if (e.key === 'Escape') return 'leave'
   return null
 }
+
+/** a quick-note line: one starting with ">" is a direction for Ole (#176), anything else goes to My notes; null when empty */
+export function quickNoteTarget(text: string): { steer: string } | { note: string } | null {
+  const t = text.trim()
+  if (t.startsWith('>')) { const d = t.slice(1).trim(); return d ? { steer: d } : null }
+  return t ? { note: t } : null
+}
