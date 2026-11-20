@@ -24,4 +24,16 @@ describe('commitments merge (#160)', () => {
     expect(out.commitments.filter(c => !c.done)).toHaveLength(LIST_MAX - 1)
     expect(out.commitments).toHaveLength(LIST_MAX)
   })
+  it('a withdrawal must name who and what; the words alone never drop one', () => {
+    const prev = mem([{ who: 'Me', what: 'Send the pricing sheet' }])
+    const out = parseCallMemory(reply([{ who: 'Someone', what: 'Send the pricing sheet', withdrawn: true }]), prev)!
+    expect(out.commitments).toContainEqual({ who: 'Me', what: 'Send the pricing sheet' })
+  })
+  it('one update pushes out at most 3 done commitments', () => {
+    const prev = mem(Array.from({ length: LIST_MAX }, (_, i) => ({ who: 'Me', what: `Done ${i}`, done: true })))
+    const fresh = Array.from({ length: LIST_MAX }, (_, i) => ({ who: 'Them', what: `New ${i}` }))
+    const out = parseCallMemory(reply([...prev.commitments, ...fresh]), prev)!
+    expect(out.commitments.filter(c => c.done)).toHaveLength(LIST_MAX - 3)
+    expect(out.commitments).toHaveLength(LIST_MAX)
+  })
 })

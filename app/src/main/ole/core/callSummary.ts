@@ -11,6 +11,8 @@ export const SUMMARY_EVERY_MS = 3 * 60_000
 export const SUMMARY_MAX = 1200
 /** open questions and commitments kept, each (#82) */
 export const LIST_MAX = 8
+/** done commitments one update may push out to make room (#160) */
+const EVICT_MAX = 3
 /** an open question or a commitment is cut to this */
 export const ITEM_MAX = 140
 
@@ -90,16 +92,22 @@ function mergeCommitments(reply: OleCommitment[], previous: OleCommitment[], raw
     const i = find(c)
     if (i < 0) { if (!info?.withdrawn) out.push({ c, fresh: true }); continue }
     used.add(i)
-    if (info?.withdrawn) continue
     const prev = previous[i]
+    // taking one back needs the same who and the same words: a near match never deletes a record (#160)
+    if (info?.withdrawn) {
+      if (whoOf(prev) === whoOf(c) && rawInfo.some(r => r.withdrawn && r.who === whoOf(prev) && r.what === sameWhat(prev))) continue
+      out.push({ c: prev, fresh: false }); continue
+    }
     // one the reply carries without a done flag keeps its done; only an explicit false reopens it (#158)
     out.push({ c: !info?.flagged && prev.done && !c.done ? { ...c, done: true } : c, fresh: false })
   }
   // a previous commitment the reply left out is kept as it was, never silently dropped (#158)
   for (let j = 0; j < previous.length; j++) if (!used.has(j)) out.push({ c: previous[j], fresh: false })
   // at the cap, done commitments (oldest first) make room for new ones before any open one is dropped (#160)
+  // and only a few per update, so one reply can't sweep the record clean
   const freshCount = () => out.filter(o => o.fresh).length
-  while (out.length > LIST_MAX && freshCount() > 0) {
+  let evictions = EVICT_MAX
+  while (out.length > LIST_MAX && freshCount() > 0 && evictions-- > 0) {
     const d = out.findIndex(o => !o.fresh && o.c.done)
     if (d < 0) break
     out.splice(d, 1)
