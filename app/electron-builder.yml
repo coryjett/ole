@@ -2,13 +2,13 @@
 appId: net.cjett.ole
 productName: Ole
 copyright: Copyright © 2026 Frigade
-# GitHub Releases on Ole's own feed (coryjett/ole-releases). Fixed file names, so releases/latest/download/Ole-mac-arm64.dmg
+# GitHub Releases on Ole's own feed (coryjett/ole). Fixed file names, so releases/latest/download/Ole-mac-arm64.dmg
 # points at the newest. Installed copies update from the same release (latest-mac.yml; src/main/updates.ts).
 # Never point this at Yogurt's repo: an installed Ole would download and install a Yogurt release.
 publish:
   provider: github
   owner: coryjett
-  repo: ole-releases
+  repo: ole
   releaseType: release
 extraMetadata:
   name: ole

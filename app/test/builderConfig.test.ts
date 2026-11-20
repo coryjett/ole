@@ -36,6 +36,6 @@ it("Ole updates from its own release feed, never Yogurt's", () => {
   const publish = config.match(/^publish:\n((?:  .*\n)*)/m)?.[1] ?? ''
   expect(publish).toContain('provider: github')
   expect(publish).toMatch(/^  owner: coryjett$/m)
-  expect(publish).toMatch(/^  repo: ole-releases$/m)
+  expect(publish).toMatch(/^  repo: ole$/m)
   expect(publish).not.toMatch(/frigadehq|yogurt/i)
 })

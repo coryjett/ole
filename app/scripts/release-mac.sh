@@ -9,8 +9,8 @@
 set -e
 ID="${YOGURT_SIGN_ID:-Christian Mathiesen (2JNSQVN3N8)}"
 LOCAL=0
-if [ "$ID" = 'Yogurt Local' ]; then
-  [ "${YOGURT_NOTARIZE:-1}" = 0 ] || { echo 'Yogurt Local requires YOGURT_NOTARIZE=0' >&2; exit 1; }
+if [ "$ID" = 'Ole Local' ]; then
+  [ "${YOGURT_NOTARIZE:-1}" = 0 ] || { echo 'Ole Local requires YOGURT_NOTARIZE=0' >&2; exit 1; }
   LOCAL=1
 fi
 cd "$(dirname "$0")/.."
@@ -19,9 +19,9 @@ APP=dist/mac-arm64/Ole.app
 set --
 if [ "$LOCAL" = 1 ]; then
   # Pin the exact certificate; never silently fall back to ad-hoc or a different signer.
-  CERT=$(security find-identity -v -p codesigning | awk '/"Yogurt Local"$/ { print $2 }')
-  [ "${#CERT}" = 40 ] || { echo 'Create exactly one valid Yogurt Local code-signing identity.' >&2; exit 1; }
-  LOCAL_DIR=$(mktemp -d "${TMPDIR:-/tmp}/yogurt-local-sign.XXXXXX")
+  CERT=$(security find-identity -v -p codesigning | awk '/"Ole Local"$/ { print $2 }')
+  [ "${#CERT}" = 40 ] || { echo 'Create exactly one valid Ole Local code-signing identity.' >&2; exit 1; }
+  LOCAL_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ole-local-sign.XXXXXX")
   trap 'rm -rf "$LOCAL_DIR"' EXIT
   for ent in mac mac.inherit; do
     cp "build/entitlements.$ent.plist" "$LOCAL_DIR/$ent.plist"
@@ -32,7 +32,7 @@ if [ "$LOCAL" = 1 ]; then
 const path = require('node:path')
 const dir = process.argv[2]
 console.log(JSON.stringify({ extends: path.resolve('electron-builder.yml'), publish: null, forceCodeSigning: true,
-  mac: { identity: 'Yogurt Local', notarize: false, entitlements: path.join(dir, 'mac.plist'),
+  mac: { identity: 'Ole Local', notarize: false, entitlements: path.join(dir, 'mac.plist'),
     entitlementsInherit: path.join(dir, 'mac.inherit.plist') } }))
 JS
   set -- --config "$LOCAL_DIR/config.json"
