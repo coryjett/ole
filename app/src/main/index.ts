@@ -38,6 +38,10 @@ import { wavOf } from './fakeCapture'
 import { askFakeNotifications, chatMeetings, fakeAccess, fakeDownloadDeps, fakeHardware, fakeHelper, fakeNow, installFakeHooks, manyMeetings, mediaCalls, waitForFakeAudioMetadata } from './fake'
 import { createPermissions } from './permissions'
 import { hookPreferences, onboardingShowing } from './preferences'
+import { hookOleSecrets, readSecret } from './ole/secrets'
+import { hookOleProviders, providersOf } from './ole/providers'
+import { createOpenAIModel } from './ole/openaiModel'
+import { hookOle } from './ole/session'
 import { loginItemOn, openedAtLogin, setLoginItem, syncLoginItem } from './loginItem'
 import { createMedia } from './media'
 import { createTray, linuxTrayHost } from './tray'
@@ -87,13 +91,14 @@ import { AUDIO_SCHEME, audioExts, createAudioHandler, trackFile, type AudioExt }
 import { helperDecode, wavDecode } from './asr/backfill'
 import { finishQuit, hookUpdates, isPreviewBuild, updatesOn } from './updates'
 import type { NoteSaveResult, StartResult } from '../shared/types'
+import { APP_ID, PRODUCT_NAME } from '../shared/brand'
 
 // the transcript's player streams each meeting's audio from here; seeking needs stream support (before ready)
 protocol.registerSchemesAsPrivileged([{ scheme: AUDIO_SCHEME, privileges: { standard: true, secure: true, stream: true } }])
 
-app.setName('Yogurt')
+app.setName(PRODUCT_NAME)
 // Windows shows notifications only for an app with this id (the installer's shortcut carries the same one, electron-builder appId)
-if (process.platform === 'win32') app.setAppUserModelId('so.yogurt.app')
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID)
 app.setPath('userData', userDataDir())
 // before anything goes online: a company's own HTTPS certificate, installed in the system, is trusted too (#115)
 const systemCerts = trustSystemCertificates()
@@ -132,7 +137,7 @@ let sendWidgetTranscript = (_channel: string, _value: unknown) => {}
 function createWindow() {
   win = new BrowserWindow({
     width: 1100, height: 760, minWidth: 720, minHeight: 520,
-    title: 'Yogurt',
+    title: PRODUCT_NAME,
     ...windowChrome(process.platform, nativeTheme.shouldUseDarkColors),
     show: false,
     // hidden pages would otherwise pause timers and animations
@@ -541,6 +546,17 @@ app.whenReady().then(() => {
   initMeetings(store)
   // the person's own names, never given to the other side: the one in Settings and the Mac's
   const settingsFile = join(userDataDir(), 'settings.json')
+  // Ole: keys, providers and the live call companion (ole/)
+  hookOleSecrets({ file: settingsFile })
+  hookOleProviders({ file: settingsFile })
+  const oleProviders = () => providersOf(loadSettings(settingsFile))
+  const ole = hookOle({
+    file: settingsFile,
+    send: (s) => { win?.webContents.send('ole:state', s); sendWidgetTranscript('ole:state', s) },
+    save: (id, bullets) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-bullets.json'), JSON.stringify(bullets, null, 2)),
+  })
+  onMeetingStart((m) => ole.meetingStarted({ id: m.id, title: m.title }))
+  onMeetingStop((m) => ole.meetingStopped(m.id))
   setCalendarSelection(() => loadSettings(settingsFile))
   setCalendarOwnEmail(email => {
     try { if (store.rememberOwnEmail(email)) win?.webContents.send('meetings:changed') }
@@ -559,7 +575,11 @@ app.whenReady().then(() => {
   })
   // Windows and Linux: whisper left the graphics card in a meeting, so the speed check (timed with it) runs again next start
   onWhisperGpuOff(() => speedStore(speedFile()).forget())
-  hookTranscription({ store, modelPath: () => setup.installed()?.asr, send: (seg) => {
+  hookTranscription({ store, modelPath: () => setup.installed()?.asr,
+    useOpenAI: () => oleProviders().transcription === 'openai',
+    openai: { key: () => readSecret(settingsFile, 'openai'), model: () => oleProviders().openaiTranscribeModel },
+    send: (seg) => {
+    ole.segment(seg)
     const order = seg.track === 'them' && seg.speaker ? store.speakerOrder(seg.meetingId, seg.speaker) : []
     const colored = { ...seg, speakerColor: speakerColor(seg.track, seg.speaker, order) }
     win?.webContents.send('transcript:segment', colored); sendWidgetTranscript('transcript:segment', colored)
@@ -616,11 +636,20 @@ app.whenReady().then(() => {
   // fake mode: the fixed Mac (a bigger one) unless a test asks for a 16 GB one
   const smallMac = isFake() ? process.env.YOGURT_FAKE_SMALL_MAC === '1' : isSmallMac(os.totalmem())
   const memory = notesMemory(smallMac)
-  const model = createNotesModel({ engine, modelPath: () => setup.notesPath(), onLoaded: path => setup.notesModelLoaded(path), contextSize: memory.contextSize, ...(memory.releaseSpeech ? { beforeLoad: releaseIdleSpeech } : {}) })
+  const localModel = createNotesModel({ engine, modelPath: () => setup.notesPath(), onLoaded: path => setup.notesModelLoaded(path), contextSize: memory.contextSize, ...(memory.releaseSpeech ? { beforeLoad: releaseIdleSpeech } : {}) })
+  // Ole: the notes model is OpenAI or the local one, chosen per job so a Settings change applies to the next one
+  const openaiModel = createOpenAIModel({ key: () => readSecret(settingsFile, 'openai'), model: () => oleProviders().openaiChatModel })
+  const onOpenAI = () => oleProviders().assistant === 'openai'
+  const model: typeof localModel = {
+    llm: (...a) => (onOpenAI() ? openaiModel : localModel).llm(...a),
+    unload: () => localModel.unload(),
+    loaded: () => onOpenAI() ? openaiModel.loaded() : localModel.loaded(),
+    needsLoad: () => onOpenAI() ? false : localModel.needsLoad(),
+  }
   // first run: the notes model lands after recording already works; jobs wait in the queue for it
   // the embedding model (meaning search across meetings) runs in the same worker and is let go with the notes model
   const embedder = createEmbedder({ engine, modelPath: () => setup.installed()?.embed, id: bundledCatalog.embedding.id, dims: bundledCatalog.embedding.dims })
-  const queue = createQueue({ recording: () => !!activeMeeting(), smallMac, idleMs: memory.idleMs, backlogMs: transcriptionBacklogMs, onIdle: () => { void model.unload().catch(e => console.error('letting the notes model go failed', e)); void embedder.unload() }, modelReady: () => !!setup.notesPath() })
+  const queue = createQueue({ recording: () => !!activeMeeting(), smallMac, idleMs: memory.idleMs, backlogMs: transcriptionBacklogMs, onIdle: () => { void model.unload().catch(e => console.error('letting the notes model go failed', e)); void embedder.unload() }, modelReady: () => onOpenAI() || !!setup.notesPath() })
   ipcMain.handle('setup:remove-upgrade', () => setup.removeUpgrade(remove => queue.enqueue(async () => {
     await model.unload()
     remove()

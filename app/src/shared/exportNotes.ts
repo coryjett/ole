@@ -128,7 +128,8 @@ export function toMarkdownFile(meeting: Meeting, notes: string, segments: Segmen
   const when = new Date(meeting.startedAt).toLocaleString(language(), { dateStyle: 'long', timeStyle: 'short' })
   const title = meeting.title.replace(/\s+/g, ' ').trim()
   // a small credit on the date line: whoever the file is shared with can find the app
-  const credit = t('Recorded with {app}', { app: '[Yogurt](https://yogurt.so)' })
+  // Ole credits Yogurt outside t(): t() shows Yogurt's name as Ole's, which would make this "a fork of Ole"
+  const credit = `${t('Recorded with {app}', { app: 'Ole' })} (a fork of [Yogurt](https://yogurt.so))`
   const head = [`# ${escapeText(title)}`, '', `${when} · ${credit}`]
   const people = meeting.attendees.map((a) => a.name.trim()).filter(Boolean)
   if (people.length) head.push('', t('With: {names}', { names: people.join(', ') }))

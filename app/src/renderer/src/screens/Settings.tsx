@@ -1,4 +1,5 @@
 import { LoadingContent } from '../components/LoadingContent'
+import { OleSettings } from '../ole/OleSettings'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, Copy, Download, ExternalLink, Globe, Lock, Upload, FileText } from 'lucide-react'
 import type { Access, AppVisibility, McpStatus, PermissionKind, PermissionStatus, SetupState, Theme, UpdateStatus } from '../../../shared/types'
@@ -163,6 +164,8 @@ export function Settings({ revision = 0, focus }: { revision?: number; focus?: s
           </div>
 
           <Backup />
+
+          <OleSettings api={window.yogurt.ole} />
 
           <AiApps />
 

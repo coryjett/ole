@@ -49,7 +49,14 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   /** the default for newly written summaries; the meeting's language when left out */
   summaryLanguage?: string
   /** new versions download by themselves; on unless turned off */
-  autoUpdate?: boolean }
+  autoUpdate?: boolean
+  /** Ole: keys sealed with safeStorage (ole/secrets.ts); never plain */
+  oleSecrets?: Partial<Record<import('./ole/types').SecretName, string>>
+  /** Ole: providers for transcription and the notes model (ole/providers.ts) */
+  oleTranscription?: 'local' | 'openai'
+  oleAssistant?: 'local' | 'openai'
+  oleTranscribeModel?: string
+  oleChatModel?: string }
 
 /** "English only" unless Multi-language was picked */
 export const spokenSetting = (s: Settings): Spoken => spokenOf(s.spoken)

@@ -1,4 +1,5 @@
 import { TranscriptionControl, TranscriptionNotice } from '../components/Transcription'
+import { OlePanel } from '../ole/OlePanel'
 import { transcriptionBusy } from '../../../shared/transcription'
 import { citationTargetIndex } from '../../../shared/citations'
 import { NoteReadingPane } from '../components/NoteReadingPane'
@@ -422,6 +423,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             <span data-testid="note-tab-indicator" className="note-tab-indicator" aria-hidden="true" />
           </div>
         </header>
+        {recording && <OlePanel compact />}
         <div ref={setChatAnchor} className="note-reading-area">
           <div ref={panels} className="note-panels">
           <NoteReadingPane active={primary === 'notes'} summary={shown === 'enhanced'} generating={shown === 'enhanced' && ['waiting', 'rewriting', 'handoff', 'reset', 'streaming'].includes(summaryState)} resetting={shown === 'enhanced' && summaryState === 'reset'} writing={shown === 'enhanced' && summaryState === 'streaming'} scroll={readingScroll}>

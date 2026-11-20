@@ -15,6 +15,7 @@ import { createTranscriber, type Line, type Transcribe } from './transcribe'
 import { meetingWords, respell, whisperPrompt } from '../vocab'
 import type { TranscriptPartial } from '../../shared/types'
 import type { Chunk } from './chunker'
+import { createOpenAITranscriber } from '../ole/openaiTranscribe'
 
 /**
  * Live transcription of the meeting being recorded: the capture's audio goes through a pipeline (chunks, whisper-server,
@@ -158,6 +159,9 @@ export function hookTranscription(p: {
   store: Pick<Store, 'addSegments' | 'updateMeeting'> & Partial<Pick<Store, 'segments' | 'hideSegments' | 'meeting'>>
   /** the speech model, once setup has it */
   modelPath: () => string | undefined
+  /** Ole: transcribe through OpenAI instead of the local model (read when a meeting opens); no local model needed then */
+  useOpenAI?: () => boolean
+  openai?: { key: () => string | null; model: () => string; fetch?: typeof fetch }
   send: (seg: Omit<Segment, 'id'>) => void
   /** saved echoes changed during recording or the final sweep: the window reads them again */
   refresh?: (meetingId: string) => void
@@ -214,6 +218,7 @@ export function hookTranscription(p: {
     if (p.transcriber) { const f = p.transcriber; transcribe = async (c, o) => f(c, (l, n, locked) => hear(l, n, locked), o) }
     // fake mode's stand-in is loaded only in fake mode, so it stays out of what real runs load
     else if (isFake()) transcribe = async (c, o) => (await import('./fake')).fakeTranscribe(c, o, promptOf(), whisperLanguage(spokenNow()))
+    else if (p.useOpenAI?.() && p.openai) transcribe = createOpenAITranscriber(p.openai)
     else {
       const model = p.modelPath()
       if (model) {
@@ -263,7 +268,7 @@ export function hookTranscription(p: {
 
   const offStart = (p.onStart ?? onMeetingStart)((m) => { open(m.id) })
   recorded = async (id, tracks, stopped, options) => {
-    if (sessions.has(id) || !p.modelPath()) return false
+    if (sessions.has(id) || !(p.useOpenAI?.() || p.modelPath())) return false
     const s = open(id, true, options)
     if (!s.pipeline) { sessions.delete(id); return false }
     const pipe = s.pipeline

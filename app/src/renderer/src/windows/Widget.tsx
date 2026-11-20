@@ -1,4 +1,6 @@
 import { transcriptSpeaker } from '../../../shared/transcript'
+import { OleBullets } from '../ole/OleBullets'
+import { useOleState } from '../ole/OlePanel'
 import { SPEAKER_COLORS } from '../../../shared/speakerColors'
 import { widgetDragDelta, isWidgetClick, type WidgetPress } from '../../../shared/widgetGesture'
 import { Loading } from '../components/Loading'
@@ -197,11 +199,13 @@ function Preview({ view, open }: { view: WidgetView; open: boolean }) {
   }
   const note = view.note
   const permission = widgetSettings(note)
+  const ole = useOleState()
   return <div data-testid="widget-preview" className="widget-preview" role="region" aria-label={t('Live transcript')} inert={!open} aria-hidden={!open}>
     {note && <div className="widget-preview-warning" role="status">
       <p data-testid="widget-note" data-tone={note.tone}>{note.text}</p>
       {permission && <button className="workspace-button widget-settings" onClick={() => { void window.yogurt.permissions.open(permission) }}>{t('Open Settings')}</button>}
     </div>}
+    {ole && <div className="widget-ole" style={{ padding: '6px 10px', maxHeight: 220, overflowY: 'auto' }}><OleBullets bullets={ole.bullets} prepared={ole.prepared} /></div>}
     <ScrollFade>
     <div ref={scroll} data-testid="widget-preview-text" className="widget-preview-conversation" role="log" aria-live="off" aria-label={t('Transcript')}
       onWheel={manual} onTouchStart={manual} onPointerDown={manual} onKeyDown={manual} onScroll={e => {

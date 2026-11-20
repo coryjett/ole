@@ -11,7 +11,7 @@ it('uninstalling on Windows never deletes the profile: it holds every meeting', 
 })
 
 it('Windows and Linux builds have fixed file names, like the Mac one', () => {
-  expect(config).toContain('artifactName: Yogurt-mac-${arch}.${ext}')
+  expect(config).toContain('artifactName: Ole-mac-${arch}.${ext}')
   expect(config).toContain('artifactName: Yogurt-windows-${arch}.${ext}')
   expect(config).toContain('artifactName: Yogurt-linux-${arch}.${ext}')
 })
@@ -30,4 +30,12 @@ it("only Windows and Linux carry the speed check's clip: a Mac never times its s
 
 it('the Linux build starts through the launcher that picks X11 on Wayland (#8)', () => {
   expect(config).toMatch(/^afterPack: scripts\/linux-launcher\.cjs$/m)
+})
+
+it("Ole updates from its own release feed, never Yogurt's", () => {
+  const publish = config.match(/^publish:\n((?:  .*\n)*)/m)?.[1] ?? ''
+  expect(publish).toContain('provider: github')
+  expect(publish).toMatch(/^  owner: coryjett$/m)
+  expect(publish).toMatch(/^  repo: ole-releases$/m)
+  expect(publish).not.toMatch(/frigadehq|yogurt/i)
 })

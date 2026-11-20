@@ -293,6 +293,8 @@ export type YogurtApi = {
     /** English only or Multi-language: the meeting being recorded and the next ones */
     setSpoken(v: import('./spoken').Spoken): Promise<void>
   }
+  /** Ole: keys, providers, Siesta warm-up and live context bullets */
+  ole: OleApi
   /** finds meetings by date, title, attendees, folders, transcript and notes; nothing typed: the latest. folder: only the meetings in it */
   search: { query(q: string, folder?: string, people?: Person[]): Promise<SearchResult[]>; people(): Promise<Person[]> }
   /** named folders of meetings; a meeting can be in several, and deleting a folder keeps its meetings */
@@ -462,3 +464,19 @@ export type ConversationSummary = { id: string; title: string; updatedAt: number
 export type McpStatus = { enabled: boolean; clients: string[]; command: string }
 /** Settings → Updates. available: this build updates itself (not in development or a preview); next: the version found */
 export type UpdateStatus = { version: string; available: boolean; on: boolean; state: 'idle' | 'checking' | 'latest' | 'downloading' | 'ready' | 'error'; next?: string; dismissed?: boolean }
+
+/** Ole: what the renderer sees of the live call companion (never a key) */
+export type OleLiveState = {
+  meetingId: string | null
+  preparing: boolean
+  prepared: { meetingTitle: string | null; accountId: string | null; accountName: string | null; preparedAt: number } | null
+  error: string | null
+  bullets: import('../main/ole/types').OleBullet[]
+}
+export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & {
+  state(): Promise<OleLiveState>
+  onState(cb: (s: OleLiveState) => void): () => void
+  /** warm-up from Siesta; no account given: the next matched meeting */
+  prepare(o?: { accountId?: string | null; meetingTitle?: string | null }): Promise<OleLiveState>
+  searchAccounts(q: string): Promise<Array<{ id: string; name: string }>>
+}

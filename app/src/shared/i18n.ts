@@ -3,6 +3,8 @@
  * language's table and falls back to the English. Tables live in shared/locales/<id>.json; en.json
  * holds only the English plural forms. Blanks are {name}; a value with plural forms picks one by {count}.
  */
+import { brand } from './brand'
+
 export type Locale = { id: string; name: string; english: string; rtl?: boolean }
 export type Entry = string | Partial<Record<Intl.LDMLPluralRule, string>>
 export type Table = Record<string, Entry>
@@ -98,7 +100,13 @@ export function onLanguage(l: () => void) {
   return () => { listeners.delete(l) }
 }
 
-/** The text in the current language */
-export const t = (text: string, vars?: Vars) => translate(tables, current, text, vars)
+/** The text in the current language, with Yogurt's product name shown as Ole's (brand.ts) */
+export const t = (text: string, vars?: Vars) => {
+  // Ole: the product name is swapped in the message only, never in a value filled into it (a meeting title).
+  // The plural form is picked with the count, then the other values fill the branded message.
+  const count = typeof vars?.count === 'number' ? { count: vars.count } : undefined
+  const message = brand(translate(tables, current, text, count))
+  return vars ? translate({}, current, message, vars) : message
+}
 /** Marks text to translate where it's shown (lists and constants); returns it unchanged */
 export const msg = (text: string) => text

@@ -2,7 +2,7 @@ import { audioUpload } from './audioUpload'
 import type { WidgetLayout } from '../shared/widgetMorph'
 import { contextBridge, ipcRenderer } from 'electron'
 import { capabilities, platformOf } from '../shared/platform'
-import type { ChatView, ConversationSummary, ConversationView, NoteView, PromptAction, SetupState, UpdateStatus, WidgetView, YogurtApi } from '../shared/types'
+import type { ChatView, ConversationSummary, ConversationView, NoteView, OleLiveState, PromptAction, SetupState, UpdateStatus, WidgetView, YogurtApi } from '../shared/types'
 
 const api: YogurtApi = {
   reportRendererError: report => ipcRenderer.send('renderer:error', report),
@@ -233,6 +233,16 @@ const api: YogurtApi = {
     export: () => ipcRenderer.invoke('backup:export'),
     import: () => ipcRenderer.invoke('backup:import'),
     show: () => { ipcRenderer.send('backup:show') },
+  },
+  ole: {
+    getProviders: () => ipcRenderer.invoke('ole:providers:get'),
+    setProviders: (patch) => ipcRenderer.invoke('ole:providers:set', patch),
+    setSecret: (name, value) => ipcRenderer.invoke('ole:secret:set', name, value),
+    secretStatus: () => ipcRenderer.invoke('ole:secret:status'),
+    state: () => ipcRenderer.invoke('ole:state'),
+    onState: (cb) => { const f = (_e: unknown, s: OleLiveState) => cb(s); ipcRenderer.on('ole:state', f); return () => { ipcRenderer.off('ole:state', f) } },
+    prepare: (o) => ipcRenderer.invoke('ole:prepare', o ?? {}),
+    searchAccounts: (q) => ipcRenderer.invoke('ole:search-accounts', q),
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
