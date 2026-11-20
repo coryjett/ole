@@ -83,6 +83,8 @@ function assetsOf(repo, tag) {
 
 /** download the release into a temp folder and check it end to end; returns the problems found */
 export function verifyRelease(repo, tag, identitySha1) {
+  // fail closed: the certificate check is the point, so a missing or malformed identity is an error, never "no constraint"
+  if (!/^[0-9a-f]{40}$/i.test(String(identitySha1 ?? ''))) throw new Error('verify needs the 40-character SHA-1 of the "Ole Local" signing identity')
   const dir = mkdtempSync(join(tmpdir(), 'ole-verify-'))
   try {
     sh('gh', ['release', 'download', tag, '--repo', repo, '--dir', dir])
@@ -105,7 +107,7 @@ export function verifyRelease(repo, tag, identitySha1) {
         const r = spawnSync('codesign', ['-d', '-r-', appPath], { encoding: 'utf8' })
         const req = `${r.stdout ?? ''}${r.stderr ?? ''}`
         if (/cdhash/.test(req) && !/certificate leaf/.test(req)) problems.push('the app has an ad-hoc signature (installed copies would refuse the update)')
-        if (identitySha1 && !req.toLowerCase().includes(identitySha1.toLowerCase())) problems.push('the app is not signed by the expected certificate (installed copies would refuse the update)')
+        if (!req.toLowerCase().includes(identitySha1.toLowerCase())) problems.push('the app is not signed by the expected certificate (installed copies would refuse the update)')
         const feed = readFileSync(join(appPath, 'Contents/Resources/app-update.yml'), 'utf8')
         if (!/owner:\s*coryjett/.test(feed) || !/repo:\s*ole\s*$/m.test(feed) || /frigade|yogurt/i.test(feed)) problems.push('the app\'s update feed is not coryjett/ole')
         const v = sh('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', join(appPath, 'Contents/Info.plist')]).trim()
@@ -132,6 +134,8 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
     const newest = releases(b || REPO)[0]
     if (newest && compareVersions(a, newest) <= 0) { console.error(`${a} is not above the newest release ${newest}; installed copies would never update to it`); process.exit(1) }
     console.log(`${a} is above ${newest ?? 'nothing yet'}`)
+  } else if (cmd === 'newest') {
+    console.log(releases(a || REPO)[0] ?? '')
   } else if (cmd === 'verify') {
     const problems = verifyRelease(c || REPO, a, b)
     if (problems.length) { console.error(`${a} failed verification:\n- ${problems.join('\n- ')}`); process.exit(1) }

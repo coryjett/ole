@@ -1,7 +1,7 @@
 // Ole: the tools the model may call. Every enabled MCP server's read-only tools, named `<serverId>__<tool>` for
 // OpenAI function calling, and a runner that maps a model's call back to the right server.
 import type { McpServerConfig, OleTool } from './types'
-import type { McpCallOptions, McpClient, McpTool } from './mcp'
+import { McpError, type McpCallOptions, type McpClient, type McpTool } from './mcp'
 
 export type ToolServer = { config: McpServerConfig; client: McpClient }
 export type ToolRunner = { call(name: string, argsJson: string, opts?: McpCallOptions): Promise<string> }
@@ -65,9 +65,21 @@ export function isReadOnly(tool: Pick<McpTool, 'name' | 'annotations'>): boolean
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
 /** the read-only tools of every enabled server; a server that fails to list is skipped */
-export async function collectTools(servers: ToolServer[]): Promise<OleTool[]> {
+/** an enabled server Ole couldn't use, and why in a few words (#33) */
+export type Unavailable = { name: string; reason: string }
+
+export const unavailableReason = (e: unknown): string => {
+  const kind = e instanceof McpError ? e.kind : null
+  if (kind === 'auth') return 'key rejected'
+  if (kind === 'timeout') return 'timed out'
+  if (kind === 'unreachable') return "couldn't be reached"
+  return (e instanceof Error ? e.message : String(e)).slice(0, 120)
+}
+
+export async function collectTools(servers: ToolServer[], onUnavailable?: (u: Unavailable) => void): Promise<OleTool[]> {
   const enabled = servers.filter(s => s.config.enabled)
-  const listed = await Promise.all(enabled.map(s => s.client.listTools({ timeoutMs: LIST_TIMEOUT_MS }).catch(() => [] as McpTool[])))
+  // a server that fails is skipped, but never silently: the caller hears which and why (#33)
+  const listed = await Promise.all(enabled.map(s => s.client.listTools({ timeoutMs: LIST_TIMEOUT_MS }).catch((e: unknown) => { onUnavailable?.({ name: s.config.name, reason: unavailableReason(e) }); return [] as McpTool[] })))
   const out: OleTool[] = []
   const taken = new Set<string>()
   enabled.forEach((s, i) => {

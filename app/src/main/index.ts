@@ -18,7 +18,7 @@ import { isAppRoute } from '../shared/routes'
 import { resumesNote } from '../shared/agendaNote'
 import { relaunchOptions, stripAppImageEnv } from './relaunch'
 import { capabilities, micListHelper, platformOf, supportedKinds } from '../shared/platform'
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, protocol, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, powerMonitor, protocol, safeStorage, shell } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { basename, join } from 'node:path'
@@ -42,6 +42,7 @@ import { hookOleSecrets, readSecret } from './ole/secrets'
 import { hookOleProviders, providersOf } from './ole/providers'
 import { createOpenAIModel } from './ole/openaiModel'
 import { hookOle, testServer } from './ole/session'
+import type { Llm } from './notes/enhance'
 import { hookOleServers } from './ole/servers'
 import { loginItemOn, openedAtLogin, setLoginItem, syncLoginItem } from './loginItem'
 import { createMedia } from './media'
@@ -556,6 +557,7 @@ app.whenReady().then(() => {
     file: settingsFile,
     send: (s) => { win?.webContents.send('ole:state', s); sendWidgetTranscript('ole:state', s) },
     save: (id, bullets) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-bullets.json'), JSON.stringify(bullets, null, 2)),
+    notify: (title, body) => { if (Notification.isSupported()) new Notification({ title, body }).show() },
     load: (id) => {
       const path = join(userDataDir(), 'meetings', id, 'ole-bullets.json')
       if (!existsSync(path)) return []
@@ -565,6 +567,8 @@ app.whenReady().then(() => {
     },
   })
   onMeetingStart((m) => ole.meetingStarted({ id: m.id, title: m.title }))
+  // a Mac that slept may have missed a server going down (#33)
+  powerMonitor.on('resume', () => void ole.checkServers())
   onMeetingStop((m) => ole.meetingStopped(m.id))
   setCalendarSelection(() => loadSettings(settingsFile))
   setCalendarOwnEmail(email => {
@@ -670,6 +674,11 @@ app.whenReady().then(() => {
     remove()
   }, 'enhance')))
   setup.onNotesModel(() => { queue.modelArrived(); conversations.refresh() })
+  // Ole: Prepare on this Mac (#5) runs as a chat job in the notes queue, so it never overlaps a summary or a recording's work
+  ole.setLocal(<T,>(job: (llm: Llm, signal: AbortSignal) => Promise<T>) => new Promise<T>((resolve, reject) => {
+    if (!setup.notesPath()) { reject(new Error('No local model yet: it downloads in Settings > Models.')); return }
+    void queue.enqueue(async (signal) => { try { resolve(await job(await localModel.llm(signal), signal)) } catch (e) { reject(e) } }, 'chat').catch(reject)
+  }))
   // chat across meetings: every finished meeting chunked and embedded in the background, last in the queue
   const library = new Library(store.db)
   const indexer = createIndexer({ store, library, embedder, queue })

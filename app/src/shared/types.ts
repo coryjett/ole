@@ -474,12 +474,16 @@ export type OleLiveState = {
   bullets: import('../main/ole/types').OleBullet[]
   /** why Prepare and live context are off (Assistant on Local, or no OpenAI key); null when they can run */
   blocked: string | null
+  /** enabled MCP servers Ole couldn't use for this briefing or call, and why (#33) */
+  unavailable: Array<{ name: string; reason: string }>
 }
 export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & {
   state(): Promise<OleLiveState>
   onState(cb: (s: OleLiveState) => void): () => void
   /** the pre-call briefing from the MCP servers; focus: a company, person or topic to prepare for */
   prepare(o?: { focus?: string | null; meetingTitle?: string | null }): Promise<OleLiveState>
+  /** try the MCP servers again (#33) */
+  retryServers(): Promise<OleLiveState>
   /** a meeting's context bullets from the call, newest first; [] when there were none */
   bullets(meetingId: string): Promise<import('../main/ole/types').OleBullet[]>
 }

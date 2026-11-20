@@ -13,7 +13,7 @@ let file = ''
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ole-providers-')); file = join(dir, 'settings.json'); hookOleProviders({ file }) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); handlers.clear() })
 
-const DEFAULTS = { transcription: 'local', assistant: 'local', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', warmupInstructions: '' }
+const DEFAULTS = { transcription: 'local', assistant: 'local', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '' }
 
 it('defaults to local for both and the documented OpenAI models', () => {
   expect(providersOf({})).toEqual(DEFAULTS)
@@ -32,7 +32,7 @@ it('rejects unknown provider values', () => {
   expect(setProviders(file, { assistant: 'anthropic', transcription: 'vertex' })).toEqual(DEFAULTS)
   setProviders(file, { assistant: 'openai' })
   expect(setProviders(file, { assistant: 'anthropic' }).assistant).toBe('openai')
-  expect(setProviders(file, { openaiChatModel: '', openaiTranscribeModel: 'bad model; rm' })).toMatchObject({ openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', openaiTranscribeModel: 'gpt-4o-mini-transcribe' })
+  expect(setProviders(file, { openaiChatModel: '', openaiTranscribeModel: 'bad model; rm' })).toMatchObject({ openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', openaiTranscribeModel: 'gpt-4o-mini-transcribe' })
   expect(setProviders(file, 'openai')).toEqual({ ...DEFAULTS, assistant: 'openai' })
   expect(setProviders(file, null)).toEqual({ ...DEFAULTS, assistant: 'openai' })
 })

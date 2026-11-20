@@ -14,6 +14,7 @@ type OleProviderSettings = Settings & {
   oleCustomBaseUrl?: string
   oleCustomModel?: string
   oleWarmupInstructions?: string
+  olePrepareOn?: string
 }
 
 export const PROVIDER_DEFAULTS: OleProviders = {
@@ -24,6 +25,7 @@ export const PROVIDER_DEFAULTS: OleProviders = {
   openaiPrepareModel: 'gpt-5.6-terra',
   customBaseUrl: '',
   customModel: '',
+  prepareOn: 'assistant',
   warmupInstructions: ''
 }
 
@@ -72,7 +74,9 @@ export function providersOf(s: Settings): OleProviders {
   // '' means whatever the server serves (sent as 'default'); a single-model server ignores the name anyway
   const customModel = isValidModelName(cm) ? cm : PROVIDER_DEFAULTS.customModel
 
-  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel }
+  const prepareOn = settings.olePrepareOn === 'local' ? 'local' as const : 'assistant' as const
+
+  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel, prepareOn }
 }
 
 export function setProviders(file: string, patch: unknown): OleProviders {
@@ -105,6 +109,7 @@ export function setProviders(file: string, patch: unknown): OleProviders {
     if (url === '' || isValidBaseUrl(url)) settingsPatch.oleCustomBaseUrl = url
   }
   if ('customModel' in p && typeof p.customModel === 'string' && (p.customModel.trim() === '' || isValidModelName(p.customModel.trim()))) settingsPatch.oleCustomModel = p.customModel.trim()
+  if ('prepareOn' in p && (p.prepareOn === 'local' || p.prepareOn === 'assistant')) settingsPatch.olePrepareOn = p.prepareOn
   if ('openaiPrepareModel' in p) {
     const model = typeof p.openaiPrepareModel === 'string' ? p.openaiPrepareModel.trim() : ''
     if (isValidModelName(model)) settingsPatch.olePrepareModel = model

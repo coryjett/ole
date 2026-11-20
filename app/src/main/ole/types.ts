@@ -21,6 +21,8 @@ export type OleProviders = {
   customBaseUrl: string;
   /** the model asked of the Custom server for Prepare, bullets and summaries */
   customModel: string;
+  /** where Prepare runs: with the Assistant (OpenAI or Custom server), or on the Mac's own model (#5); live bullets never run locally */
+  prepareOn: 'assistant' | 'local';
 };
 
 /** an MCP server the person added in Settings; its key is the secret `mcp:<id>` */

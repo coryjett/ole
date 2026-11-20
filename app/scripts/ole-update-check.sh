@@ -6,7 +6,10 @@ set -e
 cd "$(dirname "$0")/.."
 node scripts/release-check.mjs feed
 if [ "$1" = --full ]; then
-  TAG=$(gh release list --repo coryjett/ole --limit 1 --exclude-drafts --json tagName -q '.[0].tagName')
+  # fail closed: without the signing identity the certificate check would have nothing to compare against
   IDENTITY=$(security find-identity -v -p codesigning | awk '/"Ole Local"$/ { print $2 }')
+  [ "${#IDENTITY}" = 40 ] || { echo 'The "Ole Local" signing identity is missing (OLE.md); cannot verify the signature' >&2; exit 1; }
+  TAG=$(node scripts/release-check.mjs newest)
+  [ -n "$TAG" ] || { echo 'no published release to verify' >&2; exit 1; }
   node scripts/release-check.mjs verify "$TAG" "$IDENTITY"
 fi

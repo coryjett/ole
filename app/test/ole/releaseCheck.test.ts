@@ -40,3 +40,12 @@ describe('release checks (#26)', () => {
     expect(feedProblems(parseLatestYml(yml.replace(/Ole-mac-arm64\.zip/g, 'Ole.dmg2')), assets, 'v0.1.0-alpha.11')).toContain('latest-mac.yml lists no .zip (the Mac updater installs the zip)')
   })
 })
+
+describe('verify fails closed (#26)', () => {
+  it('refuses to run without a 40-character signing identity', async () => {
+    // @ts-expect-error a plain .mjs script
+    const { verifyRelease } = await import('../../scripts/release-check.mjs')
+    expect(() => verifyRelease('coryjett/ole', 'v0.1.0', '')).toThrow(/signing identity/)
+    expect(() => verifyRelease('coryjett/ole', 'v0.1.0', 'abc')).toThrow(/signing identity/)
+  })
+})

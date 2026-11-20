@@ -28,6 +28,8 @@
 - **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. When the briefing doesn't cover something, Ole looks it up with the same tools, a few times a minute at most. Other customers' names are kept anonymous.
 - **Any MCP server, several at once.** CRM, support, docs, internal tools: add each one in Settings. Ole only uses tools that read.
 - **Servers can teach Ole how to prepare.** A server that publishes an MCP prompt named `prepare_for_meeting` tells Ole which tools to call and how to write the briefing. Your own warm-up instructions in Settings refine it.
+- **Never caught out by a broken server.** Ole checks your MCP servers in the background and tells you (on Home and with a notification) when one can't be reached or rejects its key, before the call.
+- **Prepare on your Mac if you like.** The briefing can run on the local model instead; live context stays on OpenAI or your own server.
 - **Who said what.** Speaker names from Zoom, Teams and Meet.
 - **A summary when you hang up.** Discussion, decisions, next steps and open questions, from the transcript and your own notes.
 - **A library of every call.** Folders, search, copy and Markdown export.

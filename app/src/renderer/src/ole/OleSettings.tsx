@@ -1,6 +1,6 @@
 // Ole: the Settings section for providers, keys and MCP servers. Keys are write-only from here; only masked status comes back.
 import { MODEL_ADVICE, isRecommended, type ModelRole } from './modelAdvice'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { AssistantChoice, McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/types'
 
@@ -30,6 +30,7 @@ export type OleSettingsApi = {
 
 const CHOICES: Array<[ProviderChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI']]
 const ASSISTANT_CHOICES: Array<[AssistantChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI'], ['custom', 'Custom server']]
+const PREPARE_ON_CHOICES: Array<['assistant' | 'local', string]> = [['assistant', 'Assistant'], ['local', 'This Mac']]
 const MAX_SERVERS = 10
 
 /** a secret name made safe for an element id: `mcp:abc` becomes `mcp-abc` */
@@ -322,27 +323,21 @@ function WarmupInstructions({ value, disabled, onSave }: { value: string; disabl
   )
 }
 
-export function OleSettings({ api, initialProviders, initialStatus, initialServers }: { api: OleSettingsApi; initialProviders?: OleProviders; initialStatus?: SecretStatus; initialServers?: McpServerConfig[] }) {
-  const [providers, setProviders] = useState<OleProviders | undefined>(initialProviders)
-  const [status, setStatus] = useState<SecretStatus | undefined>(initialStatus)
+/**
+ * The MCP servers list with Add server, and per server its key, Test (badge and Show tools), switch and Remove. One
+ * component for Settings and first-run setup, so both offer exactly the same checks (#29).
+ */
+export function OleServers({ api, initialServers, initialStatus, note }: {
+  api: Pick<OleSettingsApi, 'getServers' | 'setServers' | 'testServer' | 'setSecret' | 'secretStatus'>
+  initialServers?: McpServerConfig[]; initialStatus?: SecretStatus; note?: ReactNode
+}) {
   const [servers, setServerList] = useState<McpServerConfig[] | undefined>(initialServers)
+  const [status, setStatus] = useState<SecretStatus | undefined>(initialStatus)
   const [error, setError] = useState('')
-  const [models, setModels] = useState<OpenAIModelList | undefined>()
-  const loadModels = () => void api.openaiModels?.().then(setModels, () => setModels({ ok: false, error: "Couldn't load the model list", chat: [], transcribe: [] }))
-  const modelsNote = models && !models.ok ? models.error : models ? undefined : 'Loading your models…'
-
   useEffect(() => {
-    if (!initialProviders) void api.getProviders().then(setProviders).catch(() => setError('Could not load Ole settings'))
-    if (!initialStatus) void api.secretStatus().then(setStatus).catch(() => setError('Could not load Ole settings'))
-    if (!initialServers) void api.getServers().then(setServerList).catch(() => setError('Could not load Ole settings'))
+    if (!initialServers) void api.getServers().then(setServerList).catch(() => setError('Could not load the servers'))
+    if (!initialStatus) void api.secretStatus().then(setStatus).catch(() => {})
   }, [api])
-  // the model list follows the OpenAI key: loaded on open, and again when the key changes
-  useEffect(() => { if (status?.openai?.set) loadModels(); else if (status) setModels({ ok: false, error: 'Save an OpenAI key to see your models', chat: [], transcribe: [] }) }, [status?.openai?.set, status?.openai?.masked])
-
-  const patch = (p: Partial<OleProviders>) => {
-    setError('')
-    void api.setProviders(p).then(setProviders).catch(() => setError('Could not save the setting'))
-  }
   const saveKey = async (name: SecretName, value: string) => {
     setError('')
     try { const next = await api.setSecret(name, value); setStatus((s) => ({ ...s, ...next })); return true } catch { setError('Could not save the key'); return false }
@@ -360,6 +355,43 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
   const addServer = (name: string, url: string) => saveServers([...(servers ?? []), { name, url, enabled: true }])
   const toggleServer = (id: string) => void saveServers((servers ?? []).map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)))
   const removeServer = (id: string) => void saveServers((servers ?? []).filter((s) => s.id !== id))
+  return (
+    <div data-testid="ole-servers" className="settings-group">
+      {note && <div className="settings-row">{note}</div>}
+      {servers?.length === 0 && <div className="settings-row"><p className="settings-description">No MCP servers yet. Add one below; the assistant finds its tools by itself.</p></div>}
+      {servers?.map((s) => (
+        <ServerRow key={s.id} server={s} status={status?.[`mcp:${s.id}`]} saveKey={saveKey} test={(id) => api.testServer(id)}
+          onToggle={() => toggleServer(s.id)} onRemove={() => removeServer(s.id)} />
+      ))}
+      {(servers?.length ?? 0) < MAX_SERVERS && <AddServer disabled={!servers} onAdd={addServer} />}
+      {error && <div className="settings-row"><p role="alert" className="settings-description">{error}</p></div>}
+    </div>
+  )
+}
+
+export function OleSettings({ api, initialProviders, initialStatus, initialServers }: { api: OleSettingsApi; initialProviders?: OleProviders; initialStatus?: SecretStatus; initialServers?: McpServerConfig[] }) {
+  const [providers, setProviders] = useState<OleProviders | undefined>(initialProviders)
+  const [status, setStatus] = useState<SecretStatus | undefined>(initialStatus)
+  const [error, setError] = useState('')
+  const [models, setModels] = useState<OpenAIModelList | undefined>()
+  const loadModels = () => void api.openaiModels?.().then(setModels, () => setModels({ ok: false, error: "Couldn't load the model list", chat: [], transcribe: [] }))
+  const modelsNote = models && !models.ok ? models.error : models ? undefined : 'Loading your models…'
+
+  useEffect(() => {
+    if (!initialProviders) void api.getProviders().then(setProviders).catch(() => setError('Could not load Ole settings'))
+    if (!initialStatus) void api.secretStatus().then(setStatus).catch(() => setError('Could not load Ole settings'))
+  }, [api])
+  // the model list follows the OpenAI key: loaded on open, and again when the key changes
+  useEffect(() => { if (status?.openai?.set) loadModels(); else if (status) setModels({ ok: false, error: 'Save an OpenAI key to see your models', chat: [], transcribe: [] }) }, [status?.openai?.set, status?.openai?.masked])
+
+  const patch = (p: Partial<OleProviders>) => {
+    setError('')
+    void api.setProviders(p).then(setProviders).catch(() => setError('Could not save the setting'))
+  }
+  const saveKey = async (name: SecretName, value: string) => {
+    setError('')
+    try { const next = await api.setSecret(name, value); setStatus((s) => ({ ...s, ...next })); return true } catch { setError('Could not save the key'); return false }
+  }
 
   const off = !providers
   return (
@@ -370,6 +402,8 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
           value={providers?.transcription ?? 'local'} disabled={off} onChange={(v) => patch({ transcription: v })} />
         <ChoiceRow id="ole-assistant" label="Assistant" description="Who writes notes and answers questions. Prepare and live context need OpenAI or your own server: with Local they are off and your MCP servers are not used. Anthropic and Vertex: coming later"
           choices={ASSISTANT_CHOICES} value={providers?.assistant ?? 'local'} disabled={off} onChange={(v) => patch({ assistant: v })} />
+        <ChoiceRow id="ole-prepare-on" label="Prepare runs on" description="Where the briefing before a call is written. This Mac uses the local notes model: private and free, slower, and best with a larger model (around 26B and up); it runs only before a call, never during one. Live context always uses the Assistant."
+          choices={PREPARE_ON_CHOICES} value={providers?.prepareOn ?? 'assistant'} disabled={off} onChange={(v) => patch({ prepareOn: v })} />
         {providers?.assistant === 'custom' && <CustomServerRows api={api} providers={providers} status={status?.custom} saveKey={saveKey} disabled={off} patch={patch} />}
         <OpenAIKeyRow status={status?.openai} save={saveKey} test={() => api.testOpenAI()}
           adopt={async () => { const r = await api.adoptOpenAI(); setProviders(r.providers); return r }}
@@ -382,15 +416,8 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
           value={providers?.openaiChatModel ?? ''} options={models?.chat} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiChatModel: v })} />
       </div>
       <h3 className="settings-section-heading">MCP servers</h3>
-      <div data-testid="ole-servers" className="settings-group">
-        {providers?.assistant === 'local' && <div className="settings-row"><p data-testid="ole-servers-local" role="status" className="settings-description">Used only when Assistant is OpenAI. With Local, Ole doesn't call these servers.</p></div>}
-        {servers?.length === 0 && <div className="settings-row"><p className="settings-description">No MCP servers yet. Add one below; the assistant finds its tools by itself.</p></div>}
-        {servers?.map((s) => (
-          <ServerRow key={s.id} server={s} status={status?.[`mcp:${s.id}`]} saveKey={saveKey} test={(id) => api.testServer(id)}
-            onToggle={() => toggleServer(s.id)} onRemove={() => removeServer(s.id)} />
-        ))}
-        {(servers?.length ?? 0) < MAX_SERVERS && <AddServer disabled={!servers} onAdd={addServer} />}
-      </div>
+      <OleServers api={api} initialServers={initialServers} initialStatus={initialStatus}
+        note={providers?.assistant === 'local' ? <p data-testid="ole-servers-local" role="status" className="settings-description">Used only when Assistant is OpenAI or a Custom server. With Local, Ole doesn't call these servers.</p> : undefined} />
       <h3 className="settings-section-heading">Warm-up instructions</h3>
       <WarmupInstructions value={providers?.warmupInstructions ?? ''} disabled={off} onSave={(v) => patch({ warmupInstructions: v })} />
       {error && <div className="settings-row"><p role="alert" className="settings-description">{error}</p></div>}
