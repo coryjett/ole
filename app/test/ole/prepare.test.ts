@@ -35,7 +35,7 @@ describe('prepareContext', () => {
     expect(PREPARE_SYSTEM).toMatch(/upcoming call/i)
     expect(PREPARE_SYSTEM).toMatch(/source/i)
     expect(PREPARE_SYSTEM).toMatch(/never invent/i)
-    expect(PREPARE_SYSTEM).toMatch(/labelled sections/i)
+    expect(PREPARE_SYSTEM).toMatch(/Before you join/)
   })
 
   it('runs parallel calls in a round and answers every call, refusing past the cap', async () => {

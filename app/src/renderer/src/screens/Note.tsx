@@ -424,7 +424,10 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             <span data-testid="note-tab-indicator" className="note-tab-indicator" aria-hidden="true" />
           </div>
         </header>
-        {recording ? <OlePanel compact /> : <OleSavedBullets key={id} meetingId={id} />}
+        {/* Ole takes at most a third of the window and scrolls inside, so the note and transcript stay usable (#47) */}
+        <div data-testid="ole-note-region" style={{ flex: 'none', maxHeight: '34vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+          {recording ? <OlePanel compact /> : <OleSavedBullets key={id} meetingId={id} />}
+        </div>
         <div ref={setChatAnchor} className="note-reading-area">
           <div ref={panels} className="note-panels">
           <NoteReadingPane active={primary === 'notes'} summary={shown === 'enhanced'} generating={shown === 'enhanced' && ['waiting', 'rewriting', 'handoff', 'reset', 'streaming'].includes(summaryState)} resetting={shown === 'enhanced' && summaryState === 'reset'} writing={shown === 'enhanced' && summaryState === 'streaming'} scroll={readingScroll}>

@@ -39,3 +39,28 @@ export function OleBriefing({ text, defaultOpen, maxHeight = 360 }: { text: stri
     {open && <div style={{ maxHeight, overflowY: 'auto', marginTop: 6 }}><BriefingText text={text} /></div>}
   </section>
 }
+
+/** the briefing's "Before you join" items (#46), for the strip pinned above the live bullets (#49) */
+export function beforeYouJoin(text: string, max = 3): string[] {
+  const lines = text.split('\n')
+  const start = lines.findIndex(l => /^#{1,6}\s*before you join\b/i.test(l.trim()))
+  if (start === -1) return []
+  const out: string[] = []
+  for (const raw of lines.slice(start + 1)) {
+    const line = raw.trim()
+    if (/^#{1,6}\s/.test(line)) break
+    const li = line.match(/^[-*•]\s+(.*)$/)
+    if (li) out.push(li[1])
+    if (out.length === max) break
+  }
+  return out
+}
+
+/** the pinned strip: the few things that matter most, always in view during the call */
+export function BeforeYouJoinStrip({ text }: { text: string }) {
+  const items = beforeYouJoin(text)
+  if (!items.length) return null
+  return <div data-testid="ole-before-strip" className="mb-2 rounded-lg px-3 py-2 text-[12px] leading-[17px]" style={{ background: 'rgba(108, 196, 99, 0.10)', boxShadow: 'inset 3px 0 0 #6cc463' }}>
+    {items.map((it, i) => <p key={i} dir="auto">• {inline(it)}</p>)}
+  </div>
+}
