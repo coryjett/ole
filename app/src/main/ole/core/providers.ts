@@ -76,7 +76,8 @@ export function providersOf(s: OleSettings): OleProviders {
 
   // a retiring model is read as its successor, and saved that way on the next write (#89)
   const { model: openaiTranscribeModel, switched } = transcribeModelOf(settings.oleTranscribeModel)
-  const transcribeModelSwitched = switched ?? switchOf(settings.oleTranscribeModelSwitched)
+  // the notice reaches the renderer over IPC: validated whether it was just made or read back from the file
+  const transcribeModelSwitched = switchOf(switched) ?? switchOf(settings.oleTranscribeModelSwitched)
 
   let openaiChatModel = (settings.oleChatModel ?? '').trim()
   if (!isValidModelName(openaiChatModel)) {
@@ -125,7 +126,7 @@ export function setProviders(store: SettingsStore, patch: unknown): OleProviders
   if ('transcription' in p || 'assistant' in p) settingsPatch.oleAutoSwitched = auto.size ? [...auto] : undefined
   // a saved retiring model is written back as its successor on any write, and the notice is kept until dismissed (#89)
   const saved = store.get().oleTranscribeModel
-  const moved = typeof saved === 'string' && isValidModelName(saved.trim()) ? migrateTranscribeModel(saved.trim()).switched : null
+  const moved = typeof saved === 'string' && isValidModelName(saved.trim()) ? switchOf(migrateTranscribeModel(saved.trim()).switched) : null
   if (moved) {
     settingsPatch.oleTranscribeModel = moved.to
     settingsPatch.oleTranscribeModelSwitched = moved
@@ -135,8 +136,9 @@ export function setProviders(store: SettingsStore, patch: unknown): OleProviders
     if (isValidModelName(model)) {
       const chosen = migrateTranscribeModel(model)
       settingsPatch.oleTranscribeModel = chosen.model
-      // a model the person picks replaces any earlier notice; picking a retiring one still lands on the successor
-      settingsPatch.oleTranscribeModelSwitched = chosen.switched ?? undefined
+      // a model the person picks replaces any earlier notice; picking a retiring one still lands on the successor.
+      // Only a well-formed notice is saved
+      settingsPatch.oleTranscribeModelSwitched = switchOf(chosen.switched) ?? undefined
     }
   }
   if ('transcribeModelSwitched' in p && p.transcribeModelSwitched === null) settingsPatch.oleTranscribeModelSwitched = undefined

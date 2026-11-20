@@ -103,3 +103,14 @@ it('a malformed stored notice is ignored (#89)', () => {
   for (const bad of [{ from: 'x' }, 'notice', { from: 'whisper-1', to: 'gpt-transcribe', retires: 'soon' }, { from: 'a b', to: 'gpt-transcribe', retires: '2027-02-26' }])
     expect(providersOf({ oleTranscribeModel: 'gpt-transcribe', oleTranscribeModelSwitched: bad as never }).transcribeModelSwitched).toBeNull()
 })
+
+it('a saved or chosen model named like an object property never makes a notice (#89)', () => {
+  for (const name of ['constructor', '__proto__', 'toString']) {
+    expect(providersOf({ oleTranscribeModel: name }).transcribeModelSwitched).toBeNull()
+    updateSettings(file, { oleTranscribeModel: name, oleTranscribeModelSwitched: undefined })
+    expect(setProviders(file, { openaiStreaming: true }).transcribeModelSwitched).toBeNull()
+    expect(loadSettings(file).oleTranscribeModelSwitched).toBeUndefined()
+    expect(setProviders(file, { openaiTranscribeModel: name }).transcribeModelSwitched).toBeNull()
+    expect(loadSettings(file).oleTranscribeModelSwitched).toBeUndefined()
+  }
+})

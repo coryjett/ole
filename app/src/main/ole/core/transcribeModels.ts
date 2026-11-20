@@ -9,27 +9,37 @@
 /** the supported model for file and chunk transcription on /audio/transcriptions */
 export const TRANSCRIBE_SUCCESSOR = 'gpt-transcribe'
 
+/**
+ * The chunked transcriber's safety net: OpenAI's docs don't say outright that gpt-transcribe takes response_format=json
+ * on /audio/transcriptions. If a gpt-transcribe request is refused as a bad request (400) or unknown (404), the chunk is
+ * sent again with this model, which is served until 2027-02-26, and the rest of that recording uses it.
+ */
+export const TRANSCRIBE_FALLBACK = 'gpt-4o-mini-transcribe'
+
 const SHUTDOWN = '2027-02-26'
 
-/** retiring model name: its shutdown date (YYYY-MM-DD) */
-const RETIRING: Record<string, string> = {
-  'whisper-1': SHUTDOWN,
-  'gpt-4o-transcribe': SHUTDOWN,
-  'gpt-4o-mini-transcribe': SHUTDOWN,
-  'gpt-4o-mini-transcribe-2025-12-15': SHUTDOWN,
-  'gpt-4o-mini-transcribe-2025-03-20': '2026-12-01',
-  'gpt-4o-transcribe-diarize': SHUTDOWN,
-}
+/** retiring model name: its shutdown date (YYYY-MM-DD). A Map, so a name like "constructor" or "__proto__" finds nothing */
+const RETIRING: ReadonlyMap<string, string> = new Map([
+  ['whisper-1', SHUTDOWN],
+  ['gpt-4o-transcribe', SHUTDOWN],
+  ['gpt-4o-mini-transcribe', SHUTDOWN],
+  ['gpt-4o-mini-transcribe-2025-12-15', SHUTDOWN],
+  ['gpt-4o-mini-transcribe-2025-03-20', '2026-12-01'],
+  ['gpt-4o-transcribe-diarize', SHUTDOWN],
+])
 
 /** the same families with a dated snapshot the table doesn't name: they go with their family */
 const FAMILY = /^(whisper-1|gpt-4o-transcribe|gpt-4o-mini-transcribe|gpt-4o-transcribe-diarize)-\d{4}-\d{2}-\d{2}$/
 
+const YMD = /^\d{4}-\d{2}-\d{2}$/
+
 /** when OpenAI shuts this transcription model down (YYYY-MM-DD), or null when it isn't retiring */
 export function transcribeModelRetires(model: string): string | null {
+  if (typeof model !== 'string') return null
   const m = model.trim().toLowerCase()
-  if (RETIRING[m]) return RETIRING[m]
   const f = FAMILY.exec(m)
-  return f ? RETIRING[f[1]] : null
+  const date = RETIRING.get(m) ?? (f ? RETIRING.get(f[1]) : undefined)
+  return typeof date === 'string' && YMD.test(date) ? date : null
 }
 
 /** a retiring model mapped to the successor, with what it was; anything else unchanged */

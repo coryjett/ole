@@ -19,6 +19,11 @@ describe('retiring transcription models (#89)', () => {
     expect(transcribeModelRetires(' GPT-4o-Mini-Transcribe ')).toBe('2027-02-26')
     expect(transcribeModelRetires('my-whisper-1-finetune')).toBeNull()
   })
+  it('a name that is a property of every object is not a retiring model', () => {
+    for (const m of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', 'CONSTRUCTOR'])
+      expect(transcribeModelRetires(m)).toBeNull()
+    expect(migrateTranscribeModel('constructor')).toEqual({ model: 'constructor', switched: null })
+  })
   it('maps a retiring model to the successor and says what it was', () => {
     expect(migrateTranscribeModel('gpt-4o-mini-transcribe')).toEqual({ model: 'gpt-transcribe', switched: { from: 'gpt-4o-mini-transcribe', to: 'gpt-transcribe', retires: '2027-02-26' } })
     expect(migrateTranscribeModel('whisper-1').model).toBe('gpt-transcribe')

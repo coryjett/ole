@@ -128,4 +128,57 @@ describe('openaiTranscribe', () => {
     await expect(t(chunk(8000))).rejects.toThrow('Add an OpenAI key to transcribe with OpenAI')
     expect(f).not.toHaveBeenCalled()
   })
+
+  describe('gpt-transcribe safety net (#89)', () => {
+    const modelOf = (init: unknown) => ((init as RequestInit).body as FormData).get('model')
+    /** answers status for gpt-transcribe, a transcript for anything else */
+    const refusing = (status: number) => vi.fn<typeof fetch>(async (_u, init) => modelOf(init) === 'gpt-transcribe'
+      ? new Response('{"error":{"message":"secret detail"}}', { status })
+      : new Response(JSON.stringify({ text: 'hallo zusammen' }), { status: 200 }))
+
+    for (const status of [400, 404]) {
+      it(`a ${status} retries the chunk once with gpt-4o-mini-transcribe, and the rest of the recording uses it`, async () => {
+        const f = refusing(status)
+        const log = vi.fn()
+        const t = createOpenAITranscriber({ key: () => 'sk-test', model: () => 'gpt-transcribe', fetch: f, log })
+        expect(await t(chunk(8000))).toEqual([{ track: 'me', startMs: 0, endMs: 500, text: 'hallo zusammen' }])
+        expect(f.mock.calls.map(c => modelOf(c[1]))).toEqual(['gpt-transcribe', 'gpt-4o-mini-transcribe'])
+        expect(((f.mock.calls[1][1] as RequestInit).body as FormData).get('file')).toBeInstanceOf(Blob)
+        await t(chunk(8000, 1000))
+        expect(f.mock.calls.map(c => modelOf(c[1]))).toEqual(['gpt-transcribe', 'gpt-4o-mini-transcribe', 'gpt-4o-mini-transcribe'])
+        expect(log).toHaveBeenCalledTimes(1)
+        expect(log.mock.calls[0][0]).toBe(`ole: gpt-transcribe transcription answered ${status}; gpt-4o-mini-transcribe for the rest of this recording`)
+        expect(log.mock.calls[0][0]).not.toContain('secret')
+      })
+    }
+
+    for (const status of [401, 403, 429, 500, 503]) {
+      it(`a ${status} is not a model problem: no retry, no fallback`, async () => {
+        const f = refusing(status)
+        const log = vi.fn()
+        const t = createOpenAITranscriber({ key: () => 'sk-test', model: () => 'gpt-transcribe', fetch: f, log })
+        await expect(t(chunk(8000))).rejects.toThrow()
+        expect(f).toHaveBeenCalledTimes(1)
+        expect(log).not.toHaveBeenCalled()
+        await expect(t(chunk(8000))).rejects.toThrow()
+        expect(f.mock.calls.map(c => modelOf(c[1]))).toEqual(['gpt-transcribe', 'gpt-transcribe'])
+      })
+    }
+
+    it('another chosen model is never swapped', async () => {
+      const f = vi.fn<typeof fetch>(async () => new Response('{}', { status: 400 }))
+      const log = vi.fn()
+      const t = createOpenAITranscriber({ key: () => 'sk-test', model: () => 'gpt-transcribe-2027-01-01', fetch: f, log })
+      await expect(t(chunk(8000))).rejects.toThrow('OpenAI transcription answered 400')
+      expect(f).toHaveBeenCalledTimes(1)
+      expect(log).not.toHaveBeenCalled()
+    })
+
+    it('a failing retry reports its own status', async () => {
+      const f = vi.fn<typeof fetch>(async () => new Response('{}', { status: 404 }))
+      const t = createOpenAITranscriber({ key: () => 'sk-test', model: () => 'gpt-transcribe', fetch: f, log: vi.fn() })
+      await expect(t(chunk(8000))).rejects.toThrow('OpenAI transcription answered 404')
+      expect(f).toHaveBeenCalledTimes(2)
+    })
+  })
 })
