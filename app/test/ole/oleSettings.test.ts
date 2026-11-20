@@ -4,7 +4,7 @@ import { expect, it, vi } from 'vitest'
 import { OleSettings, type OleSettingsApi, type SecretStatus } from '../../src/renderer/src/ole/OleSettings'
 import type { McpServerConfig } from '../../src/main/ole/types'
 
-const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', warmupInstructions: '' } as const
+const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', warmupInstructions: '' } as const
 const servers: McpServerConfig[] = [
   { id: 'crm', name: 'CRM', url: 'https://crm.example/mcp', enabled: true },
   { id: 'docs', name: 'Docs', url: 'https://docs.example/mcp', enabled: false },
@@ -13,7 +13,7 @@ const status: SecretStatus = { openai: { set: true, masked: 'sk-…3456' }, 'mcp
 const api = (): OleSettingsApi => ({
   getProviders: vi.fn(async () => providers), setProviders: vi.fn(async () => providers),
   setSecret: vi.fn(async () => status), secretStatus: vi.fn(async () => status),
-  getServers: vi.fn(async () => servers), setServers: vi.fn(async () => servers), testServer: vi.fn(async () => ({ ok: true, tools: 4 })), testOpenAI: vi.fn(async () => ({ ok: true })),
+  getServers: vi.fn(async () => servers), setServers: vi.fn(async () => servers), testServer: vi.fn(async () => ({ ok: true, tools: 4 })), testOpenAI: vi.fn(async () => ({ ok: true })), openaiModels: vi.fn(async () => ({ ok: true, chat: ['gpt-5.6-luna', 'gpt-5.6-terra'], transcribe: ['gpt-4o-mini-transcribe'] })),
 })
 const render = (p: Partial<{ initialServers: McpServerConfig[]; initialProviders: typeof providers }> = {}) =>
   renderToStaticMarkup(createElement(OleSettings, { api: api(), initialProviders: providers, initialStatus: status, initialServers: servers, ...p }))
@@ -21,8 +21,13 @@ const render = (p: Partial<{ initialServers: McpServerConfig[]; initialProviders
 it('the settings section lists Anthropic and Vertex as coming later and offers only Local and OpenAI', () => {
   const html = render()
   expect(html).toContain('Anthropic and Vertex: coming later')
-  const options = [...html.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map((m) => m[1])
-  expect(options).toEqual(['Local', 'OpenAI', 'Local', 'OpenAI'])
+  // the provider selects only; the model dropdowns (#8) have their own options
+  const optionsOf = (id: string) => {
+    const select = html.match(new RegExp(`id="${id}"[^>]*>(.*?)</select>`))?.[1] ?? ''
+    return [...select.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map((m) => m[1])
+  }
+  expect(optionsOf('ole-transcription')).toEqual(['Local', 'OpenAI'])
+  expect(optionsOf('ole-assistant')).toEqual(['Local', 'OpenAI'])
   expect(html).toMatch(/id="ole-assistant"[^>]*>.*<option value="openai" selected="">OpenAI/)
   expect(html).toContain('value="gpt-5.6-luna"')
   expect(html).toContain('settings-section-heading')

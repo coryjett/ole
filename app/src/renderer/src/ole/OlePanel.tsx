@@ -33,8 +33,8 @@ export function OlePanel({ compact = false }: { compact?: boolean }) {
         {state.preparing ? 'Preparing…' : state.prepared ? 'Prepare again' : 'Prepare for next call'}</button>
     </div>
     {state.error && <p data-testid="ole-error" role="status" className="settings-description" style={{ color: 'var(--color-danger, #d33)' }}>{state.error}</p>}
-    <div className="mt-2">
-      <OleBullets bullets={state.bullets} prepared={state.prepared} />
-    </div>
+    {/* bullets belong to a call: shown while one records; a finished call keeps them on its note page */}
+    {state.meetingId ? <div className="mt-2"><OleBullets bullets={state.bullets} prepared={state.prepared} /></div>
+      : state.prepared && <p data-testid="ole-prepared" className="settings-description mt-2">Prepared for: {[state.prepared.meetingTitle, state.prepared.focus].filter(Boolean).join(' · ') || 'the next call'}</p>}
   </section>
 }

@@ -8,7 +8,10 @@ export type OleProviders = {
   transcription: ProviderChoice;
   assistant: ProviderChoice;
   openaiTranscribeModel: string;
+  /** live bullets and summaries: fast */
   openaiChatModel: string;
+  /** the pre-call briefing: picks tools and writes, so a larger model */
+  openaiPrepareModel: string;
   /** the person's own instructions for the pre-call warm-up (which tools, what matters, the format); '' for none */
   warmupInstructions: string;
 };

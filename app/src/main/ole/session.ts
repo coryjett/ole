@@ -47,6 +47,8 @@ export function hookOle(d: Deps): {
 
   const openaiKey = () => readSecret(d.file, 'openai')
   const chat: ChatFn = (req) => openaiChat({ key: openaiKey(), model: providersOf(loadSettings(d.file)).openaiChatModel, ...req })
+  // the briefing picks tools and writes, so it gets its own (larger) model
+  const prepareChat: ChatFn = (req) => openaiChat({ key: openaiKey(), model: providersOf(loadSettings(d.file)).openaiPrepareModel, ...req })
   const clientOf = (s: McpServerConfig) => createMcpClient({ key: readSecret(d.file, `mcp:${s.id}`) ?? undefined, url: s.url })
 
   /** the enabled servers' read-only tools, gathered again on each prepare and meeting start */
@@ -69,7 +71,7 @@ export function hookOle(d: Deps): {
       const meetingTitle = o.meetingTitle ?? null, focus = o.focus ?? null
       // each server's own warm-up prompt (MCP prompts, prepare_for_meeting) comes first; the person's instructions refine it
       const serverPrompts = await collectWarmupPrompts(enabledServers(), { meetingTitle, focus })
-      const result = await prepareContext({ chat, tools, call, meetingTitle, focus, instructions, serverPrompts })
+      const result = await prepareContext({ chat: prepareChat, tools, call, meetingTitle, focus, instructions, serverPrompts })
       if (seq !== prepareSeq) return state()
       // the meeting ended while this was loading: the next call prepares fresh
       if (o.forMeeting !== undefined && o.forMeeting !== meetingId) { preparing = false; send(); return state() }
@@ -125,6 +127,8 @@ export function hookOle(d: Deps): {
       engine = null
       meetingId = null
       prepared = null
+      // the call's bullets now live with the meeting (its note page); Home starts clean for the next call
+      bullets = []
       send()
     },
     bulletsOf: (id) => finished.get(id) ?? (id === meetingId ? bullets : []),

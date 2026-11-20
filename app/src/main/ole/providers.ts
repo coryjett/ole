@@ -3,13 +3,14 @@ import { ipcMain } from 'electron'
 import { loadSettings, updateSettings, type Settings } from '../settings'
 import type { OleProviders, ProviderChoice } from './types'
 import { readSecret } from './secrets'
-import { testOpenAI } from './openaiTest'
+import { listOpenAIModels, testOpenAI } from './openaiTest'
 
 type OleProviderSettings = Settings & {
   oleTranscription?: string
   oleAssistant?: string
   oleTranscribeModel?: string
   oleChatModel?: string
+  olePrepareModel?: string
   oleWarmupInstructions?: string
 }
 
@@ -18,6 +19,7 @@ export const PROVIDER_DEFAULTS: OleProviders = {
   assistant: 'local',
   openaiTranscribeModel: 'gpt-4o-mini-transcribe',
   openaiChatModel: 'gpt-5.6-luna',
+  openaiPrepareModel: 'gpt-5.6-terra',
   warmupInstructions: ''
 }
 
@@ -50,7 +52,10 @@ export function providersOf(s: Settings): OleProviders {
 
   const warmupInstructions = warmupOf(settings.oleWarmupInstructions)
 
-  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, warmupInstructions }
+  let openaiPrepareModel = (settings.olePrepareModel ?? '').trim()
+  if (!isValidModelName(openaiPrepareModel)) openaiPrepareModel = PROVIDER_DEFAULTS.openaiPrepareModel
+
+  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, openaiPrepareModel, warmupInstructions }
 }
 
 export function setProviders(file: string, patch: unknown): OleProviders {
@@ -70,6 +75,10 @@ export function setProviders(file: string, patch: unknown): OleProviders {
     if (isValidModelName(model)) {
       settingsPatch.oleTranscribeModel = model
     }
+  }
+  if ('openaiPrepareModel' in p) {
+    const model = typeof p.openaiPrepareModel === 'string' ? p.openaiPrepareModel.trim() : ''
+    if (isValidModelName(model)) settingsPatch.olePrepareModel = model
   }
   if ('openaiChatModel' in p) {
     const model = typeof p.openaiChatModel === 'string' ? p.openaiChatModel.trim() : ''
@@ -95,4 +104,5 @@ export function hookOleProviders(d: { file: string }): void {
     const p = providersOf(loadSettings(d.file))
     return testOpenAI({ key: readSecret(d.file, 'openai'), chatModel: p.openaiChatModel, transcribeModel: p.openaiTranscribeModel })
   })
+  ipcMain.handle('ole:openai:models', () => listOpenAIModels({ key: readSecret(d.file, 'openai') }))
 }
