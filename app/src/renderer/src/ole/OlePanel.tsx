@@ -32,6 +32,10 @@ export function OlePanel({ compact = false }: { compact?: boolean }) {
       <button data-testid="ole-prepare" className="workspace-button settings-action" disabled={state.preparing || !!state.blocked} onClick={prepare}>
         {state.preparing ? 'Preparing…' : state.prepared ? 'Prepare again' : 'Prepare for next call'}</button>
     </div>
+    {/* a server Ole couldn't use is never skipped silently (#33) */}
+    {state.unavailable?.length > 0 && <p data-testid="ole-unavailable" role="alert" className="settings-description" style={{ color: '#e5a50a' }}>
+      ⚠ Couldn't use {state.unavailable.map(u => `${u.name} (${u.reason})`).join(', ')}. {state.prepared || state.meetingId ? 'Context from it is missing.' : ''}{' '}
+      <button data-testid="ole-retry-servers" className="text-action" onClick={() => void window.yogurt.ole.retryServers()}>Retry</button></p>}
     {state.blocked && <p data-testid="ole-blocked" role="status" className="settings-description">{state.blocked}</p>}
     {state.error && <p data-testid="ole-error" role="status" className="settings-description" style={{ color: 'var(--color-danger, #d33)' }}>{state.error}</p>}
     {/* bullets belong to a call: shown while one records; a finished call keeps them on its note page */}

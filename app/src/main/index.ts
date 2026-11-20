@@ -18,7 +18,7 @@ import { isAppRoute } from '../shared/routes'
 import { resumesNote } from '../shared/agendaNote'
 import { relaunchOptions, stripAppImageEnv } from './relaunch'
 import { capabilities, micListHelper, platformOf, supportedKinds } from '../shared/platform'
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, protocol, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, powerMonitor, protocol, safeStorage, shell } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { basename, join } from 'node:path'
@@ -557,6 +557,7 @@ app.whenReady().then(() => {
     file: settingsFile,
     send: (s) => { win?.webContents.send('ole:state', s); sendWidgetTranscript('ole:state', s) },
     save: (id, bullets) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-bullets.json'), JSON.stringify(bullets, null, 2)),
+    notify: (title, body) => { if (Notification.isSupported()) new Notification({ title, body }).show() },
     load: (id) => {
       const path = join(userDataDir(), 'meetings', id, 'ole-bullets.json')
       if (!existsSync(path)) return []
@@ -566,6 +567,8 @@ app.whenReady().then(() => {
     },
   })
   onMeetingStart((m) => ole.meetingStarted({ id: m.id, title: m.title }))
+  // a Mac that slept may have missed a server going down (#33)
+  powerMonitor.on('resume', () => void ole.checkServers())
   onMeetingStop((m) => ole.meetingStopped(m.id))
   setCalendarSelection(() => loadSettings(settingsFile))
   setCalendarOwnEmail(email => {

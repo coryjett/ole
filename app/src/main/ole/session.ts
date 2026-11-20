@@ -9,7 +9,7 @@ import { providersOf } from './providers'
 import { serversOf } from './servers'
 import { openaiChat } from './openaiModel'
 import { createMcpClient, McpError } from './mcp'
-import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, isReadOnly } from './tools'
+import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, isReadOnly, type Unavailable } from './tools'
 import { prepareContext } from './prepare'
 import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
@@ -21,6 +21,10 @@ type Deps = {
   file: string; send: (s: OleLiveState) => void; save?: (meetingId: string, bullets: OleBullet[]) => void
   /** a finished meeting's bullets from disk (Ole was restarted since) */
   load?: (meetingId: string) => OleBullet[]
+  /** a macOS notification, for a server that just stopped working (#33) */
+  notify?: (title: string, body: string) => void
+  /** how often the servers are checked in the background; 0 turns the background check off (tests) */
+  checkEveryMs?: number
 }
 
 export function hookOle(d: Deps): {
@@ -30,6 +34,8 @@ export function hookOle(d: Deps): {
   bulletsOf(id: string): OleBullet[]
   /** hands over the Mac's own model for Prepare once Yogurt's notes queue exists (#5) */
   setLocal(run: LocalRun): void
+  /** check the MCP servers now (at startup, on a timer, on wake), so a broken one is found before the call (#33) */
+  checkServers(): Promise<void>
 } {
   let prepared: PreparedContext | null = null
   let preparing = false
@@ -38,6 +44,8 @@ export function hookOle(d: Deps): {
   let engine: BulletsEngine | null = null
   let bullets: OleBullet[] = []
   let tools: OleTool[] = []
+  /** enabled servers that failed the last time tools were loaded (#33) */
+  let unavailable: Unavailable[] = []
   let call: (name: string, argsJson: string) => Promise<string> = async () => 'No MCP tools are available'
   let prepareSeq = 0
   const finished = new Map<string, OleBullet[]>()
@@ -60,7 +68,7 @@ export function hookOle(d: Deps): {
     return null
   }
   const state = (): OleLiveState => ({
-    meetingId, preparing, error, bullets, blocked: blocked(),
+    meetingId, preparing, error, bullets, blocked: blocked(), unavailable,
     prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt } : null,
   })
   const send = () => d.send(state())
@@ -81,7 +89,9 @@ export function hookOle(d: Deps): {
   const enabledServers = () => serversOf(loadSettings(d.file)).filter(s => s.enabled).map(config => ({ config, client: clientOf(config) }))
   async function loadTools(): Promise<void> {
     const servers = enabledServers()
-    tools = servers.length ? await collectTools(servers) : []
+    const failed: Unavailable[] = []
+    tools = servers.length ? await collectTools(servers, u => failed.push(u)) : []
+    unavailable = failed
     const runner = createToolRunner(servers, tools)
     call = (name, argsJson) => runner.call(name, argsJson)
   }
@@ -95,6 +105,8 @@ export function hookOle(d: Deps): {
     try {
       await loadTools()
       const instructions = providersOf(loadSettings(d.file)).warmupInstructions
+      // every enabled server failed: say so rather than write a briefing from nothing (#33)
+      if (!tools.length && unavailable.length) throw new Error(`Couldn't use any MCP server: ${unavailable.map(u => `${u.name} (${u.reason})`).join(', ')}.`)
       const meetingTitle = o.meetingTitle ?? null, focus = o.focus ?? null
       // each server's own warm-up prompt (MCP prompts, prepare_for_meeting) comes first; the person's instructions refine it
       const serverPrompts = await collectWarmupPrompts(enabledServers(), { meetingTitle, focus })
@@ -104,7 +116,8 @@ export function hookOle(d: Deps): {
       if (seq !== prepareSeq) return state()
       // the meeting ended while this was loading: the next call prepares fresh
       if (o.forMeeting !== undefined && o.forMeeting !== meetingId) { preparing = false; send(); return state() }
-      prepared = result
+      // the saved briefing records which servers it lacks
+      prepared = unavailable.length ? { ...result, text: `${result.text}\n\n_Not included: ${unavailable.map(u => `${u.name} (${u.reason})`).join(', ')}._` } : result
     } catch (e) {
       if (seq !== prepareSeq) return state()
       error = e instanceof Error ? e.message : String(e)
@@ -115,7 +128,23 @@ export function hookOle(d: Deps): {
   }
 
   const text = (v: unknown, max: number) => typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null
+  /** servers already reported as failing: one notification when one stops working, none again until it recovers (#33) */
+  const reported = new Set<string>()
+  async function checkServers(): Promise<void> {
+    // with Assistant on Local and Prepare not on this Mac, Ole never contacts the servers (#11)
+    if (liveBlocked() && providersOf(loadSettings(d.file)).prepareOn !== 'local') return
+    if (!serversOf(loadSettings(d.file)).some(s => s.enabled) || preparing) return
+    try { await loadTools() } catch (e) { console.warn('checking the MCP servers failed', e); return }
+    const failing = new Set(unavailable.map(u => u.name))
+    for (const u of unavailable) if (!reported.has(u.name)) d.notify?.(`Ole can't use ${u.name}`, `The MCP server ${u.reason === "couldn't be reached" ? "couldn't be reached" : `failed: ${u.reason}`}. Fix it in Settings › Ole before your next call.`)
+    reported.clear(); for (const n of failing) reported.add(n)
+    send()
+  }
+  const every = d.checkEveryMs ?? 10 * 60_000
+  if (every > 0) { setTimeout(() => void checkServers(), 5_000).unref?.(); setInterval(() => void checkServers(), every).unref?.() }
+
   ipcMain.handle('ole:state', () => state())
+  ipcMain.handle('ole:retry-servers', async () => { try { await loadTools() } catch (e) { console.warn('loading the MCP tools failed', e) } send(); return state() })
   // a saved meeting's context bullets, newest first; ids are Yogurt's meeting UUIDs
   ipcMain.handle('ole:bullets', (_e, id: unknown) => {
     if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) return []
@@ -135,7 +164,7 @@ export function hookOle(d: Deps): {
       // a local Prepare never runs during a call (#5): the bullets just get the tools
       const prepareNow = (!prepared || Date.now() - prepared.preparedAt > STALE_MS) && providersOf(loadSettings(d.file)).prepareOn !== 'local'
       if (prepareNow) void prepare({ meetingTitle: m.title, forMeeting: m.id })
-      else void loadTools().catch(e => console.warn('loading the MCP tools failed', e))
+      else void loadTools().then(send, e => console.warn('loading the MCP tools failed', e))
       // bullets need the OpenAI key; without it the meeting records as Yogurt does
       engine = !liveBlocked() ? createBulletsEngine({
         chat,
@@ -164,6 +193,7 @@ export function hookOle(d: Deps): {
       send()
     },
     setLocal(run) { local = run; send() },
+    checkServers,
     bulletsOf: (id) => finished.get(id) ?? (id === meetingId ? bullets : []),
   }
 }
