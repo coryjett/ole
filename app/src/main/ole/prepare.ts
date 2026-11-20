@@ -2,7 +2,7 @@
 // meeting, then writes a compact briefing with sources that the live bullets work from.
 import type { OleTool, PreparedContext } from './types'
 import type { ChatMessage, ToolCall } from './bullets'
-import { MORE_TOOLS, MORE_TOOLS_DEF, narrowForPrepare, toOpenAiTools, type WarmupPrompt } from './tools'
+import { MEETING_CONTEXT_TOOL, MORE_TOOLS, MORE_TOOLS_DEF, narrowForPrepare, toOpenAiTools, type WarmupPrompt } from './tools'
 
 export const TOTAL_CAP = 24_000
 export const INSTRUCTIONS_CAP = 8000
@@ -50,6 +50,34 @@ export function serverGuidance(serverPrompts: WarmupPrompt[] = []): string | nul
   return parts.length ? parts.join('\n\n') : null
 }
 
+/** the fast path's own guard; the tool runner's call timeout normally ends it first (#93) */
+export const FAST_PATH_TIMEOUT_MS = 25_000
+/** added to the request when a server already matched the meeting to a record (#93) */
+export const SERVER_MATCHED_LINE = "The server already matched this meeting (see the first tool result); do not reply that you couldn't match it."
+
+/** the arguments a meeting-context tool gets: only known values, and only those its schema declares when it declares any */
+export function meetingContextArgs(tool: OleTool, o: { meetingTitle: string | null; focus: string | null; startsAt: number | null }): Record<string, string> {
+  const known: Record<string, string | null> = {
+    meeting_title: o.meetingTitle,
+    focus: o.focus,
+    starts_at: o.startsAt !== null && Number.isFinite(o.startsAt) ? new Date(o.startsAt).toISOString() : null,
+  }
+  const props = tool.parameters?.properties
+  const declared = props && typeof props === 'object' && Object.keys(props).length ? new Set(Object.keys(props)) : null
+  const args: Record<string, string> = {}
+  for (const [k, v] of Object.entries(known)) if (v && (!declared || declared.has(k))) args[k] = v
+  return args
+}
+
+/** a result that is a non-empty JSON object whose `matchedBy` is set: the server found the meeting's record (#93) */
+export function serverMatched(result: string): boolean {
+  let v: unknown
+  try { v = JSON.parse(result) } catch { return false }
+  if (!v || typeof v !== 'object' || Array.isArray(v) || !Object.keys(v).length) return false
+  const by = (v as Record<string, unknown>).matchedBy
+  return by !== null && by !== undefined && by !== false && by !== ''
+}
+
 const cap = (s: string) => s.length > TOTAL_CAP ? `${s.slice(0, TOTAL_CAP)}\n[truncated]` : s
 
 export async function prepareContext(opts: {
@@ -58,6 +86,8 @@ export async function prepareContext(opts: {
   call: PrepareCallFn
   meetingTitle?: string | null
   focus?: string | null
+  /** the meeting's start (ms) when a calendar event gave it; passed to a meeting-context tool (#93) */
+  startsAt?: number | null
   instructions?: string | null
   serverPrompts?: WarmupPrompt[]
   now?: number
@@ -74,20 +104,45 @@ export async function prepareContext(opts: {
   const log = opts.log ?? ((line: string) => console.info(line))
   const counts = new Map<string, number>()
   let nudged = false
+  let fastPath = false
   const toolOf = (name: string) => opts.tools.find(t => t.name === name)?.tool ?? name
   const done = (text: string): PreparedContext => {
     const total = [...counts.values()].reduce((a, b) => a + b, 0)
     const list = [...counts].map(([n, c]) => `${n} ${c}`).join(', ')
-    log(`ole prepare: ${total} tool calls${list ? ` (${list})` : ''}${nudged ? ', searched again once' : ''}`)
+    log(`ole prepare: ${total} tool calls${list ? ` (${list})` : ''}${nudged ? ', searched again once' : ''}${fastPath ? ', fast path' : ''}`)
     return { meetingTitle, focus, text: cap(text.trim()), preparedAt: now }
   }
 
   if (!opts.tools.length) return done(NO_TOOLS_TEXT)
 
+  // a server's meeting-context tool runs first, with no model involved (#93): one call per server, in parallel
+  const startsAt = typeof opts.startsAt === 'number' && Number.isFinite(opts.startsAt) ? opts.startsAt : null
+  const ctxTools = opts.tools.filter(t => t.tool === MEETING_CONTEXT_TOOL).slice(0, maxToolCalls)
+  const fast = (await Promise.all(ctxTools.map(async (t, i) => {
+    const argsJson = JSON.stringify(meetingContextArgs(t, { meetingTitle, focus, startsAt }))
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const result = await Promise.race([
+        opts.call(t.name, argsJson),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('timed out')), FAST_PATH_TIMEOUT_MS) }),
+      ])
+      if (/^error:/.test(result)) throw new Error(result.slice(6).trim().slice(0, 120))
+      return { tool: t, argsJson, result, id: `fast_path_${i}` }
+    } catch (e) {
+      // a failure costs nothing: the model's loop runs as it would without the tool
+      log(`ole prepare: ${MEETING_CONTEXT_TOOL} on ${t.serverName} failed (${e instanceof Error ? e.message : String(e)}), using the tool loop`)
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+  }))).filter((f): f is NonNullable<typeof f> => !!f)
+  const matched = fast.some(f => serverMatched(f.result))
+
   const ask = [
     `Now: ${new Date(now).toISOString()}.`,
     meetingTitle ? `Meeting: ${meetingTitle}` : 'Meeting: not given; look only for a meeting happening now (started in the last 15 minutes or starting in the next 15) if a tool can find it. Never brief a later meeting.',
     focus ? `Focus: ${focus}` : null,
+    matched ? SERVER_MATCHED_LINE : null,
     'Gather the facts, then write the briefing.',
   ].filter(Boolean).join('\n')
   const guidance = serverGuidance(opts.serverPrompts)
@@ -104,13 +159,31 @@ export async function prepareContext(opts: {
   const seen = new Map<string, Promise<string>>()
   let used = 0
 
+  // the fast path's results read as if the model had called the tools itself, before its first turn (#93)
+  if (fast.length) {
+    fastPath = true
+    messages.push({ role: 'assistant', content: null, tool_calls: fast.map(f => ({ id: f.id, type: 'function' as const, function: { name: f.tool.name, arguments: f.argsJson } })) })
+    for (const f of fast) {
+      messages.push({ role: 'tool', tool_call_id: f.id, content: f.result })
+      seen.set(`${f.tool.name}\0${f.argsJson}`, Promise.resolve(f.result))
+      counts.set(f.tool.tool, (counts.get(f.tool.tool) ?? 0) + 1)
+      used++
+      // a tool the model's history names is one it is offered
+      if (!offered.includes(f.tool)) {
+        offered = [...offered, f.tool]
+        narrowed.rest = narrowed.rest.filter(t => t !== f.tool)
+        widened = !narrowed.rest.length
+      }
+    }
+  }
+
   for (let round = 0; round < maxRounds && used < maxToolCalls; round++) {
     const reply = await opts.chat({ messages, tools: toolsNow() })
     if (!reply.tool_calls?.length) {
       // "no match" before any search for the focus or title: sent back once to search (#62)
       const searched = [...counts.keys()].some(n => SEARCH_TOOL.test(n))
       const target = focus ?? meetingTitle
-      if (!nudged && target && !searched && (reply.content ?? '').trim().startsWith(NO_MATCH_PREFIX) && opts.tools.some(t => SEARCH_TOOL.test(t.tool))) {
+      if (!nudged && !matched && target && !searched && (reply.content ?? '').trim().startsWith(NO_MATCH_PREFIX) && opts.tools.some(t => SEARCH_TOOL.test(t.tool))) {
         nudged = true
         if (!widened) { widened = true; offered = [...offered, ...narrowed.rest] }
         messages.push({ role: 'assistant', content: reply.content })
