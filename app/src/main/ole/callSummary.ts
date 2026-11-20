@@ -97,8 +97,28 @@ export function callMemoryText(m: OleCallMemory): string {
   return parts.join('\n\n')
 }
 
-/** an answer worth keeping in the notes: answered, not the "couldn't find it" or a failure */
-const answered = (a: OleAnswer) => !a.pending && !!a.text.trim() && !/^Couldn['’]t (?:find that|answer)\b/.test(a.text)
+/** an answer worth keeping in the notes: answered, not the "couldn't find it" or a failure. The ok flag decides; an
+ * answer saved before it existed is judged by its text, as it was then */
+const answered = (a: OleAnswer) => !a.pending && !!a.text.trim() && (a.ok ?? !/^Couldn['’]t (?:find that|answer)\b/.test(a.text))
+
+/** a question and an answer in the notes are cut to these */
+export const NOTE_QUESTION_MAX = 200
+export const NOTE_ANSWER_MAX = 300
+
+/**
+ * Call content as one line of the notes: line breaks flattened, markdown control at its start taken off (headings,
+ * quotes, list markers, code fences) and no bold of its own, so what was said on the call can't forge the section's
+ * own headings, lists or labels.
+ */
+export function noteItem(v: string, max?: number): string {
+  let s = v.replace(/\s+/g, ' ').replace(/\*\*/g, '').replace(/`{3,}/g, '').trim()
+  for (;;) {
+    const next = s.replace(/^(?:#+(?=\s|$)|>+|[-*+](?=\s|$)|\d+[.)](?=\s|$)|`+)\s*/, '').trim()
+    if (next === s) break
+    s = next
+  }
+  return max ? clip(s, max) : s
+}
 
 /**
  * The "From Ole" notes section a finished call adds to the meeting's notes (#83): the running summary, open
@@ -106,11 +126,15 @@ const answered = (a: OleAnswer) => !a.pending && !!a.text.trim() && !/^Couldn['�
  */
 export function fromOleNotes(m: OleCallMemory, answers: OleAnswer[] = []): string {
   const parts: string[] = []
-  if (m.summary.trim()) parts.push(m.summary.trim())
-  if (m.openQuestions.length) parts.push(`**Open questions**\n${m.openQuestions.map(q => `- ${q}`).join('\n')}`)
-  if (m.commitments.length) parts.push(`**Commitments**\n${m.commitments.map(c => `- ${commitmentLine(c)}`).join('\n')}`)
-  const asked = answers.filter(answered).sort((a, b) => a.at - b.at)
-  if (asked.length) parts.push(`**Asked during the call**\n${asked.map(a => `- ${a.question.replace(/\s+/g, ' ').trim()}: ${a.text.replace(/\s+/g, ' ').trim()}${a.source ? ` (${a.source})` : ''}`).join('\n')}`)
+  // every item from the call is one flat line (noteItem): only Ole writes this section's structure
+  const summary = m.summary.split('\n').map(l => noteItem(l)).filter(Boolean)
+  if (summary.length) parts.push(summary.join('\n'))
+  const questions = m.openQuestions.map(q => noteItem(q)).filter(Boolean)
+  if (questions.length) parts.push(`**Open questions**\n${questions.map(q => `- ${q}`).join('\n')}`)
+  const promised = m.commitments.map(c => ({ who: noteItem(c.who), what: noteItem(c.what) })).filter(c => c.what)
+  if (promised.length) parts.push(`**Commitments**\n${promised.map(c => `- ${commitmentLine(c)}`).join('\n')}`)
+  const asked = answers.filter(answered).sort((a, b) => a.at - b.at).map(a => ({ q: noteItem(a.question, NOTE_QUESTION_MAX), text: noteItem(a.text, NOTE_ANSWER_MAX), source: a.source ? noteItem(a.source) : '' })).filter(a => a.q && a.text)
+  if (asked.length) parts.push(`**Asked during the call**\n${asked.map(a => `- ${a.q}: ${a.text}${a.source ? ` (${a.source})` : ''}`).join('\n')}`)
   return parts.length ? `## From Ole\n${parts.join('\n\n')}` : ''
 }
 

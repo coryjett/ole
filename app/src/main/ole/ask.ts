@@ -30,7 +30,7 @@ export async function answerQuestion(o: {
   chat: ChatFn; question: string; context: PreparedContext | null; lines: TranscriptLine[]; tools: OleTool[]; call: CallToolFn
   /** the running summary (#75), the user's notes (#77) and earlier questions in this call, oldest first (#76) */
   summary?: string; notes?: string; earlier?: Array<{ question: string; text: string }>
-}): Promise<{ text: string; source?: string; url?: string }> {
+}): Promise<{ text: string; source?: string; url?: string; ok: boolean }> {
   // what doesn't change during the call first, so prompt caching covers it (#77)
   const parts = [o.context?.text ? `Briefing:\n${o.context.text}` : 'No briefing.']
   if (!hasMatchedRecord(o.context)) parts.push(noRecordRule(o.context))
@@ -69,10 +69,10 @@ export async function answerQuestion(o: {
   let parsed: { answer?: unknown; source?: unknown; url?: unknown } = {}
   try { parsed = JSON.parse((reply.content ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) } catch { /* plain text or nothing: no answer */ }
   const text = typeof parsed.answer === 'string' && parsed.answer.trim() ? parsed.answer.trim().slice(0, ANSWER_MAX) : ''
-  if (!text) return { text: NO_ANSWER }
+  if (!text) return { text: NO_ANSWER, ok: false }
   const source = typeof parsed.source === 'string' && parsed.source.trim() ? readableSource(parsed.source.trim()).slice(0, 120) : undefined
   // a link is kept only if Ole has it: models invent plausible URLs (#42)
   const material = `${o.context?.text ?? ''}\n${messages.filter(m => m.role === 'tool').map(m => m.content ?? '').join('\n')}`
   const url = typeof parsed.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(parsed.url.trim()) && material.includes(parsed.url.trim()) ? parsed.url.trim() : undefined
-  return { text, ...(source ? { source } : {}), ...(url ? { url } : {}) }
+  return { text, ...(source ? { source } : {}), ...(url ? { url } : {}), ok: true }
 }

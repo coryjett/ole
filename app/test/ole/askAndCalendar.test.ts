@@ -12,7 +12,7 @@ describe('Ask Ole (#53)', () => {
   it('answers from the briefing and keeps a link only when Ole has it', async () => {
     const chat = vi.fn<ChatFn>().mockResolvedValue({ content: JSON.stringify({ answer: 'Renewal is 1 March.', source: 'opportunity: Renewal', url: 'https://crm.example/o/9' }) })
     const a = await answerQuestion({ chat, question: 'when is the renewal?', context: ctx, lines: [], tools: [], call: vi.fn() })
-    expect(a).toEqual({ text: 'Renewal is 1 March.', source: 'opportunity: Renewal', url: 'https://crm.example/o/9' })
+    expect(a).toEqual({ text: 'Renewal is 1 March.', source: 'opportunity: Renewal', url: 'https://crm.example/o/9', ok: true })
     const sent = chat.mock.calls[0][0].messages
     expect(sent[0]).toEqual({ role: 'system', content: ASK_SYSTEM })
     expect(sent[1].content).toContain('Question: when is the renewal?')
@@ -72,5 +72,12 @@ describe('hide while sharing the screen (#51)', () => {
     expect(gone.setContentProtection).not.toHaveBeenCalled()
     protectFromCapture([live], false)
     expect(live.setContentProtection).toHaveBeenLastCalledWith(false)
+  })
+})
+
+describe('answers carry whether they are real (security)', () => {
+  it('ok is false for "couldn\'t find it"', async () => {
+    const chat = vi.fn(async () => ({ content: '{"answer":""}' }))
+    expect(await answerQuestion({ chat, question: 'q', context: null, lines: [], tools: [], call: vi.fn() })).toEqual({ text: NO_ANSWER, ok: false })
   })
 })

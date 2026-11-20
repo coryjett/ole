@@ -77,6 +77,24 @@ describe('pin, rate and ask during a call (#53, #54, #55)', () => {
   })
 })
 
+describe('a failed answer is marked as not real (security)', () => {
+  it('the error branch sets ok: false, so the notes leave it out', async () => {
+    const { ole, appendNotes } = await setup()
+    const real = openaiChat.getMockImplementation()!
+    openaiChat.mockImplementation(async (req) => {
+      if (req.messages[0].content.includes('question the user typed')) throw new Error('down')
+      return real(req)
+    })
+    try {
+      ole.meetingStarted({ id: ID, title: 'Acme renewal' })
+      await handlers.get('ole:ask')!({}, 'when is the renewal?')
+      expect(state().answers[0]).toMatchObject({ text: "Couldn't answer: down", ok: false })
+      ole.meetingStopped(ID)
+      expect(appendNotes).not.toHaveBeenCalled()
+    } finally { openaiChat.mockImplementation(real) }
+  })
+})
+
 describe('the calendar decides what a default-titled call is (#56)', () => {
   it('a "Meeting" recording is prepared for the event on now', async () => {
     const now = Date.now()

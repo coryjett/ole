@@ -282,7 +282,7 @@ export function hookOle(d: Deps): {
       const earlier = answers.filter(a => !a.pending && a.id !== id).slice(0, 3).reverse().map(a => ({ question: a.question, text: a.text }))
       got = await answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(), call: (n, a) => call(n, a),
         summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier })
-    } catch (e) { got = { text: `Couldn't answer: ${e instanceof Error ? e.message : String(e)}` } }
+    } catch (e) { got = { text: `Couldn't answer: ${e instanceof Error ? e.message : String(e)}`, ok: false } }
     // the call ended while answering: the answer belongs to it, not to the next call
     const done = (a: OleAnswer): OleAnswer => a.id === id ? { id, question, at: a.at, ...got } : a
     if (forMeeting === meetingId) answers = answers.map(done)
