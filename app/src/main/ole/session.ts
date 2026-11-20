@@ -11,6 +11,7 @@ import { openaiChat } from './openaiModel'
 import { createMcpClient, McpError } from './mcp'
 import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, isReadOnly } from './tools'
 import { prepareContext } from './prepare'
+import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
 
 /** a prepared briefing older than this is gathered again when a meeting starts */
@@ -27,6 +28,8 @@ export function hookOle(d: Deps): {
   meetingStopped(id: string): void
   segment(seg: { meetingId: string; track: 'me' | 'them'; speaker?: string | null; text: string; startMs: number }): void
   bulletsOf(id: string): OleBullet[]
+  /** hands over the Mac's own model for Prepare once Yogurt's notes queue exists (#5) */
+  setLocal(run: LocalRun): void
 } {
   let prepared: PreparedContext | null = null
   let preparing = false
@@ -39,12 +42,21 @@ export function hookOle(d: Deps): {
   let prepareSeq = 0
   const finished = new Map<string, OleBullet[]>()
 
-  /** why Prepare and live context are off, or null when they can run: they need the Assistant on OpenAI and a key (#11) */
-  const blocked = (): string | null => {
+  /** the Mac's own model for Prepare (#5), handed over once Yogurt's notes queue exists */
+  let local: LocalRun | null = null
+  /** why live context is off, or null when it can run: it needs the Assistant on OpenAI with a key, or a Custom server (#11, #17) */
+  const liveBlocked = (): string | null => {
     const p = providersOf(loadSettings(d.file))
     if (p.assistant === 'local') return 'Prepare and live context use OpenAI or your own server, with your MCP servers. Set Assistant to OpenAI or Custom server in Settings > Ole.'
     if (p.assistant === 'openai' && !openaiKey()) return 'Add an OpenAI key in Settings > Ole to prepare for calls.'
     if (p.assistant === 'custom' && !p.customBaseUrl) return 'Add the Custom server address in Settings > Ole to prepare for calls.'
+    return null
+  }
+  /** why Prepare is off: on the local model only before a call and once it is ready (#5), otherwise as live context */
+  const blocked = (): string | null => {
+    if (providersOf(loadSettings(d.file)).prepareOn !== 'local') return liveBlocked()
+    if (!local) return 'The local model is still starting.'
+    if (meetingId) return 'Prepare on this Mac runs before a call, not during one.'
     return null
   }
   const state = (): OleLiveState => ({
@@ -75,7 +87,7 @@ export function hookOle(d: Deps): {
   }
 
   async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string }): Promise<OleLiveState> {
-    // enforced here, not only in the panel: Assistant = Local never reaches OpenAI or an MCP server
+    // enforced here, not only in the panel: Assistant = Local (without local Prepare) never reaches OpenAI or an MCP server
     if (blocked()) { error = null; send(); return state() }
     if (!serversOf(loadSettings(d.file)).some(s => s.enabled)) { error = 'Add an MCP server in Settings'; send(); return state() }
     const seq = ++prepareSeq
@@ -86,7 +98,9 @@ export function hookOle(d: Deps): {
       const meetingTitle = o.meetingTitle ?? null, focus = o.focus ?? null
       // each server's own warm-up prompt (MCP prompts, prepare_for_meeting) comes first; the person's instructions refine it
       const serverPrompts = await collectWarmupPrompts(enabledServers(), { meetingTitle, focus })
-      const result = await prepareContext({ chat: prepareChat, tools, call, meetingTitle, focus, instructions, serverPrompts })
+      // on this Mac (#5) the notes queue runs it, so it never overlaps a summary
+      const onMac = providersOf(loadSettings(d.file)).prepareOn === 'local' && local
+      const result = await prepareContext({ chat: onMac ? createLocalChat(onMac) : prepareChat, tools, call, meetingTitle, focus, instructions, serverPrompts })
       if (seq !== prepareSeq) return state()
       // the meeting ended while this was loading: the next call prepares fresh
       if (o.forMeeting !== undefined && o.forMeeting !== meetingId) { preparing = false; send(); return state() }
@@ -118,10 +132,12 @@ export function hookOle(d: Deps): {
     meetingStarted(m) {
       meetingId = m.id
       bullets = []
-      if (!prepared || Date.now() - prepared.preparedAt > STALE_MS) void prepare({ meetingTitle: m.title, forMeeting: m.id })
+      // a local Prepare never runs during a call (#5): the bullets just get the tools
+      const prepareNow = (!prepared || Date.now() - prepared.preparedAt > STALE_MS) && providersOf(loadSettings(d.file)).prepareOn !== 'local'
+      if (prepareNow) void prepare({ meetingTitle: m.title, forMeeting: m.id })
       else void loadTools().catch(e => console.warn('loading the MCP tools failed', e))
       // bullets need the OpenAI key; without it the meeting records as Yogurt does
-      engine = !blocked() ? createBulletsEngine({
+      engine = !liveBlocked() ? createBulletsEngine({
         chat,
         // live bullets get the lookup-style tools only (#15)
         tools: () => tools.filter(isLiveTool),
@@ -147,6 +163,7 @@ export function hookOle(d: Deps): {
       bullets = []
       send()
     },
+    setLocal(run) { local = run; send() },
     bulletsOf: (id) => finished.get(id) ?? (id === meetingId ? bullets : []),
   }
 }

@@ -42,6 +42,7 @@ import { hookOleSecrets, readSecret } from './ole/secrets'
 import { hookOleProviders, providersOf } from './ole/providers'
 import { createOpenAIModel } from './ole/openaiModel'
 import { hookOle, testServer } from './ole/session'
+import type { Llm } from './notes/enhance'
 import { hookOleServers } from './ole/servers'
 import { loginItemOn, openedAtLogin, setLoginItem, syncLoginItem } from './loginItem'
 import { createMedia } from './media'
@@ -670,6 +671,11 @@ app.whenReady().then(() => {
     remove()
   }, 'enhance')))
   setup.onNotesModel(() => { queue.modelArrived(); conversations.refresh() })
+  // Ole: Prepare on this Mac (#5) runs as a chat job in the notes queue, so it never overlaps a summary or a recording's work
+  ole.setLocal(<T,>(job: (llm: Llm, signal: AbortSignal) => Promise<T>) => new Promise<T>((resolve, reject) => {
+    if (!setup.notesPath()) { reject(new Error('No local model yet: it downloads in Settings > Models.')); return }
+    void queue.enqueue(async (signal) => { try { resolve(await job(await localModel.llm(signal), signal)) } catch (e) { reject(e) } }, 'chat').catch(reject)
+  }))
   // chat across meetings: every finished meeting chunked and embedded in the background, last in the queue
   const library = new Library(store.db)
   const indexer = createIndexer({ store, library, embedder, queue })

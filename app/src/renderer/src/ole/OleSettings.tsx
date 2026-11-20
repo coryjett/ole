@@ -30,6 +30,7 @@ export type OleSettingsApi = {
 
 const CHOICES: Array<[ProviderChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI']]
 const ASSISTANT_CHOICES: Array<[AssistantChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI'], ['custom', 'Custom server']]
+const PREPARE_ON_CHOICES: Array<['assistant' | 'local', string]> = [['assistant', 'Assistant'], ['local', 'This Mac']]
 const MAX_SERVERS = 10
 
 /** a secret name made safe for an element id: `mcp:abc` becomes `mcp-abc` */
@@ -370,6 +371,8 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
           value={providers?.transcription ?? 'local'} disabled={off} onChange={(v) => patch({ transcription: v })} />
         <ChoiceRow id="ole-assistant" label="Assistant" description="Who writes notes and answers questions. Prepare and live context need OpenAI or your own server: with Local they are off and your MCP servers are not used. Anthropic and Vertex: coming later"
           choices={ASSISTANT_CHOICES} value={providers?.assistant ?? 'local'} disabled={off} onChange={(v) => patch({ assistant: v })} />
+        <ChoiceRow id="ole-prepare-on" label="Prepare runs on" description="Where the briefing before a call is written. This Mac uses the local notes model: private and free, slower, and best with a larger model (around 26B and up); it runs only before a call, never during one. Live context always uses the Assistant."
+          choices={PREPARE_ON_CHOICES} value={providers?.prepareOn ?? 'assistant'} disabled={off} onChange={(v) => patch({ prepareOn: v })} />
         {providers?.assistant === 'custom' && <CustomServerRows api={api} providers={providers} status={status?.custom} saveKey={saveKey} disabled={off} patch={patch} />}
         <OpenAIKeyRow status={status?.openai} save={saveKey} test={() => api.testOpenAI()}
           adopt={async () => { const r = await api.adoptOpenAI(); setProviders(r.providers); return r }}

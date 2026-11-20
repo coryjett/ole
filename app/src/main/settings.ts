@@ -60,6 +60,7 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   olePrepareModel?: string
   oleCustomBaseUrl?: string
   oleCustomModel?: string
+  olePrepareOn?: 'assistant' | 'local'
   /** Ole: the person picked these providers themselves; the OpenAI key never changes them (#10) */
   oleTranscriptionChosen?: boolean
   oleAssistantChosen?: boolean
