@@ -128,10 +128,22 @@ function KeyRow({ name, label, status, save }: { name: SecretName; label: string
   )
 }
 
-function ServerRow({ server, status, saveKey, onToggle, onRemove, test }: {
+/** the list with one server moved a place up (-1) or down (1); the same list when it can't move (#98) */
+export function moveServer<T extends { id: string }>(list: T[], id: string, by: -1 | 1): T[] {
+  const i = list.findIndex((s) => s.id === id)
+  const j = i + by
+  if (i < 0 || j < 0 || j >= list.length) return list
+  const next = [...list]
+  ;[next[i], next[j]] = [next[j], next[i]]
+  return next
+}
+
+function ServerRow({ server, status, saveKey, onToggle, onRemove, test, onUp, onDown }: {
   server: McpServerConfig; status?: { set: boolean; masked: string }
   saveKey: (name: SecretName, value: string) => Promise<boolean>
   onToggle: () => void; onRemove: () => void; test: (id: string) => Promise<ServerTestResult>
+  /** move the server a place up or down the order; absent at that end of the list (#98) */
+  onUp?: () => void; onDown?: () => void
 }) {
   const [result, setResult] = useState<ServerTestResult | null>(null)
   const [testing, setTesting] = useState(false)
@@ -168,6 +180,8 @@ function ServerRow({ server, status, saveKey, onToggle, onRemove, test }: {
             <span className="settings-toggle-knob" />
           </button>
           <button data-testid={`${id}-test`} className="workspace-button" disabled={testing} onClick={() => void runTest()}>{testing ? 'Testing…' : 'Test'}</button>
+          <button data-testid={`${id}-up`} className="workspace-button" aria-label={`Move ${server.name} up`} title="Move up" disabled={!onUp} onClick={onUp}>↑</button>
+          <button data-testid={`${id}-down`} className="workspace-button" aria-label={`Move ${server.name} down`} title="Move down" disabled={!onDown} onClick={onDown}>↓</button>
           <button data-testid={`${id}-remove`} className="workspace-button" onClick={onRemove}>Remove</button>
         </div>
       </div>
@@ -382,13 +396,17 @@ export function OleServers({ api, initialServers, initialStatus, note }: {
   const addServer = (name: string, url: string) => saveServers([...(servers ?? []), { name, url, enabled: true }])
   const toggleServer = (id: string) => void saveServers((servers ?? []).map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)))
   const removeServer = (id: string) => void saveServers((servers ?? []).filter((s) => s.id !== id))
+  // the order is the priority for meetings (#98): saved as the order of the list
+  const move = (id: string, by: -1 | 1) => void saveServers(moveServer(servers ?? [], id, by))
   return (
     <div data-testid="ole-servers" className="settings-group">
       {note && <div className="settings-row">{note}</div>}
       {servers?.length === 0 && <div className="settings-row"><p className="settings-description">No MCP servers yet. Add one below; the assistant finds its tools by itself.</p></div>}
-      {servers?.map((s) => (
+      {(servers?.length ?? 0) > 1 && <div className="settings-row"><p data-testid="ole-servers-order" className="settings-description">Order matters: the first server that knows a meeting supplies its context and the meeting list.</p></div>}
+      {servers?.map((s, i) => (
         <ServerRow key={s.id} server={s} status={status?.[`mcp:${s.id}`]} saveKey={saveKey} test={(id) => api.testServer(id)}
-          onToggle={() => toggleServer(s.id)} onRemove={() => removeServer(s.id)} />
+          onToggle={() => toggleServer(s.id)} onRemove={() => removeServer(s.id)}
+          onUp={i > 0 ? () => move(s.id, -1) : undefined} onDown={i < servers.length - 1 ? () => move(s.id, 1) : undefined} />
       ))}
       {(servers?.length ?? 0) < MAX_SERVERS && <AddServer disabled={!servers} onAdd={addServer} />}
       {error && <div className="settings-row"><p role="alert" className="settings-description">{error}</p></div>}

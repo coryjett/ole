@@ -3,6 +3,10 @@
 import type { OleTool, PreparedContext } from './types'
 import type { ChatMessage, ToolCall } from './bullets'
 import { MEETING_CONTEXT_TOOL, MORE_TOOLS, MORE_TOOLS_DEF, narrowForPrepare, toOpenAiTools, type WarmupPrompt } from './tools'
+import { createMeetingSource, cleanNote, failureKind as failureKindOf, noteLine, type MeetingContext, type MeetingSource } from './meetingSource'
+
+// moved to meetingSource.ts (#98); re-exported for callers of the #93 helpers
+export { cleanNote, failureKind, meetingContextArgs, NOTE_PREFIX, noteLine, serverMatched } from './meetingSource'
 
 export const TOTAL_CAP = 24_000
 export const INSTRUCTIONS_CAP = 8000
@@ -14,14 +18,6 @@ export type PrepareCallFn = (name: string, argsJson: string) => Promise<string>
 /** how the one-line "no match" reply starts (#44) */
 export const NO_MATCH_PREFIX = "Couldn't match this call"
 const SEARCH_TOOL = /^(search|find|lookup)_/i
-
-/** the kind of a fast-path failure for the log (#95): never the server's own message, which may carry URLs or ids */
-export function failureKind(e: unknown): 'timeout' | 'transport' | 'server error' {
-  const m = e instanceof Error ? e.message : String(e)
-  if (/timed? ?out|timeout|abort/i.test(m)) return 'timeout'
-  if (/fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|network|socket|unreachable/i.test(m)) return 'transport'
-  return 'server error'
-}
 
 export const PREPARE_SYSTEM = [
   'Keep each source\'s web address (issue, docs page, tracker or record link) next to it when the tool result gives one, as a markdown link. Never make up a link.',
@@ -58,33 +54,10 @@ export function serverGuidance(serverPrompts: WarmupPrompt[] = []): string | nul
   return parts.length ? parts.join('\n\n') : null
 }
 
-/** the fast path's own guard; the tool runner's call timeout normally ends it first (#93) */
+/** the fast path's own guard over the whole meeting source; each server's own 8 s timeout normally ends it first (#93, #98) */
 export const FAST_PATH_TIMEOUT_MS = 25_000
 /** added to the request when a server already matched the meeting to a record (#93) */
 export const SERVER_MATCHED_LINE = "The server already matched this meeting (see the first tool result); do not reply that you couldn't match it."
-
-/** the arguments a meeting-context tool gets: only known values, and only those its schema declares when it declares any */
-export function meetingContextArgs(tool: OleTool, o: { meetingTitle: string | null; focus: string | null; startsAt: number | null }): Record<string, string> {
-  const known: Record<string, string | null> = {
-    meeting_title: o.meetingTitle,
-    focus: o.focus,
-    starts_at: o.startsAt !== null && Number.isFinite(o.startsAt) ? new Date(o.startsAt).toISOString() : null,
-  }
-  const props = tool.parameters?.properties
-  const declared = props && typeof props === 'object' && Object.keys(props).length ? new Set(Object.keys(props)) : null
-  const args: Record<string, string> = {}
-  for (const [k, v] of Object.entries(known)) if (v && (!declared || declared.has(k))) args[k] = v
-  return args
-}
-
-/** a result that is a non-empty JSON object whose `matchedBy` is set: the server found the meeting's record (#93) */
-export function serverMatched(result: string): boolean {
-  let v: unknown
-  try { v = JSON.parse(result) } catch { return false }
-  if (!v || typeof v !== 'object' || Array.isArray(v) || !Object.keys(v).length) return false
-  const by = (v as Record<string, unknown>).matchedBy
-  return by !== null && by !== undefined && by !== false && by !== ''
-}
 
 const cap = (s: string) => s.length > TOTAL_CAP ? `${s.slice(0, TOTAL_CAP)}\n[truncated]` : s
 
@@ -96,6 +69,10 @@ export async function prepareContext(opts: {
   focus?: string | null
   /** the meeting's start (ms) when a calendar event gave it; passed to a meeting-context tool (#93) */
   startsAt?: number | null
+  /** a server's one-line note on the chosen meeting (#98), with the server's name */
+  note?: { text: string; source?: string } | null
+  /** who answers "what is this meeting" (#98); by default the tools given here, in their order */
+  source?: Pick<MeetingSource, 'meetingContext'>
   instructions?: string | null
   serverPrompts?: WarmupPrompt[]
   now?: number
@@ -107,49 +84,48 @@ export async function prepareContext(opts: {
   const now = opts.now ?? Date.now()
   const meetingTitle = opts.meetingTitle?.trim() || null
   const focus = opts.focus?.trim() || null
+  const noteText = opts.note?.text ? cleanNote(opts.note.text) || null : null
+  const note = noteText ? { text: noteText, ...(opts.note?.source?.trim() ? { source: opts.note.source.trim().slice(0, 60) } : {}) } : null
   const maxToolCalls = opts.maxToolCalls ?? 10
   const maxRounds = opts.maxRounds ?? 6
   const log = opts.log ?? ((line: string) => console.info(line))
   const counts = new Map<string, number>()
   let nudged = false
   let fastPath = false
+  let matchedOn: string | null = null
   const toolOf = (name: string) => opts.tools.find(t => t.name === name)?.tool ?? name
   const done = (text: string): PreparedContext => {
     const total = [...counts.values()].reduce((a, b) => a + b, 0)
     const list = [...counts].map(([n, c]) => `${n} ${c}`).join(', ')
-    log(`ole prepare: ${total} tool calls${list ? ` (${list})` : ''}${nudged ? ', searched again once' : ''}${fastPath ? ', fast path' : ''}`)
-    return { meetingTitle, focus, text: cap(text.trim()), preparedAt: now }
+    log(`ole prepare: ${total} tool calls${list ? ` (${list})` : ''}${nudged ? ', searched again once' : ''}${fastPath ? ', fast path' : ''}${matchedOn ? `, matched on ${matchedOn}` : ''}`)
+    return { meetingTitle, focus, text: cap(text.trim()), preparedAt: now, ...(note ? { note } : {}) }
   }
 
   if (!opts.tools.length) return done(NO_TOOLS_TEXT)
 
-  // a server's meeting-context tool runs first, with no model involved (#93): one call per server, in parallel
+  // the meeting source answers "what is this meeting" first, with no model involved (#93, #98): servers in Settings
+  // order, the first match wins
   const startsAt = typeof opts.startsAt === 'number' && Number.isFinite(opts.startsAt) ? opts.startsAt : null
-  const ctxTools = opts.tools.filter(t => t.tool === MEETING_CONTEXT_TOOL).slice(0, maxToolCalls)
-  const fast = (await Promise.all(ctxTools.map(async (t, i) => {
-    const argsJson = JSON.stringify(meetingContextArgs(t, { meetingTitle, focus, startsAt }))
+  const source = opts.source ?? createMeetingSource({ tools: () => opts.tools, call: (name, argsJson) => opts.call(name, argsJson), log })
+  let fast: MeetingContext | null = null
+  if (maxToolCalls > 0) {
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      const result = await Promise.race([
-        opts.call(t.name, argsJson),
+      fast = await Promise.race([
+        source.meetingContext({ title: meetingTitle, focus, startsAt }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('timed out')), FAST_PATH_TIMEOUT_MS) }),
       ])
-      if (/^error:/.test(result)) throw new Error(result.slice(6).trim().slice(0, 120))
-      return { tool: t, argsJson, result, id: `fast_path_${i}` }
     } catch (e) {
-      // a failure costs nothing: the model's loop runs as it would without the tool
-      log(`ole prepare: ${MEETING_CONTEXT_TOOL} on ${t.serverName} failed (${failureKind(e)}), using the tool loop`)
-      return null
-    } finally {
-      clearTimeout(timer)
-    }
-  }))).filter((f): f is NonNullable<typeof f> => !!f)
-  const matched = fast.some(f => serverMatched(f.result))
+      log(`ole prepare: ${MEETING_CONTEXT_TOOL} failed (${failureKindOf(e)}), using the tool loop`)
+    } finally { clearTimeout(timer) }
+  }
+  const matched = !!fast
 
   const ask = [
     `Now: ${new Date(now).toISOString()}.`,
     meetingTitle ? `Meeting: ${meetingTitle}` : 'Meeting: not given; look only for a meeting happening now (started in the last 15 minutes or starting in the next 15) if a tool can find it. Never brief a later meeting.',
     focus ? `Focus: ${focus}` : null,
+    note ? noteLine(note) : null,
     matched ? SERVER_MATCHED_LINE : null,
     'Gather the facts, then write the briefing.',
   ].filter(Boolean).join('\n')
@@ -168,20 +144,20 @@ export async function prepareContext(opts: {
   let used = 0
 
   // the fast path's results read as if the model had called the tools itself, before its first turn (#93)
-  if (fast.length) {
+  if (fast) {
     fastPath = true
-    messages.push({ role: 'assistant', content: null, tool_calls: fast.map(f => ({ id: f.id, type: 'function' as const, function: { name: f.tool.name, arguments: f.argsJson } })) })
-    for (const f of fast) {
-      messages.push({ role: 'tool', tool_call_id: f.id, content: f.result })
-      seen.set(`${f.tool.name}\0${f.argsJson}`, Promise.resolve(f.result))
-      counts.set(f.tool.tool, (counts.get(f.tool.tool) ?? 0) + 1)
-      used++
-      // a tool the model's history names is one it is offered
-      if (!offered.includes(f.tool)) {
-        offered = [...offered, f.tool]
-        narrowed.rest = narrowed.rest.filter(t => t !== f.tool)
-        widened = !narrowed.rest.length
-      }
+    matchedOn = fast.serverName
+    const f = { ...fast, id: 'fast_path_0' }
+    messages.push({ role: 'assistant', content: null, tool_calls: [{ id: f.id, type: 'function' as const, function: { name: f.tool.name, arguments: f.argsJson } }] })
+    messages.push({ role: 'tool', tool_call_id: f.id, content: f.result })
+    seen.set(`${f.tool.name}\0${f.argsJson}`, Promise.resolve(f.result))
+    counts.set(f.tool.tool, (counts.get(f.tool.tool) ?? 0) + 1)
+    used++
+    // a tool the model's history names is one it is offered
+    if (!offered.includes(f.tool)) {
+      offered = [...offered, f.tool]
+      narrowed.rest = narrowed.rest.filter(t => t !== f.tool)
+      widened = !narrowed.rest.length
     }
   }
 

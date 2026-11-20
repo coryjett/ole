@@ -31,7 +31,7 @@ describe('Prepare: meeting-context fast path (#93)', () => {
     expect(msgs[userAt + 1]).toEqual({ role: 'assistant', content: null, tool_calls: [tc('fast_path_0', 's__get_meeting_context', { meeting_title: 'Example Co sync', focus: 'renewal', starts_at: '2026-11-19T15:30:00.000Z' })] })
     expect(msgs[userAt + 2]).toEqual({ role: 'tool', tool_call_id: 'fast_path_0', content: MATCHED })
     expect(msgs.findIndex(m => m.role === 'tool')).toBe(userAt + 2)
-    expect(log).toHaveBeenCalledWith('ole prepare: 1 tool calls (get_meeting_context 1), fast path')
+    expect(log).toHaveBeenCalledWith('ole prepare: 1 tool calls (get_meeting_context 1), fast path, matched on S')
   })
 
   it('is skipped when no server offers the tool: the loop and the log line are as before', async () => {
@@ -55,25 +55,44 @@ describe('Prepare: meeting-context fast path (#93)', () => {
     expect(call).not.toHaveBeenCalled()
   })
 
-  it('calls each server that offers the tool, in parallel, and includes every result', async () => {
-    const tools = [tool('a', 'get_meeting_context', CTX_PROPS), tool('b', 'get_meeting_context', CTX_PROPS), tool('a', 'search_accounts')]
-    let inFlight = 0, most = 0
-    const call = vi.fn(async (name: string) => {
-      inFlight++; most = Math.max(most, inFlight)
-      await new Promise(r => setTimeout(r, 5))
-      inFlight--
-      return `{"from":"${name}"}`
-    })
+  it('asks the servers in order and stops at the first match (#98)', async () => {
+    const tools = [tool('a', 'get_meeting_context', CTX_PROPS), tool('b', 'get_meeting_context', CTX_PROPS), tool('c', 'get_meeting_context', CTX_PROPS), tool('a', 'search_accounts')]
+    const call = vi.fn(async (name: string) => name.startsWith('a__') ? '{"matchedBy":null}' : MATCHED)
     const chat = vi.fn<PrepareChatFn>().mockResolvedValueOnce({ content: 'brief' })
     const log = vi.fn()
     await prepareContext({ chat, tools, call, meetingTitle: 'Sync', now, log })
-    expect(most).toBe(2)
+    expect(call.mock.calls.map(c => c[0])).toEqual(['a__get_meeting_context', 'b__get_meeting_context'])
     const msgs = chat.mock.calls[0][0].messages
-    const asked = msgs.find(m => m.role === 'assistant')!
-    expect(asked.tool_calls!.map(c => [c.id, c.function.name])).toEqual([['fast_path_0', 'a__get_meeting_context'], ['fast_path_1', 'b__get_meeting_context']])
-    expect(msgs.filter(m => m.role === 'tool').map(m => [m.tool_call_id, m.content]))
-      .toEqual([['fast_path_0', '{"from":"a__get_meeting_context"}'], ['fast_path_1', '{"from":"b__get_meeting_context"}']])
-    expect(log).toHaveBeenCalledWith('ole prepare: 2 tool calls (get_meeting_context 2), fast path')
+    // only the match reaches the model; a server without one adds nothing
+    expect(msgs.find(m => m.role === 'assistant')!.tool_calls!.map(c => [c.id, c.function.name])).toEqual([['fast_path_0', 'b__get_meeting_context']])
+    expect(msgs.filter(m => m.role === 'tool').map(m => [m.tool_call_id, m.content])).toEqual([['fast_path_0', MATCHED]])
+    expect(log).toHaveBeenCalledWith('ole prepare: 1 tool calls (get_meeting_context 1), fast path, matched on B')
+  })
+
+  it('with no server matching, the loop runs as it would without the tool', async () => {
+    const tools = [tool('a', 'get_meeting_context', CTX_PROPS), tool('b', 'get_meeting_context', CTX_PROPS)]
+    const call = vi.fn(async () => '{"account":null}')
+    const chat = vi.fn<PrepareChatFn>().mockResolvedValueOnce({ content: 'brief' })
+    const log = vi.fn()
+    await prepareContext({ chat, tools, call, meetingTitle: 'Sync', now, log })
+    expect(call).toHaveBeenCalledTimes(2)
+    expect(chat.mock.calls[0][0].messages.some(m => m.role === 'tool')).toBe(false)
+    expect(log).toHaveBeenCalledWith('ole prepare: 0 tool calls')
+  })
+
+  it('takes a meeting source in place of the tools, and passes a server note as one capped line (#98)', async () => {
+    const tools = [tool('s', 'get_meeting_context', CTX_PROPS), tool('s', 'search_accounts')]
+    const call = vi.fn(async () => MATCHED)
+    const meetingContext = vi.fn(async () => null)
+    const chat = vi.fn<PrepareChatFn>().mockResolvedValueOnce({ content: 'brief' })
+    const out = await prepareContext({ chat, tools, call, meetingTitle: 'Sync', focus: 'f', startsAt, now, log: () => {}, source: { meetingContext },
+      note: { text: `Renewal\n  due ${'x'.repeat(400)}`, source: 'CRM' } })
+    expect(meetingContext).toHaveBeenCalledWith({ title: 'Sync', focus: 'f', startsAt })
+    expect(call).not.toHaveBeenCalled()
+    const ask = chat.mock.calls[0][0].messages.find(m => m.role === 'user' && m.content?.startsWith('Now:'))!.content!
+    const line = ask.split('\n').find(l => l.startsWith('Note about this meeting from CRM: Renewal due x'))!
+    expect(line.length).toBeLessThan(260)
+    expect(out.note?.source).toBe('CRM')
   })
 
   it('a failed call logs one line and the loop runs as it would without the tool', async () => {
@@ -115,7 +134,7 @@ describe('Prepare: meeting-context fast path (#93)', () => {
 
   it('counts toward the tool-call budget, and the model is not given the same call again', async () => {
     const tools = [tool('s', 'get_meeting_context', CTX_PROPS), tool('s', 'get_account')]
-    const call = vi.fn(async () => '{"x":1}')
+    const call = vi.fn(async () => '{"x":1,"matchedBy":"title"}')
     const chat = vi.fn<PrepareChatFn>()
       .mockResolvedValueOnce({ content: null, tool_calls: [tc('1', 's__get_meeting_context', { meeting_title: 'Sync' }), tc('2', 's__get_account', { id: 1 }), tc('3', 's__get_account', { id: 2 })] })
       .mockResolvedValueOnce({ content: 'brief' })
@@ -123,13 +142,14 @@ describe('Prepare: meeting-context fast path (#93)', () => {
     // the fast path, then one more under a budget of 2; the repeat is answered from the first run
     expect(call.mock.calls).toEqual([['s__get_meeting_context', '{"meeting_title":"Sync"}'], ['s__get_account', '{"id":1}']])
     const toolMsgs = chat.mock.calls[1][0].messages.filter(m => m.role === 'tool')
-    expect(toolMsgs.map(m => m.content)).toEqual(['{"x":1}', '{"x":1}', '{"x":1}', 'not run: the tool call limit is reached, write the briefing from what you have'])
+    const R = '{"x":1,"matchedBy":"title"}'
+    expect(toolMsgs.map(m => m.content)).toEqual([R, R, R, 'not run: the tool call limit is reached, write the briefing from what you have'])
   })
 
   it('the tool is offered to the model even when a server prompt narrows the first tools', async () => {
     const tools = [tool('s', 'get_meeting_context', CTX_PROPS), tool('s', 'get_account'), tool('s', 'list_files')]
     const chat = vi.fn<PrepareChatFn>().mockResolvedValueOnce({ content: 'brief' })
-    await prepareContext({ chat, tools, call: async () => '{}', meetingTitle: 'Sync', now, log: () => {}, serverPrompts: [{ serverId: 's', serverName: 'S', text: 'Call get_account.' }] })
+    await prepareContext({ chat, tools, call: async () => MATCHED, meetingTitle: 'Sync', now, log: () => {}, serverPrompts: [{ serverId: 's', serverName: 'S', text: 'Call get_account.' }] })
     const offered = (chat.mock.calls[0][0].tools as Array<{ function: { name: string } }>).map(t => t.function.name)
     expect(offered).toEqual(['s__get_account', 's__get_meeting_context', 'more_tools'])
   })
@@ -145,7 +165,7 @@ describe('the fast path and the search-first nudge (#62, #93)', () => {
     expect(chat).toHaveBeenCalledTimes(1)
     const ask = chat.mock.calls[0][0].messages.find(m => m.role === 'user' && m.content?.startsWith('Now:'))!.content!
     expect(ask).toContain(SERVER_MATCHED_LINE)
-    expect(log).toHaveBeenCalledWith('ole prepare: 1 tool calls (get_meeting_context 1), fast path')
+    expect(log).toHaveBeenCalledWith('ole prepare: 1 tool calls (get_meeting_context 1), fast path, matched on S')
   })
 
   it('a result with matchedBy null keeps the nudge and does not claim a match', async () => {
@@ -158,7 +178,8 @@ describe('the fast path and the search-first nudge (#62, #93)', () => {
     const msgs = chat.mock.calls[0][0].messages
     expect(msgs.find(m => m.role === 'user' && m.content?.startsWith('Now:'))!.content).not.toContain(SERVER_MATCHED_LINE)
     expect(msgs).toContainEqual({ role: 'user', content: 'You have not searched for "Example Co" yet. Search for it with the tools before deciding there is no match.' })
-    expect(log).toHaveBeenCalledWith('ole prepare: 2 tool calls (get_meeting_context 1, search_accounts 1), searched again once, fast path')
+    // no match: the result is not handed over (#98), so only the model's own search counts
+    expect(log).toHaveBeenCalledWith('ole prepare: 1 tool calls (search_accounts 1), searched again once')
   })
 
   it('serverMatched reads only a non-empty JSON object with matchedBy set', () => {
@@ -175,13 +196,13 @@ describe('the fast path and the search-first nudge (#62, #93)', () => {
 
 describe('meetingContextArgs', () => {
   it('sends only known values, as ISO for the start', () => {
-    expect(meetingContextArgs(tool('s', 'get_meeting_context', CTX_PROPS), { meetingTitle: 'Sync', focus: null, startsAt: null })).toEqual({ meeting_title: 'Sync' })
-    expect(meetingContextArgs(tool('s', 'get_meeting_context', CTX_PROPS), { meetingTitle: null, focus: null, startsAt })).toEqual({ starts_at: '2026-11-19T15:30:00.000Z' })
+    expect(meetingContextArgs(tool('s', 'get_meeting_context', CTX_PROPS), { title: 'Sync', focus: null, startsAt: null })).toEqual({ meeting_title: 'Sync' })
+    expect(meetingContextArgs(tool('s', 'get_meeting_context', CTX_PROPS), { title: null, focus: null, startsAt })).toEqual({ starts_at: '2026-11-19T15:30:00.000Z' })
   })
 
   it('leaves out what the schema does not declare, and sends all when it declares nothing', () => {
-    expect(meetingContextArgs(tool('s', 'get_meeting_context', { meeting_title: {} }), { meetingTitle: 'Sync', focus: 'f', startsAt })).toEqual({ meeting_title: 'Sync' })
-    expect(meetingContextArgs(tool('s', 'get_meeting_context'), { meetingTitle: 'Sync', focus: 'f', startsAt })).toEqual({ meeting_title: 'Sync', focus: 'f', starts_at: '2026-11-19T15:30:00.000Z' })
+    expect(meetingContextArgs(tool('s', 'get_meeting_context', { meeting_title: {} }), { title: 'Sync', focus: 'f', startsAt })).toEqual({ meeting_title: 'Sync' })
+    expect(meetingContextArgs(tool('s', 'get_meeting_context'), { title: 'Sync', focus: 'f', startsAt })).toEqual({ meeting_title: 'Sync', focus: 'f', starts_at: '2026-11-19T15:30:00.000Z' })
   })
 })
 
