@@ -31,7 +31,7 @@ if [ "$LOCAL" = 1 ]; then
   node - "$LOCAL_DIR" <<'JS' > "$LOCAL_DIR/config.json"
 const path = require('node:path')
 const dir = process.argv[2]
-console.log(JSON.stringify({ extends: path.resolve('electron-builder.yml'), publish: null, forceCodeSigning: true,
+console.log(JSON.stringify({ extends: path.resolve('electron-builder.yml'), forceCodeSigning: true,
   mac: { identity: 'Ole Local', notarize: false, entitlements: path.join(dir, 'mac.plist'),
     entitlementsInherit: path.join(dir, 'mac.inherit.plist') } }))
 JS
@@ -74,7 +74,8 @@ DMG=dist/Ole-mac-arm64.dmg
 # electron-builder signed the disk image too (dmg.sign); signing it again here would change it after latest-mac.yml
 verify_identity "$DMG"
 if [ "$LOCAL" = 1 ]; then
-  [ ! -e "$APP/Contents/Resources/app-update.yml" ] || { echo 'Local builds must not have a release feed' >&2; exit 1; }
+  # Ole ships its locally signed builds: the feed must be Ole's own, never Yogurt's
+  grep -q 'repo: ole$' "$APP/Contents/Resources/app-update.yml" && ! grep -qi 'frigade\|yogurt' "$APP/Contents/Resources/app-update.yml" || { echo 'The release feed must be coryjett/ole' >&2; exit 1; }
   [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = net.cjett.ole ] || exit 1
 
 fi
