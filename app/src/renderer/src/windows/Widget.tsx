@@ -1,3 +1,4 @@
+import { loudBullets } from '../../../main/ole/core/spotlight'
 import { transcriptSpeaker } from '../../../shared/transcript'
 import { OleBullets } from '../ole/OleBullets'
 import { useOleState } from '../ole/OlePanel'
@@ -205,7 +206,7 @@ function Preview({ view, open }: { view: WidgetView; open: boolean }) {
       <p data-testid="widget-note" data-tone={note.tone}>{note.text}</p>
       {permission && <button className="workspace-button widget-settings" onClick={() => { void window.yogurt.permissions.open(permission) }}>{t('Open Settings')}</button>}
     </div>}
-    {ole && <div className="widget-ole" style={{ padding: '6px 10px', maxHeight: 220, overflowY: 'auto' }}>{ole.unavailable?.length > 0 && <p data-testid="widget-ole-unavailable" className="text-[11px]" style={{ color: '#f0b429', marginBottom: 4 }}>⚠ Couldn't use {ole.unavailable.map(u => u.name).join(', ')}</p>}<OleBullets bullets={ole.bullets} prepared={ole.prepared} /></div>}
+    {ole && <div className="widget-ole" style={{ padding: '6px 10px', maxHeight: 220, overflowY: 'auto' }}>{ole.unavailable?.length > 0 && <p data-testid="widget-ole-unavailable" className="text-[11px]" style={{ color: '#f0b429', marginBottom: 4 }}>⚠ Couldn't use {ole.unavailable.map(u => u.name).join(', ')}</p>}<OleBullets bullets={loudBullets(ole.bullets)} prepared={ole.prepared} /></div>}
     <ScrollFade>
     <div ref={scroll} data-testid="widget-preview-text" className="widget-preview-conversation" role="log" aria-live="off" aria-label={t('Transcript')}
       onWheel={manual} onTouchStart={manual} onPointerDown={manual} onKeyDown={manual} onScroll={e => {

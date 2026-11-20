@@ -42,7 +42,8 @@ export type OleProviders = {
 export type McpServerConfig = { id: string; name: string; url: string; enabled: boolean };
 
 /** heard: the words from the call it answers; quote: a short excerpt of its source (#39). Both checked against what Ole has. */
-export type OleBullet = { id: string; text: string; source: string; at: number; heard?: string; quote?: string; url?: string; pinned?: boolean; rating?: 'up' | 'down' };
+/** act: the model marked it as changing what the user says next (#172); absent is background, as on bullets saved before */
+export type OleBullet = { id: string; text: string; source: string; at: number; heard?: string; quote?: string; url?: string; pinned?: boolean; rating?: 'up' | 'down'; act?: true };
 
 /** a question asked during the call and Ole's answer (#53); pending while it is being answered */
 /** ok: true only for a real answer, false for "couldn't find it" or a failure; absent on answers saved before it existed */

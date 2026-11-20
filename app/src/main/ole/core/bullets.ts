@@ -54,7 +54,8 @@ export const SOURCE_ANONYMITY = 'Sources follow the same rule: a "source" names 
 
 export const BULLETS_SYSTEM = [
   'You help the user during a live call by surfacing short context bullets they can glance at.',
-  'Reply with JSON only: {"bullets":[{"text":"...","source":"...","heard":"...","quote":"..."}]}.',
+  'Reply with JSON only: {"bullets":[{"text":"...","source":"...","heard":"...","quote":"...","act":true}]}.',
+  '"act": true only when the bullet changes what the user should say next: it answers a question just asked, flags a risk or blocker, contradicts something just said, or is an open issue on the topic being discussed. Leave it out for useful background.',
   '"url": the source\'s web address exactly as it appears in the prepared context or a tool result (an issue, docs page, tracker or record); leave it out when there is none. Never make one up.',
   '"heard": the few words from the conversation this bullet answers, copied exactly (under 12 words). "quote": a short excerpt copied exactly from the prepared context or tool result the fact came from (under 25 words).',
   'Give 0 to 2 NEW bullets. Fewer is better: only what the people on the call do not already know.',
@@ -220,7 +221,7 @@ export function readableSource(source: string): string {
   return source.split(/\s*;\s*/).map(p => p.replace(/^\[|\]$/g, '').replace(/^(?:get|list|search|find|lookup|read|query|fetch|describe)_([a-z0-9_]+)\s*:/i, (_m, rest: string) => `${rest.replace(/_/g, ' ')}:`).trim()).filter(Boolean).join('; ')
 }
 
-export type ParsedBullet = { text: string; source: string; heard?: string; quote?: string; url?: string }
+export type ParsedBullet = { text: string; source: string; heard?: string; quote?: string; url?: string; act?: true }
 /** bullets read from one reply at most (whole or streamed) */
 const BULLETS_PER_REPLY = 3
 
@@ -235,7 +236,7 @@ export function parseBulletItem(item: unknown): ParsedBullet | null {
   const heard = typeof o.heard === 'string' ? clip(o.heard.trim().replace(/^["“]|["”]$/g, ''), 100) : ''
   const quote = typeof o.quote === 'string' ? clip(o.quote.trim().replace(/^["“]|["”]$/g, ''), 160) : ''
   const url = typeof o.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(o.url.trim()) ? o.url.trim() : ''
-  return { text: short, source: readableSource(source), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) }
+  return { text: short, source: readableSource(source), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}), ...(o.act === true ? { act: true as const } : {}) }
 }
 
 export function parseBullets(content: string | null): ParsedBullet[] {
@@ -540,7 +541,7 @@ export function createBulletsEngine(opts: {
         const shown = anonymizeSourceLink(linked.source ?? b.source, linked.url, anonymityFor(opts.context(), [opts.context()?.text ?? '', ...looked]))
         const url = shown.url
         const source = shown.source
-        fresh.push({ id: `b${++seq}`, text: b.text, source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
+        fresh.push({ id: `b${++seq}`, text: b.text, source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}), ...(b.act ? { act: true as const } : {}) })
       }
       /** this turn's bullets on top, in the model's order; a pin or rating made meanwhile is kept */
       const show = () => {

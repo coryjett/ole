@@ -954,6 +954,8 @@ html:not(.widget) button:focus-visible, html:not(.widget) input:focus-visible { 
 .ole-link { display:inline-flex;align-items:center;padding:2px 0;border:0;background:transparent;color:var(--accent);font-weight:500;cursor:pointer;text-underline-offset:2px; }
 .ole-link:hover:not(:disabled),.ole-link:focus-visible { text-decoration:underline; }
 .ole-link:focus-visible { outline:2px solid var(--focus);outline-offset:2px; }
+/* Ole: Right now, what changes what you say next, loud (#172) */
+.ole-now-card { padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;background:var(--float);font-size:15px;line-height:22px;font-weight:500; }
 /* Ole: the call's open questions and commitments, one card each with room to read (#166) */
 .ole-call-card { padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--float); }
 .ole-mark { flex:none;width:12px;text-align:center;color:var(--muted);font-weight:600; }

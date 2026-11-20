@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { OleBullet } from '../../../main/ole/core/types'
 import { httpsHref, shownSource } from '../../../main/ole/core/links'
+import { spotlight as split } from '../../../main/ole/core/spotlight'
 
 export type OlePrepared = { meetingTitle: string | null; focus: string | null }
 
@@ -31,13 +32,37 @@ function BulletControls({ b, onPin, onRate }: { b: OleBullet; onPin: (id: string
   </span>
 }
 
-export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate, header: showHeader = true }: { bullets: OleBullet[]; prepared: OlePrepared | null; /** the "Prepared for" line; the Live tab says who the briefing is for instead (#138, #140) */ header?: boolean; /** 'none': no cap, the page around it scrolls (the note's Live tab, #108) */
+export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate, header: showHeader = true, spotlight = false }: { bullets: OleBullet[]; prepared: OlePrepared | null; /** the Live tab (#172): act bullets as Right now cards, the rest folded under Earlier */ spotlight?: boolean; /** the "Prepared for" line; the Live tab says who the briefing is for instead (#138, #140) */ header?: boolean; /** 'none': no cap, the page around it scrolls (the note's Live tab, #108) */
   maxHeight?: number | 'none'; now?: number
   /** live call only: pin (#54) and rate (#55); a saved meeting shows the marks without buttons */
   onPin?: (id: string, on: boolean) => void; onRate?: (id: string, r: 'up' | 'down' | null) => void }) {
   const [all, setAll] = useState(false)
   const header = !prepared ? 'Not prepared yet'
     : `Prepared for: ${[prepared.meetingTitle, prepared.focus].filter(Boolean).join(' · ') || 'the next call'}`
+  const item = (b: OleBullet, o: { className?: string; quiet?: boolean } = {}) => <li key={b.id} data-testid="ole-bullet" data-new={now - b.at < NEW_MS || undefined} className={o.className ?? 'widget-preview-bubble text-[13px] leading-[18px]'} dir="auto"
+    style={{ ...(now - b.at < NEW_MS && !o.className ? { boxShadow: 'inset 3px 0 0 #6cc463' } : {}), ...(o.quiet ? { opacity: 0.7 } : {}) }}>
+    <span>{b.pinned && !onPin && <span data-testid="ole-bullet-pinned" title="Pinned">📌 </span>}{b.text}</span>
+    {onPin && onRate && <BulletControls b={b} onPin={onPin} onRate={onRate} />}
+    {b.heard && <span data-testid="ole-bullet-heard" className="block text-[11px] leading-[16px] text-[#B8B8C0]">Heard: “{b.heard}”</span>}
+    {b.quote
+      ? <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]">From <SourceName b={b} />: “{b.quote}”</span>
+      : <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]"><SourceName b={b} /></span>}
+  </li>
+  if (spotlight && bullets.length) {
+    // the Live tab (#172): what changes what you say next, loud; the rest one click away, quiet
+    const { now: loud, earlier } = split(bullets)
+    return <section data-testid="ole-bullets" className="ole-bullets flex flex-col gap-3" aria-label="Context">
+      <div data-testid="ole-now">
+        <p className="mb-1.5 text-[11px] font-semibold uppercase leading-[16px] tracking-wide" style={{ color: 'var(--accent)' }}>Right now</p>
+        {loud.length ? <ul role="list" className="flex flex-col gap-2">{loud.map(b => item(b, { className: 'ole-now-card' }))}</ul>
+          : <p className="text-[13px]" style={{ color: 'var(--muted)' }}>Nothing that needs you yet.</p>}
+      </div>
+      {earlier.length > 0 && <div data-testid="ole-earlier">
+        <button data-testid="ole-earlier-toggle" className="text-action text-[12px]" aria-expanded={all} onClick={() => setAll(v => !v)}>{all ? 'Hide earlier' : `Earlier (${earlier.length})`}</button>
+        {all && <ul role="list" className="mt-1 flex flex-col gap-1">{earlier.map(b => item(b, { className: 'widget-preview-bubble text-[12px] leading-[17px]', quiet: true }))}</ul>}
+      </div>}
+    </section>
+  }
   const sorted = [...bullets].sort((a, b) => b.at - a.at)
   const shown = all ? sorted : sorted.slice(0, BULLETS_OPEN)
   const folded = sorted.length - shown.length
@@ -47,15 +72,7 @@ export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(
       : <div data-testid="ole-bullets-scroll" style={{ maxHeight, overflowY: 'auto' }}>
         <ul role="list" className="flex flex-col gap-1">
           {/* a bullet from the last few seconds has a green edge, so what just changed stands out */}
-          {shown.map(b => <li key={b.id} data-testid="ole-bullet" data-new={now - b.at < NEW_MS || undefined} className="widget-preview-bubble text-[13px] leading-[18px]" dir="auto"
-            style={now - b.at < NEW_MS ? { boxShadow: 'inset 3px 0 0 #6cc463' } : undefined}>
-            <span>{b.pinned && !onPin && <span data-testid="ole-bullet-pinned" title="Pinned">📌 </span>}{b.text}</span>
-            {onPin && onRate && <BulletControls b={b} onPin={onPin} onRate={onRate} />}
-            {b.heard && <span data-testid="ole-bullet-heard" className="block text-[11px] leading-[16px] text-[#B8B8C0]">Heard: “{b.heard}”</span>}
-            {b.quote
-              ? <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]">From <SourceName b={b} />: “{b.quote}”</span>
-              : <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]"><SourceName b={b} /></span>}
-          </li>)}
+          {shown.map(b => item(b))}
         </ul>
         {(folded > 0 || all) && sorted.length > BULLETS_OPEN && <button data-testid="ole-bullets-more" className="text-action mt-1 text-[12px]" onClick={() => setAll(v => !v)}>
           {all ? 'Show fewer' : `Show ${folded} earlier`}</button>}

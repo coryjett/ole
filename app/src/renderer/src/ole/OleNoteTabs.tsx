@@ -1,7 +1,8 @@
 // Ole on the note page as tabs beside Transcript and My notes (#108). During a call: Live (the "Before you join"
 // strip, bullets with pin and rate, open questions and commitments, the call's answers) and Briefing. Questions go
-// to Ole's Ask: a column on the right of a wide note (#148), else docked at the bottom (#122, OleAsk.tsx). On a saved meeting: Context
-// (what Ole kept) and Briefing, each only when Ole has something. Plus the quick-note bar shown during a call.
+// to Ole's Ask: a column on the right of a wide note (#148), else docked at the bottom (#122, OleAsk.tsx). A saved
+// meeting has no Ole tabs (#170); its sources sit under the Summary (OleCallSources). Plus the quick-note bar shown during a call.
+import { loudBullets } from '../../../main/ole/core/spotlight'
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, MessageSquareText, Radio } from 'lucide-react'
 import type { OleAnswer, OleBullet, OleCallMemory } from '../../../main/ole/core/types'
@@ -53,7 +54,8 @@ export function useOleNote(id: string, recording: boolean, liveShown: boolean): 
   }, [id, recording])
   const seen = useRef<{ id: string; ids: Set<string> }>({ id, ids: new Set() })
   if (seen.current.id !== id) seen.current = { id, ids: new Set() }
-  const live = recording && state?.meetingId === id ? state.bullets : []
+  // only act bullets count toward the badge: background ones never call you back to Live (#172)
+  const live = recording && state?.meetingId === id ? loudBullets(state.bullets) : []
   useEffect(() => { if (liveShown) for (const b of live) seen.current.ids.add(b.id) })
   const mine = saved?.meetingId === id ? saved : null
   const tabs = oleTabs(recording, mine && {
@@ -87,7 +89,7 @@ export function OleLiveTab({ state, answersInColumn = false }: { state: OleLiveS
   return <div data-testid="ole-live-tab" className="flex flex-col gap-2">
     <OlePanelHeader state={state} />
     {text && <BeforeYouJoinStrip text={text} />}
-    <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight="none" header={false}
+    <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight="none" header={false} spotlight
       onPin={(id, on) => void window.yogurt.ole.pinBullet(id, on)} onRate={(id, r) => void window.yogurt.ole.rateBullet(id, r)} />
     <OleCallLists openQuestions={state.openQuestions} commitments={state.commitments} />
     {!answersInColumn && <OleAnswers answers={state.answers ?? []} />}
