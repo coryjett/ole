@@ -82,7 +82,7 @@ export function OleSubject({ state }: { state: OleLiveState }) {
   const matchedName = state.matched && !state.preparing ? state.matchedName?.trim() : ''
   return <div data-testid="ole-subject" className="mt-1 flex flex-col gap-1 text-[13px]">
     {matchedName && <p data-testid="ole-matched" role="status" className="font-semibold">Briefing for {matchedName}
-      {!open && <> <span aria-hidden="true" className="opacity-50">·</span> <button data-testid="ole-not-right" className="text-action text-[12px] font-normal" onClick={() => setOpen(true)}>Not right?</button></>}
+      {!open && <> <span aria-hidden="true" className="opacity-50">·</span> <button data-testid="ole-not-right" className="ole-link text-[12px] font-normal" onClick={() => setOpen(true)}>Not right?</button></>}
     </p>}
     {unmatched && !state.blocked && <p data-testid="ole-unmatched" role="status" className="settings-description">Ole hasn't matched this call yet. It will pick up who it's with from the conversation.</p>}
     {state.subject && <p data-testid="ole-subject-updated" role="status" className="settings-description">Briefing updated for {state.subject.name}</p>}
@@ -97,7 +97,7 @@ export function OleSubject({ state }: { state: OleLiveState }) {
       </span>}
       {showInput
         ? <NameInput testId="ole-someone-else" label="Prepare for someone else" placeholder="Someone else…" disabled={state.preparing || !!state.blocked} onSubmit={choose} />
-        : matchedName ? null : <button data-testid="ole-someone-else-link" className="text-action text-[12px]" onClick={() => setOpen(true)}>Someone else…</button>}
+        : matchedName ? null : <button data-testid="ole-someone-else-link" className="ole-link text-[12px]" onClick={() => setOpen(true)}>Someone else…</button>}
     </div>
   </div>
 }
@@ -134,7 +134,7 @@ export function OleNextCall({ state }: { state: OleLiveState }) {
         // clearing the name a briefing was prepared with clears that briefing too (#128)
         ? <NameInput testId="ole-prepare-for" label="Prepare for" placeholder="A company, person or topic (optional)" disabled={state.preparing || !!state.blocked}
           onSubmit={prepareFor} onCleared={was => { if (clearsBriefing(was, state.prepared)) clear() }} submitLabel={v => v ? 'Prepare' : 'Prepare for next call'} />
-        : <button data-testid="ole-prepare-for-link" className="text-action text-[12px]" onClick={() => setOpen(true)}>Prepare for…</button>}
+        : <button data-testid="ole-prepare-for-link" className="workspace-button" onClick={() => setOpen(true)}>Prepare for…</button>}
     </div>
     {state.prepared?.text && <OleBriefing key={state.prepared.preparedAt} text={state.prepared.text} defaultOpen />}
   </>
