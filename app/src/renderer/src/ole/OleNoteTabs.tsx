@@ -59,7 +59,9 @@ export function useOleNote(id: string, recording: boolean, liveShown: boolean): 
     bullets: mine.bullets.length, answers: mine.answers.length, briefing: !!mine.briefing.trim(),
     lists: (mine.call?.openQuestions.length ?? 0) + (mine.call?.commitments.length ?? 0),
   })
-  return { state, saved: mine, tabs, unseen: liveShown ? 0 : unseenCount(live.map(b => b.id), seen.current.ids) }
+  // only this note's call: during a call, another meeting's note never sees its bullets or briefing (#113)
+  const mineState = recording && state?.meetingId === id ? state : null
+  return { state: mineState, saved: mine, tabs, unseen: liveShown ? 0 : unseenCount(live.map(b => b.id), seen.current.ids) }
 }
 
 const ICON = { live: Radio, briefing: BookOpen, context: MessageSquareText } as const
@@ -100,7 +102,7 @@ function BriefingTab({ text, empty }: { text: string; empty: string }) {
  */
 export function OleTabPanels({ tab, meetingId, recording, ole }: { tab: OleTab | null; meetingId: string; recording: boolean; ole: OleNote }) {
   const { state, saved } = ole
-  const live = recording && !!state
+  const live = recording && !!state && state.meetingId === meetingId
   return <section data-testid="note-ole-panel" id="note-ole-panel" role="tabpanel" aria-labelledby={tab ? `note-ole-${tab}-tab` : undefined} hidden={!tab}
     className="note-content" style={{ overflowY: 'auto', overscrollBehavior: 'contain' }}>
     <div className="note-page-width" style={{ paddingBlock: '18px 40px' }}>
