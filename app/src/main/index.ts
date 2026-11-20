@@ -558,6 +558,8 @@ app.whenReady().then(() => {
     send: (s) => { win?.webContents.send('ole:state', s); sendWidgetTranscript('ole:state', s) },
     save: (id, bullets) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-bullets.json'), JSON.stringify(bullets, null, 2)),
     notify: (title, body) => { if (Notification.isSupported()) new Notification({ title, body }).show() },
+    saveBriefing: (id, text) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-briefing.md'), text),
+    loadBriefing: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-briefing.md'); return existsSync(p) ? readFileSync(p, 'utf8').slice(0, 50_000) : '' },
     load: (id) => {
       const path = join(userDataDir(), 'meetings', id, 'ole-bullets.json')
       if (!existsSync(path)) return []

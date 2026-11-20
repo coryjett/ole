@@ -249,6 +249,7 @@ const api: YogurtApi = {
     adoptOpenAI: () => ipcRenderer.invoke('ole:openai:adopt'),
     revertOpenAI: (undo) => ipcRenderer.invoke('ole:openai:revert', undo),
     bullets: (id) => ipcRenderer.invoke('ole:bullets', id),
+    briefing: (id) => ipcRenderer.invoke('ole:briefing', id),
     state: () => ipcRenderer.invoke('ole:state'),
     onState: (cb) => { const f = (_e: unknown, s: OleLiveState) => cb(s); ipcRenderer.on('ole:state', f); return () => { ipcRenderer.off('ole:state', f) } },
     prepare: (o) => ipcRenderer.invoke('ole:prepare', o ?? {}),

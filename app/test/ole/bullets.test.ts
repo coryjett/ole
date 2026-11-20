@@ -30,7 +30,7 @@ describe('bullets engine', () => {
   it('throttle: two pushes within minIntervalMs give one chat call; after advancing 20s a second call happens', async () => {
     const { now, advance } = makeEngine()
     const chat = vi.fn<ChatFn>().mockResolvedValue({ content: '{"bullets":[]}' })
-    const engine = createBulletsEngine({
+    const engine = createBulletsEngine({ minIntervalMs: 20_000,
       chat,
       tools,
       callTool: vi.fn<CallToolFn>(),
@@ -58,7 +58,7 @@ describe('bullets engine', () => {
     const { now, advance } = makeEngine()
     let resolveChat!: (v: { content: string | null }) => void
     const chat = vi.fn<ChatFn>().mockImplementation(() => new Promise(r => { resolveChat = r }))
-    const engine = createBulletsEngine({
+    const engine = createBulletsEngine({ minIntervalMs: 20_000,
       chat,
       tools,
       callTool: vi.fn(),
@@ -102,7 +102,7 @@ describe('bullets engine', () => {
       return { content: '{"bullets":[]}' }
     })
 
-    const engine = createBulletsEngine({ chat, tools, callTool, context: () => null, onBullets: () => {}, now, maxLookupsPerMinute: 3 })
+    const engine = createBulletsEngine({ minIntervalMs: 20_000, chat, tools, callTool, context: () => null, onBullets: () => {}, now, maxLookupsPerMinute: 3 })
 
     engine.push(line('A', 'hello', 10))
     await advance(0)
@@ -129,7 +129,7 @@ describe('bullets engine', () => {
       if (req.tools && last?.role !== 'tool') return { content: null, tool_calls: [{ id: `t${chat.mock.calls.length}`, type: 'function' as const, function: { name: 's__search_calls', arguments: '{"query":"mtls"}' } }] }
       return { content: '{"bullets":[]}' }
     })
-    const engine = createBulletsEngine({ chat, tools, callTool, context: () => null, onBullets: () => {}, now })
+    const engine = createBulletsEngine({ minIntervalMs: 20_000, chat, tools, callTool, context: () => null, onBullets: () => {}, now })
     engine.push(line('A', 'one', 10))
     await advance(0)
     engine.push(line('A', 'two', 70_000))
@@ -141,7 +141,7 @@ describe('bullets engine', () => {
   it('offers no tools when there are none', async () => {
     const { now, advance } = makeEngine()
     const chat = vi.fn<ChatFn>().mockResolvedValue({ content: '{"bullets":[]}' })
-    const engine = createBulletsEngine({ chat, tools: () => [], callTool: vi.fn(), context: () => null, onBullets: () => {}, now })
+    const engine = createBulletsEngine({ minIntervalMs: 20_000, chat, tools: () => [], callTool: vi.fn(), context: () => null, onBullets: () => {}, now })
     engine.push(line('A', 'hello', 10))
     await advance(0)
     expect(chat.mock.calls[0][0].tools).toBeUndefined()
@@ -161,7 +161,7 @@ describe('bullets engine', () => {
       return { content: null, tool_calls: [{ id: `t${round}`, type: 'function' as const, function: { name: 's__search_calls', arguments: JSON.stringify({ query: `q${round}` }) } }] }
     })
 
-    const engine = createBulletsEngine({
+    const engine = createBulletsEngine({ minIntervalMs: 20_000,
       chat,
       tools,
       callTool,
@@ -185,7 +185,7 @@ describe('bullets engine', () => {
     const chat = vi.fn<ChatFn>().mockResolvedValue({
       content: JSON.stringify({ bullets: [{ text: 'has source', source: 'prepared' }, { text: 'no source', source: '' }, { text: 'missing source' }] }),
     })
-    const engine = createBulletsEngine({
+    const engine = createBulletsEngine({ minIntervalMs: 20_000,
       chat,
       tools,
       callTool: vi.fn(),
@@ -211,7 +211,7 @@ describe('bullets engine', () => {
     })
 
     const onBullets = vi.fn()
-    const engine = createBulletsEngine({
+    const engine = createBulletsEngine({ minIntervalMs: 20_000,
       chat,
       tools,
       callTool: vi.fn(),
@@ -240,7 +240,7 @@ describe('bullets engine', () => {
       return { content: '{"bullets":[{"text":"ok","source":"s"}]}' }
     })
 
-    const engine = createBulletsEngine({
+    const engine = createBulletsEngine({ minIntervalMs: 20_000,
       chat,
       tools,
       callTool: vi.fn(),
