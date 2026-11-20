@@ -49,12 +49,34 @@ describe('during a call (#126)', () => {
 
 describe('Home before a call (#126, #128)', () => {
   const home = (o: Partial<OleLiveState>) => base({ meetingId: null, prepared: null, matched: false, ...o })
-  it('the next meeting and its briefing state', () => {
-    const next = { title: 'Globex renewal', start: Date.UTC(2026, 10, 20, 15, 0) }
-    expect(html(OleNextCall, home({ nextMeeting: { ...next, briefing: 'ready' } }))).toContain('Briefing ready')
-    expect(html(OleNextCall, home({ nextMeeting: { ...next, briefing: 'preparing' } }))).toContain('Preparing…')
-    expect(html(OleNextCall, home({ nextMeeting: { ...next, briefing: 'none' } }))).toContain('No match yet')
-    expect(html(OleNextCall, home({ nextMeeting: { ...next, briefing: 'none' } }))).toContain('Next: Globex renewal')
+  it('the next meeting and its briefing state, from Ole\'s own Prepare (#142)', () => {
+    const next = { title: 'Globex renewal', start: Date.UTC(2026, 10, 20, 15, 0), preparesAt: null }
+    const preparesAt = new Date(2026, 10, 20, 14, 20).getTime()
+    const at = html(OleNextCall, home({ nextMeeting: { ...next, status: 'scheduled', preparesAt } }))
+    expect(at).toContain('Prepares at 14:20')
+    expect(at).toContain('>Prepare now</button>')
+    expect(html(OleNextCall, home({ nextMeeting: { ...next, status: 'preparing' } }))).toContain('Preparing…')
+    // a Prepare running for it shows Preparing… even before the state says so
+    expect(html(OleNextCall, home({ preparing: true, nextMeeting: { ...next, status: 'scheduled', preparesAt } }))).toContain('Preparing…')
+    const ready = html(OleNextCall, home({ nextMeeting: { ...next, status: 'ready' } }))
+    expect(ready).toContain('Briefing ready')
+    expect(ready).toContain('>Prepare again</button>')
+    const none = html(OleNextCall, home({ nextMeeting: { ...next, status: 'no-match' } }))
+    expect(none).toMatch(/>No match<\/span>/)
+    expect(none).toContain('>Prepare again</button>')
+    const idle = html(OleNextCall, home({ nextMeeting: { ...next, status: 'idle' } }))
+    expect(idle).toContain('Next: Globex renewal')
+    expect(idle).not.toContain('ole-next-state')
+    expect(idle).not.toContain('No match')
+    expect(idle).toContain('>Prepare now</button>')
+    expect(idle).toContain('data-testid="ole-prepare-for-link"')
+  })
+  it('Prepare now is disabled while preparing or blocked; none without a next meeting', () => {
+    const next = { title: 'Globex renewal', start: 1, status: 'idle' as const, preparesAt: null }
+    expect(html(OleNextCall, home({ preparing: true, nextMeeting: next }))).toMatch(/data-testid="ole-prepare-next"[^>]*disabled/)
+    expect(html(OleNextCall, home({ blocked: 'Add an OpenAI key', nextMeeting: next }))).toMatch(/data-testid="ole-prepare-next"[^>]*disabled/)
+    expect(html(OleNextCall, home({ nextMeeting: next }))).not.toMatch(/data-testid="ole-prepare-next"[^>]*disabled/)
+    expect(html(OleNextCall, home({}))).not.toContain('ole-prepare-next')
   })
   it('Prepare for… is a link, no Focus field; the header has no Prepare button', () => {
     const out = html(OleNextCall, home({}))

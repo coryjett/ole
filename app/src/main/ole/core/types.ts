@@ -99,8 +99,11 @@ export type OleLiveState = {
   subjectCandidates?: Array<{ name: string; resolved: true }>
   /** who Ole prepared this call for from the conversation: a name the user chose, or one Ole picked itself (auto) (#126) */
   subject?: { name: string; auto: boolean } | null
-  /** before a call: the next calendar meeting and the state of its briefing, for Home (#126) */
-  nextMeeting?: { title: string; start: number; briefing: 'ready' | 'preparing' | 'none' } | null
+  /**
+   * before a call: the next calendar meeting and the state of its briefing, for Home (#126, #142): status from Ole's own
+   * Prepare only (nextStatus.ts); preparesAt: when auto-prepare will prepare it (status scheduled), else null
+   */
+  nextMeeting?: { title: string; start: number; status: import('./nextStatus').NextStatus; preparesAt: number | null } | null
 }
 
 /** how an Export for replay went; turns: the recorded bullets turns in the file (0 for a call from before they were kept) */
