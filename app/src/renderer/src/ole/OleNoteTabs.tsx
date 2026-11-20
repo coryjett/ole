@@ -11,7 +11,7 @@ import { BeforeYouJoinStrip, OleBriefing } from './OleBriefing'
 import { OleBullets } from './OleBullets'
 import { OleCallLists } from './OleCallLists'
 import { OlePanelHeader } from './OlePanel'
-import { OleExportReplay, OleSavedBulletsView } from './OleSavedBullets'
+import { OleCallSourcesView, OleExportReplay, OleSavedBulletsView } from './OleSavedBullets'
 import { OLE_TAB_LABEL, oleTabs, quickNoteKey, unseenCount, type OleTab } from './oleTabs'
 
 type Saved = { meetingId: string; bullets: OleBullet[]; answers: OleAnswer[]; call: OleCallMemory | null; briefing: string }
@@ -144,4 +144,12 @@ export function OleQuickNote({ onAdd }: { onAdd: (text: string) => boolean }) {
       }} />
     {text && <button data-testid="ole-quick-note-clear" aria-label="Clear" className="workspace-button" onClick={() => { setText(''); input.current?.focus() }}>×</button>}
   </div>
+}
+
+/** Under the Summary after a call (#170): what Ole kept, with its sources, and Export for replay */
+export function OleCallSources({ meetingId, ole }: { meetingId: string; ole: OleNote }) {
+  const saved = ole.saved
+  if (!saved || saved.meetingId !== meetingId) return null
+  const exportable = !!saved.briefing.trim() || saved.bullets.length > 0 || saved.answers.length > 0 || !!saved.call
+  return <OleCallSourcesView meetingId={meetingId} bullets={saved.bullets} answers={saved.answers} exportable={exportable} />
 }
