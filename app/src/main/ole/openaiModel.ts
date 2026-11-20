@@ -42,6 +42,8 @@ const reason = async (res: Response, key: string): Promise<string> => {
 type Request = {
   key: string; model: string; baseUrl?: string; fetch?: typeof fetch; signal?: AbortSignal
   messages: OpenAIMessage[]; stream: boolean; maxTokens?: number; temperature?: number; tools?: unknown[]; response_format?: unknown
+  /** false: leave reasoning_effort out (a model that does not take it, see postSampled) */
+  reasoning?: boolean
 }
 
 /** POST /chat/completions; a refused request rejects with a readable OpenAIError */
@@ -49,7 +51,11 @@ async function post(r: Request): Promise<Response> {
   const body: Record<string, unknown> = { model: r.model, stream: r.stream, messages: r.messages }
   if (r.maxTokens) body.max_completion_tokens = r.maxTokens
   if (r.temperature !== undefined) body.temperature = r.temperature
-  if (r.tools?.length) body.tools = r.tools
+  if (r.tools?.length) {
+    body.tools = r.tools
+    // gpt-5.6 and later refuse function tools on Chat Completions unless reasoning is off (#3)
+    if (r.reasoning !== false) body.reasoning_effort = 'none'
+  }
   if (r.response_format !== undefined) body.response_format = r.response_format
   const res = await (r.fetch ?? fetch)(`${(r.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '')}/chat/completions`, {
     method: 'POST',
@@ -63,11 +69,16 @@ async function post(r: Request): Promise<Response> {
   throw new OpenAIError(`OpenAI request failed (${res.status})${why ? `: ${why}` : ''}`, res.status)
 }
 
-/** some models take only the default temperature: asked again without it, once */
+/**
+ * Some models take only the default temperature, and older ones do not know reasoning_effort: a 400 naming either
+ * is asked again without it, once each.
+ */
 async function postSampled(r: Request): Promise<Response> {
   try { return await post(r) } catch (e) {
-    if (r.temperature === undefined || !(e instanceof OpenAIError) || e.status !== 400 || !/temperature/i.test(e.message)) throw e
-    return post({ ...r, temperature: undefined })
+    if (!(e instanceof OpenAIError) || e.status !== 400) throw e
+    if (r.temperature !== undefined && /temperature/i.test(e.message)) return postSampled({ ...r, temperature: undefined })
+    if (r.tools?.length && r.reasoning !== false && /reasoning_effort/i.test(e.message) && !/tools/i.test(e.message)) return postSampled({ ...r, reasoning: false })
+    throw e
   }
 }
 
