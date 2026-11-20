@@ -18,6 +18,7 @@ import { answerQuestion } from './ask'
 import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
 import { feedbackOf, recordRating } from './feedback'
 import { createTurnRecorder, type RecordedCall } from './turnRecorder'
+import { createCallSummarizer } from './callSummary'
 import { buildReplayFixture, exportFileName, type ExportSegment } from './replayExport'
 import type { OleExportResult } from '../../shared/types'
 
@@ -42,6 +43,8 @@ type Deps = {
   loadAnswers?: (meetingId: string) => OleAnswer[]
   /** calendar events between two times (#52, #56); without it Ole never reads the calendar */
   upcoming?: (fromMs: number, toMs: number) => Promise<Upcoming[]>
+  /** the user's own notes for a meeting, read at each bullets turn and Ask (#77) */
+  notes?: (meetingId: string) => string
   /** how often auto-prepare looks at the calendar; 0 turns the timer off (tests) */
   autoEveryMs?: number
   /** the call's bullets turns (#70), saved with it on this Mac and read back for Export for replay */
@@ -76,6 +79,9 @@ export function hookOle(d: Deps): {
   let error: string | null = null
   let meetingId: string | null = null
   let engine: BulletsEngine | null = null
+  let summarizer: ReturnType<typeof createCallSummarizer> | null = null
+  /** the user's notes, empty on any failure: a notes read never breaks a turn (#77) */
+  const notesNow = (id: string) => { try { return d.notes?.(id) ?? '' } catch { return '' } }
   let bullets: OleBullet[] = []
   let tools: OleTool[] = []
   /** enabled servers that failed the last time tools were loaded (#33) */
@@ -254,7 +260,10 @@ export function hookOle(d: Deps): {
     send()
     let got: Omit<OleAnswer, 'id' | 'question' | 'at'>
     try {
-      got = await answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(), call: (n, a) => call(n, a) })
+      // the call's memory: running summary (#75), the user's notes (#77), earlier questions oldest first (#76)
+      const earlier = answers.filter(a => !a.pending && a.id !== id).slice(0, 3).reverse().map(a => ({ question: a.question, text: a.text }))
+      got = await answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(), call: (n, a) => call(n, a),
+        summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier })
     } catch (e) { got = { text: `Couldn't answer: ${e instanceof Error ? e.message : String(e)}` } }
     // the call ended while answering: the answer belongs to it, not to the next call
     const done = (a: OleAnswer): OleAnswer => a.id === id ? { id, question, at: a.at, ...got } : a
@@ -336,7 +345,11 @@ export function hookOle(d: Deps): {
         context: () => prepared,
         onBullets: all => { bullets = all; send() },
         feedback: () => { try { return feedbackOf(d.file) } catch { return { useful: [], notUseful: [] } } },
+        summary: () => summarizer?.summary() ?? '',
+        notes: () => notesNow(m.id),
       }) : null
+      // the running summary updates in the background from the live model (#75)
+      summarizer = engine ? createCallSummarizer({ chat }) : null
       send()
     },
     meetingRenamed(m) {
@@ -346,11 +359,15 @@ export function hookOle(d: Deps): {
     },
     segment(seg) {
       if (seg.meetingId !== meetingId || !engine || !seg.text.trim()) return
-      engine.push({ speaker: seg.speaker || (seg.track === 'me' ? 'Me' : 'Them'), text: seg.text, startMs: seg.startMs })
+      const line = { speaker: seg.speaker || (seg.track === 'me' ? 'Me' : 'Them'), text: seg.text, startMs: seg.startMs }
+      engine.push(line)
+      summarizer?.push(line)
     },
     meetingStopped(id) {
       if (id !== meetingId) return
       engine?.stop()
+      summarizer?.stop()
+      summarizer = null
       finished.set(id, bullets)
       try { d.save?.(id, bullets) } catch (e) { console.warn('saving the context bullets failed', e) }
       // pinned bullets join the person's own notes, so the summary and the notes keep them (#54)
