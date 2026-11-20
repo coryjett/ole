@@ -694,6 +694,7 @@
   "Installs when you restart Yogurt": "Mai-install kapag ni-restart mo ang Yogurt",
   "You can restart after recording": "Maaari kang mag-restart pagkatapos mag-record",
   "Later": "Mamaya",
+  "After the call": "Pagkatapos ng tawag",
   "Restart": "I-restart",
   "Yogurt couldn't restart. Try again.": "Hindi ma-restart ang Yogurt. Subukan muli.",
   "Yogurt {version}": "Yogurt {version}",

@@ -652,6 +652,7 @@
   "Installs when you restart Yogurt": "Yogurtの再起動時にインストールされます",
   "You can restart after recording": "録音後に再起動できます",
   "Later": "後で",
+  "After the call": "通話の後で",
   "Restart": "再起動",
   "Yogurt couldn't restart. Try again.": "Yogurtを再起動できませんでした。もう一度お試しください。",
   "Yogurt {version}": "Yogurt {version}",

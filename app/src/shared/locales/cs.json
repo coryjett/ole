@@ -725,6 +725,7 @@
   "Installs when you restart Yogurt": "Nainstaluje se po restartu Yogurtu",
   "You can restart after recording": "Restart bude možný po nahrávání",
   "Later": "Později",
+  "After the call": "Po hovoru",
   "Restart": "Restartovat",
   "Yogurt couldn't restart. Try again.": "Yogurt se nepodařilo restartovat. Zkuste to znovu.",
   "Yogurt {version}": "Yogurt {version}",

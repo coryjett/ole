@@ -750,6 +750,7 @@
   "Installs when you restart Yogurt": "يُثبّت عند إعادة تشغيل Yogurt",
   "You can restart after recording": "يمكنك إعادة التشغيل بعد التسجيل",
   "Later": "لاحقًا",
+  "After the call": "بعد المكالمة",
   "Restart": "إعادة التشغيل",
   "Yogurt couldn't restart. Try again.": "تعذّرت إعادة تشغيل Yogurt. حاول مجددًا.",
   "Yogurt {version}": "Yogurt {version}",

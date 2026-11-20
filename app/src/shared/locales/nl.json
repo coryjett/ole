@@ -694,6 +694,7 @@
   "Installs when you restart Yogurt": "Wordt geïnstalleerd als je Yogurt herstart",
   "You can restart after recording": "Je kunt herstarten na de opname",
   "Later": "Later",
+  "After the call": "Na het gesprek",
   "Restart": "Herstarten",
   "Yogurt couldn't restart. Try again.": "Yogurt kon niet herstarten. Probeer het opnieuw.",
   "Yogurt {version}": "Yogurt {version}",

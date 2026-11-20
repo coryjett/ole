@@ -682,6 +682,7 @@
   "Installs when you restart Yogurt": "A Yogurt újraindításakor települ",
   "You can restart after recording": "A felvétel után újraindítható",
   "Later": "Később",
+  "After the call": "A hívás után",
   "Restart": "Újraindítás",
   "Yogurt couldn't restart. Try again.": "A Yogurt nem tudott újraindulni. Próbáld újra.",
   "Yogurt {version}": "Yogurt {version}",
