@@ -12,7 +12,7 @@ import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from './bullets'
 import { answerQuestion, askErrorKind } from './ask'
 import { createEnricher, mayGetNames, type Enricher } from './enrich'
-import { nextMeeting as pickNextMeeting, pickAutoPrepare, sameEvent } from './calendarMatch'
+import { nextMeeting as pickNextMeeting, NOW_WINDOW_MS, pickAutoPrepare, sameEvent } from './calendarMatch'
 import { nextStatus } from './nextStatus'
 import { createMeetingSource, failureKind, type Meeting, type SourceCall } from './meetingSource'
 import { accountSearchTools, autoPickDue, createSubjectResolver, resultNames, searchArgs, SUBJECT_AUTO_PICK_MS, SUBJECT_NAME_MAX, SUBJECT_RETRY_MS, type SubjectResolution, type SubjectResolver } from './subject'
@@ -332,9 +332,10 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   async function prepareNext(): Promise<OleLiveState> {
     const it = next
     if (meetingId || preparing || !it) return state()
-    // a Prepare that can't run (blocked, no server) leaves the meeting to auto-prepare once it can
-    if (!blocked() && serversOf(host.settings.get()).some(s => s.enabled)) autoDone.add(it.id)
-    return prepare({ meetingTitle: it.title, startsAt: it.start, note: it.note, noteSource: it.source, auto: it })
+    const result = await prepare({ meetingTitle: it.title, startsAt: it.start, note: it.note, noteSource: it.source, auto: it })
+    // only a Prepare that worked takes the meeting from auto-prepare; a failed or blocked one leaves it to retry (#144)
+    if (!result.error && result.prepared?.meetingTitle === it.title) autoDone.add(it.id)
+    return state()
   }
 
   /** the next meeting for Home (#126), from the meeting source's list (cached there for a few minutes) */
@@ -598,7 +599,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
           event = await calendarEvent(); looked = true
           if (meetingId !== m.id) return
           // the same event, and a call title that agrees with it; with no event on now, a call titled like it before it ends
-          reuse = (sameEvent(event, autoEvent) && (!named || named === autoEvent.title)) || (!event && !!named && named === autoEvent.title && startedAt < autoEvent.end)
+          reuse = (sameEvent(event, autoEvent) && (!named || named === autoEvent.title)) || (!event && !!named && named === autoEvent.title && Math.abs(startedAt - autoEvent.start) <= NOW_WINDOW_MS)
           if (reuse) callStartsAt = autoEvent.start
           else if (prepared === before) { prepared = null; send() }
         } else if (manualFresh && (before?.focus || before?.meetingTitle)) {
