@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openStore, type Meeting, type Store } from '../src/main/store'
-import { hookCallNames, watchIds, type WatchLine } from '../src/main/callNames'
+import { LIVE_ATTENDEES_MS, hookCallNames, watchIds, type WatchLine } from '../src/main/callNames'
 import { readCall, type AxNode } from '../src/main/callNames/parse'
 
 const dirs: string[] = [], stores: Store[] = []
@@ -199,6 +199,23 @@ describe('hookCallNames', () => {
     s.audio(0, 1_000_100)
     for (let t = 1_000_000; t < 1_005_000; t += 500) s.emit(webexLine(t))
     expect(s.hook.nameFor(s.m.id, 1000, 3000)).toBe('Riley Okafor')
+  })
+
+  it('people seen in the call join the attendees during the call, not only after it, and never the person themselves', () => {
+    const s = setup({ attendees: [{ name: 'Dana Smith', email: 'dana@example.com' }] })
+    s.start()
+    s.audio(0, 1_000_100)
+    s.emit(zoomLine(1_000_100, ['Alex Morgan', 'Dana Smith', 'Ann Lee'], 'Dana Smith', 'Alex Morgan'))
+    // not on the first reading: a few seconds of readings first, so who is "me" is known
+    expect(s.store.meeting(s.m.id)!.attendees).toHaveLength(1)
+    s.audio(0, 1_000_100 + LIVE_ATTENDEES_MS)
+    s.emit(zoomLine(1_000_100 + LIVE_ATTENDEES_MS, ['Alex Morgan', 'Dana Smith', 'Ann Lee', 'Bo Chen'], 'Ann Lee', 'Alex Morgan'))
+    expect(s.store.meeting(s.m.id)!.attendees).toEqual([{ name: 'Dana Smith', email: 'dana@example.com' }, { name: 'Ann Lee', email: null }, { name: 'Bo Chen', email: null }])
+    expect(s.changed).toEqual([s.m.id])
+    // nothing new: no write, no refresh
+    s.audio(0, 1_000_100 + 2 * LIVE_ATTENDEES_MS)
+    s.emit(zoomLine(1_000_100 + 2 * LIVE_ATTENDEES_MS, ['Alex Morgan', 'Ann Lee'], 'Ann Lee', 'Alex Morgan'))
+    expect(s.changed).toEqual([s.m.id])
   })
 
   it('after the meeting every line of the other side is named again from the whole timeline; new people join the attendees', async () => {

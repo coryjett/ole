@@ -48,13 +48,15 @@ export const WATCH_EVERY_MS = 400
 const APP_LAG_MS = 750
 /** no reading for this long while recording: the reader is stuck (seen once, 11 minutes of Them), so it starts again */
 export const QUIET_MS = 5000
+/** Ole: how often people seen in the call join the attendees while it runs (#164); the first wait lets the readings say who is "me" */
+export const LIVE_ATTENDEES_MS = 10_000
 /** at most this many fresh starts per meeting, so an app that never answers can't start readers forever */
 const MAX_RESTARTS = 20
 /** changes of who talks written to the log, per meeting (enough to check a real call, never a flood) */
 const LOGGED_CHANGES = 30
 
 type Sample = Omit<CallSample, 'ms'> & { t: number }
-type Session = { app: string | null; ids: string[]; heardAt: number; restarts: number; samples: Sample[]; priorLines: Set<number>; watch?: { stop(): void }; everyApp: boolean; offset?: number; startedAt: number; pictured: boolean; errors: Set<string>; last: string; logged: number }
+type Session = { app: string | null; ids: string[]; heardAt: number; restarts: number; samples: Sample[]; priorLines: Set<number>; watch?: { stop(): void }; everyApp: boolean; offset?: number; startedAt: number; pictured: boolean; errors: Set<string>; last: string; logged: number; liveAt: number }
 
 export function hookCallNames(p: {
   store: Pick<Store, 'meeting' | 'segments' | 'setSegmentSpeakers' | 'updateMeeting'>
@@ -87,6 +89,16 @@ export function hookCallNames(p: {
     return s.samples.map(({ t, ...r }) => ({ ...r, ms: t - zero - APP_LAG_MS }))
   }
 
+  /** everyone seen in the call so far joins the meeting's attendees; how many were added */
+  const addSeen = (id: string, s: Session): number => {
+    const cur = p.store.meeting(id)
+    if (!cur) return 0
+    const known = new Set(cur.attendees.map((a) => a.name.toLocaleLowerCase()))
+    const added = othersIn(timeline(s), { myNames: p.myNames() }).filter((n) => !known.has(n.toLocaleLowerCase()))
+    if (added.length) p.store.updateMeeting(id, { attendees: [...cur.attendees, ...added.map((name) => ({ name, email: null }))] })
+    return added.length
+  }
+
   const onLine = (id: string, s: Session, l: WatchLine) => {
     s.heardAt = now()
     if (l.error || !l.app || !l.windows) {
@@ -109,11 +121,16 @@ export function hookCallNames(p: {
     const said = `${r.speaking.length} of ${r.participants.length}${r.me ? ', me known' : ''}`
     if (said !== s.last && s.logged < LOGGED_CHANGES) { s.logged++; log(`call names: ${kind} talking ${said}`) }
     s.last = said
+    // Ole: the note shows the people in the call while it runs, not only after it (#164)
+    if (now() - s.liveAt >= LIVE_ATTENDEES_MS) {
+      s.liveAt = now()
+      if (addSeen(id, s)) p.changed(id)
+    }
   }
 
   p.onStart((m) => {
     const ids = watchIds(m.app)
-    const s: Session = { app: m.app, ids, heardAt: now(), restarts: 0, everyApp: !m.app, samples: [], priorLines: new Set(p.store.segments(m.id, { hidden: true }).map((line) => line.id)), startedAt: m.resume ? m.resume.startedAt - m.resume.startMs : m.startedAt, pictured: false, errors: new Set(), last: '', logged: 0 }
+    const s: Session = { app: m.app, ids, heardAt: now(), restarts: 0, everyApp: !m.app, samples: [], priorLines: new Set(p.store.segments(m.id, { hidden: true }).map((line) => line.id)), startedAt: m.resume ? m.resume.startedAt - m.resume.startMs : m.startedAt, pictured: false, errors: new Set(), last: '', logged: 0, liveAt: now() }
     sessions.set(m.id, s)
     if (!ids.length) { log(`call names: ${m.app} can't be read, the other side is Them`); return }
     try { s.watch = p.watch(ids, (l) => onLine(m.id, s, l)) } catch (e) { console.error('call names: the watch did not start', e) }
@@ -160,12 +177,9 @@ export function hookCallNames(p: {
       const moved = names.filter((x, i) => x.speaker !== lines[i].speaker)
       if (moved.length) p.store.setSegmentSpeakers(moved)
       // everyone seen in the call is one of the people at the meeting
-      const cur = p.store.meeting(m.id)
-      const known = new Set(cur?.attendees.map((a) => a.name.toLocaleLowerCase()) ?? [])
-      const added = othersIn(tl, o).filter((n) => !known.has(n.toLocaleLowerCase()))
-      if (cur && added.length) p.store.updateMeeting(m.id, { attendees: [...cur.attendees, ...added.map((name) => ({ name, email: null }))] })
-      log(`call names: ${s.samples.length} readings, ${names.filter((x) => x.speaker).length} of ${lines.length} lines of the other side named, ${added.length} people added`)
-      if (moved.length || added.length) p.changed(m.id)
+      const added = addSeen(m.id, s)
+      log(`call names: ${s.samples.length} readings, ${names.filter((x) => x.speaker).length} of ${lines.length} lines of the other side named, ${added} people added`)
+      if (moved.length || added) p.changed(m.id)
     })().catch((e) => console.error('call names after the meeting failed', e)).finally(() => { sessions.delete(m.id); finals.delete(m.id) })
     finals.set(m.id, final)
   })
