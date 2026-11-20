@@ -98,6 +98,8 @@ Yogurt's local data folder, renamed for Ole. Yogurt does not encrypt its store t
 
 ## Fork rules
 
+Ole is a tracking fork (decided by Cory): it keeps pulling Yogurt's updates rather than making a clean break, because the fragile parts (Zoom and Teams speaker detection, macOS permissions, transcription) are Yogurt's and keep being fixed upstream. Branding goes through build config and one constants file where possible, Ole's code lives in its own folders, and Yogurt's files change only at a few small seams, so most merges are clean.
+
 - Keep Yogurt's LICENSE and copyright notice; credit Yogurt in the README and About screen.
 - Rename everything user-visible: app name, bundle ID, icon and logo, data folder, tray text. MIT covers the code, not the Yogurt name or logo.
 - Repoint or disable auto-update before anything else, so Ole can never update itself into Yogurt.
