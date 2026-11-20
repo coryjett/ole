@@ -181,6 +181,57 @@ export function parseBullets(content: string | null): Array<{ text: string; sour
 
 const normalise = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 
+/** words that carry no fact of their own, left out when comparing two bullets (#81) */
+const STOP_WORDS = new Set(('a an the and or but nor so of to in on at by for with from into onto over under about as than then '
+  + 'is are was were be been being am do does did done has have had having will would can could should may might must shall '
+  + 'it its it\'s this that these those there here their they them he she his her we our you your i me my us '
+  + 'not no yes also too very just only still already again now same more most less some any all each per via '
+  + 'what which who whom whose when where why how if while after before since until up down out off new').split(' '))
+
+/** a word cut to a rough stem, so "fixes", "fixed" and "fixing" compare equal; "429s" becomes "429" */
+const stem = (w: string) => {
+  if (/^\d[\d.]*s$/.test(w)) return w.slice(0, -1)
+  if (/\d/.test(w) || w.length <= 3) return w
+  const y = w.replace(/(?:ies|ied)$/, 'y')
+  if (y !== w) return y
+  const cut = w.replace(/(?:ing|ed|es|s)$/, '')
+  const base = cut.length >= 3 ? cut : w
+  return base.length > 3 ? base.replace(/e$/, '') : base
+}
+
+/** the content words of a bullet (#81): lower case, stop words out, numbers and versions (2.3, 429s) kept */
+export function contentWords(text: string): Set<string> {
+  const words = text.toLowerCase().match(/[a-z0-9]+(?:[.'’][a-z0-9]+)*/g) ?? []
+  return new Set(words.map(w => w.replace(/[’']s$/, '')).filter(w => !STOP_WORDS.has(w)).map(stem).filter(w => w.length > 1 || /\d/.test(w)))
+}
+
+/** numbers, versions and dates: two bullets that differ in one of these state different facts */
+const SPECIFIC = /\d|^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/
+
+/** share of the smaller bullet's content words that two bullets must share to count as the same fact (#81) */
+export const NEAR_DUPLICATE = 0.6
+/** and at least this many shared words, so one shared product name never makes two bullets the same */
+const NEAR_DUPLICATE_MIN_SHARED = 2
+
+/**
+ * A new bullet that restates an earlier one in other words (#81): most of the smaller one's content words appear in
+ * the other. "Fixed in 2.3" and "2.3 fixes the 429s" match; "Fixed in 2.3" and "Fixed in 2.4" do not.
+ */
+export function nearDuplicate(text: string, earlier: string[], threshold = NEAR_DUPLICATE): boolean {
+  const a = contentWords(text)
+  if (!a.size) return false
+  return earlier.some(e => {
+    const b = contentWords(e)
+    if (!b.size) return false
+    let shared = 0
+    for (const w of a) if (b.has(w)) shared++
+    if (shared < NEAR_DUPLICATE_MIN_SHARED || shared / Math.min(a.size, b.size) < threshold) return false
+    // a number or date each side has and the other lacks is a different fact ("renews 30 June", "renews 30 July")
+    const own = (x: Set<string>, y: Set<string>) => [...x].some(w => SPECIFIC.test(w) && !y.has(w))
+    return !(own(a, b) && own(b, a))
+  })
+}
+
 /** same tool, same arguments: key order, case and spacing in string values do not matter */
 function canonical(v: unknown): unknown {
   if (typeof v === 'string') return normalise(v)
@@ -295,6 +346,7 @@ export function createBulletsEngine(opts: {
       }
       if (stopped) return
       const seen = new Set(list.map(b => normalise(b.text)))
+      const shownTexts = list.map(b => b.text)
       const fresh: OleBullet[] = []
       const headings = briefingHeadings(opts.context()?.text ?? '')
       let dropped = 0, repeated = 0
@@ -303,8 +355,10 @@ export function createBulletsEngine(opts: {
         // a briefing heading isn't a source you can check (#37)
         if (onlyHeadings(b.source, headings)) { dropped++; continue }
         const key = normalise(b.text)
-        if (seen.has(key)) { repeated++; continue }
+        // the same words, or the same fact in other words, as a bullet already shown (#81)
+        if (seen.has(key) || nearDuplicate(b.text, shownTexts)) { repeated++; continue }
         seen.add(key)
+        shownTexts.push(b.text)
         // the excerpts are checked against what Ole actually has; one that doesn't match is left out, never shown (#39)
         const sources = `${opts.context()?.text ?? ''}\n${messages.filter(m => m.role === 'tool').map(m => m.content ?? '').join('\n')}`
         const spoken = recentWindow(lines, windowMs).map(l => l.text).join(' ')
