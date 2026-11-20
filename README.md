@@ -5,7 +5,7 @@
 <h1 align="center">Ole</h1>
 
 <p align="center">
-  A live call companion for Solo SEs. It listens to the call, and Siesta whispers back.
+  A live call companion. It listens to the call, and Siesta whispers back.
 </p>
 
 <p align="center">
