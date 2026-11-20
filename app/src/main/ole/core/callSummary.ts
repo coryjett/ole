@@ -1,6 +1,7 @@
 // Ole: a running summary of the call (#75), so live bullets and Ask keep what was discussed beyond the last few
 // minutes. Updated in the background from the previous state and only the lines since, never blocking a turn.
-// Structured (#82): the summary text, the questions raised and still open, and the commitments (who will do what).
+// Structured (#82): the summary text, the questions raised and still open, and the commitments (who will do what),
+// each marked done once the call shows it carried out (#158).
 import type { ChatFn, TranscriptLine } from './bullets'
 import type { OleAnswer, OleCallMemory, OleCommitment } from './types'
 
@@ -16,10 +17,11 @@ export const ITEM_MAX = 140
 export const SUMMARY_SYSTEM = [
   'You keep a running record of a live call for the user, who is on it.',
   'Given the record so far and the newest part of the conversation, reply with the updated record as JSON only:',
-  '{"summary":"...","openQuestions":["..."],"commitments":[{"who":"...","what":"..."}]}',
+  '{"summary":"...","openQuestions":["..."],"commitments":[{"who":"...","what":"...","done":false}]}',
   '"summary": plain short lines, about 150 words at most. Keep topics discussed, decisions and names of things (products, features, numbers, dates). Drop small talk.',
   '"openQuestions": questions raised on the call that are still unanswered, each one short line. Drop a question once it has been answered.',
-  '"commitments": what someone on the call said they will do. "who" is the person or side as the call names them ("Me" for the user), "what" one short line. Keep earlier commitments unless they were withdrawn.',
+  '"commitments": what someone on the call said they will do. "who" is the person or side as the call names them ("Me" for the user), "what" one short line. Return every earlier commitment, in the same words.',
+  '"done": true only when the newest part of the call shows the commitment was actually carried out on the call (it was shown, sent, answered or done while everyone was there), otherwise false. Never guess and never mark one done because it was only discussed or promised again. A commitment already marked done stays done unless the conversation clearly reopens it. Return every earlier commitment with its done flag.',
   `At most ${LIST_MAX} of each. Never invent anything; when the new part adds nothing, return the record unchanged.`,
 ].join('\n')
 
@@ -49,10 +51,42 @@ function commitments(v: unknown): OleCommitment[] {
     const who = clip(line(o?.who), 60)
     const key = `${who.toLowerCase()}|${what.toLowerCase()}`
     if (seen.has(key)) continue
-    seen.add(key); out.push({ who, what })
+    // only a real true is done (#158): a missing, string or other flag reads as open
+    seen.add(key); out.push(o?.done === true ? { who, what, done: true } : { who, what })
     if (out.length === LIST_MAX) break
   }
   return out
+}
+
+/** the same commitment across updates: its words, case, spacing and punctuation aside (the model may name who differently) */
+const sameWhat = (c: OleCommitment) => c.what.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+
+/**
+ * The reply's commitments against the previous ones (#158): a previous commitment the reply left out is kept as it
+ * was, never silently dropped; one the reply carries without a done flag keeps its done (only an explicit false
+ * reopens it). Under the cap, new commitments give way to kept ones.
+ */
+function mergeCommitments(reply: OleCommitment[], previous: OleCommitment[], raw: unknown[]): OleCommitment[] {
+  const before = new Map(previous.map(c => [sameWhat(c), c]))
+  // which reply items said done at all, by their words (raw, since the parsed item drops a non-true flag)
+  const flagged = new Set<string>()
+  for (const item of raw) {
+    const o = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : null
+    if (o && typeof o.done === 'boolean') flagged.add(sameWhat({ who: '', what: clip(line(o.what), ITEM_MAX) }))
+  }
+  const matched = new Set<string>()
+  const out: Array<{ c: OleCommitment; fresh: boolean }> = []
+  for (const c of reply) {
+    const k = sameWhat(c), prev = before.get(k)
+    if (!prev) { out.push({ c, fresh: true }); continue }
+    if (matched.has(k)) continue
+    matched.add(k)
+    out.push({ c: !flagged.has(k) && prev.done && !c.done ? { ...c, done: true } : c, fresh: false })
+  }
+  const missing = previous.filter(c => !matched.has(sameWhat(c)))
+  let room = LIST_MAX - out.filter(o => !o.fresh).length - missing.length
+  // the reply's order, then what it left out
+  return [...out.filter(o => !o.fresh || room-- > 0).map(o => o.c), ...missing]
 }
 
 /**
@@ -69,7 +103,7 @@ export function parseCallMemory(content: string | null, previous: OleCallMemory)
   return {
     summary,
     openQuestions: Array.isArray(o.openQuestions) ? questions(o.openQuestions) : previous.openQuestions,
-    commitments: Array.isArray(o.commitments) ? commitments(o.commitments) : previous.commitments,
+    commitments: Array.isArray(o.commitments) ? mergeCommitments(commitments(o.commitments), previous.commitments, o.commitments) : previous.commitments,
   }
 }
 
@@ -87,13 +121,16 @@ export function savedCallMemory(v: unknown): OleCallMemory | null {
 export const isEmptyMemory = (m: OleCallMemory) => !m.summary.trim() && !m.openQuestions.length && !m.commitments.length
 
 const commitmentLine = (c: OleCommitment) => c.who ? `${c.who}: ${c.what}` : c.what
+const open = (m: OleCallMemory) => m.commitments.filter(c => !c.done)
+const done = (m: OleCallMemory) => m.commitments.filter(c => c.done)
 
-/** the record as the bullets and Ask prompts take it (#82): the summary text, then the two short lists */
+/** the record as the bullets and Ask prompts take it (#82): the summary text, then the short lists (done apart, #158) */
 export function callMemoryText(m: OleCallMemory): string {
   const parts: string[] = []
   if (m.summary.trim()) parts.push(m.summary.trim())
   if (m.openQuestions.length) parts.push(`Open questions:\n${m.openQuestions.map(q => `- ${q}`).join('\n')}`)
-  if (m.commitments.length) parts.push(`Commitments:\n${m.commitments.map(c => `- ${commitmentLine(c)}`).join('\n')}`)
+  if (open(m).length) parts.push(`Commitments:\n${open(m).map(c => `- ${commitmentLine(c)}`).join('\n')}`)
+  if (done(m).length) parts.push(`Done during the call:\n${done(m).map(c => `- ${commitmentLine(c)}`).join('\n')}`)
   return parts.join('\n\n')
 }
 
@@ -122,7 +159,8 @@ export function noteItem(v: string, max?: number): string {
 
 /**
  * The "From Ole" notes section a finished call adds to the meeting's notes (#83): the running summary, open
- * questions, commitments and the questions asked with their answers, oldest first. '' when there is nothing.
+ * questions, the commitments still open, those done during the call (#158, so next steps don't repeat them) and the
+ * questions asked with their answers, oldest first. '' when there is nothing; an empty part is left out.
  */
 export function fromOleNotes(m: OleCallMemory, answers: OleAnswer[] = []): string {
   const parts: string[] = []
@@ -131,8 +169,10 @@ export function fromOleNotes(m: OleCallMemory, answers: OleAnswer[] = []): strin
   if (summary.length) parts.push(summary.join('\n'))
   const questions = m.openQuestions.map(q => noteItem(q)).filter(Boolean)
   if (questions.length) parts.push(`**Open questions**\n${questions.map(q => `- ${q}`).join('\n')}`)
-  const promised = m.commitments.map(c => ({ who: noteItem(c.who), what: noteItem(c.what) })).filter(c => c.what)
+  const flat = (cs: OleCommitment[]) => cs.map(c => ({ who: noteItem(c.who), what: noteItem(c.what) })).filter(c => c.what)
+  const promised = flat(open(m)), kept = flat(done(m))
   if (promised.length) parts.push(`**Commitments**\n${promised.map(c => `- ${commitmentLine(c)}`).join('\n')}`)
+  if (kept.length) parts.push(`**Done during the call**\n${kept.map(c => `- ${commitmentLine(c)}`).join('\n')}`)
   const asked = answers.filter(answered).sort((a, b) => a.at - b.at).map(a => ({ q: noteItem(a.question, NOTE_QUESTION_MAX), text: noteItem(a.text, NOTE_ANSWER_MAX), source: a.source ? noteItem(a.source) : '' })).filter(a => a.q && a.text)
   if (asked.length) parts.push(`**Asked during the call**\n${asked.map(a => `- ${a.q}: ${a.text}${a.source ? ` (${a.source})` : ''}`).join('\n')}`)
   return parts.length ? `## From Ole\n${parts.join('\n\n')}` : ''
@@ -164,7 +204,8 @@ export function createCallSummarizer(o: { chat: ChatFn; now?: () => number; ever
         { role: 'user', content: [
           `Summary so far:\n${before.summary || '(none yet)'}`,
           `Open questions so far:\n${before.openQuestions.length ? before.openQuestions.map(q => `- ${q}`).join('\n') : '(none)'}`,
-          `Commitments so far:\n${before.commitments.length ? before.commitments.map(c => `- ${commitmentLine(c)}`).join('\n') : '(none)'}`,
+          // as JSON with the flag (#158), so the reply can carry each one back in the same words and shape
+          `Commitments so far:\n${before.commitments.length ? JSON.stringify(before.commitments.map(c => ({ who: c.who, what: c.what, done: !!c.done }))) : '(none)'}`,
           `Newest part of the call:\n${lines.map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}`,
         ].join('\n\n') },
       ], response_format: { type: 'json_object' } })
