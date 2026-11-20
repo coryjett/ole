@@ -31,7 +31,7 @@ function BulletControls({ b, onPin, onRate }: { b: OleBullet; onPin: (id: string
   </span>
 }
 
-export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate }: { bullets: OleBullet[]; prepared: OlePrepared | null; /** 'none': no cap, the page around it scrolls (the note's Live tab, #108) */
+export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate, header: showHeader = true }: { bullets: OleBullet[]; prepared: OlePrepared | null; /** the "Prepared for" line; the Live tab says who the briefing is for instead (#138, #140) */ header?: boolean; /** 'none': no cap, the page around it scrolls (the note's Live tab, #108) */
   maxHeight?: number | 'none'; now?: number
   /** live call only: pin (#54) and rate (#55); a saved meeting shows the marks without buttons */
   onPin?: (id: string, on: boolean) => void; onRate?: (id: string, r: 'up' | 'down' | null) => void }) {
@@ -42,7 +42,7 @@ export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(
   const shown = all ? sorted : sorted.slice(0, BULLETS_OPEN)
   const folded = sorted.length - shown.length
   return <section data-testid="ole-bullets" className="ole-bullets flex flex-col gap-2" aria-label="Context">
-    <p data-testid="ole-bullets-header" className="widget-preview-speaker" title={header}>{header}</p>
+    {showHeader && <p data-testid="ole-bullets-header" className="widget-preview-speaker" title={header}>{header}</p>}
     {!sorted.length ? <p className="widget-preview-empty">Context will appear here as the call goes.</p>
       : <div data-testid="ole-bullets-scroll" style={{ maxHeight, overflowY: 'auto' }}>
         <ul role="list" className="flex flex-col gap-1">
