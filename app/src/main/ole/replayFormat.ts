@@ -23,7 +23,7 @@ export type ReplayFixture = {
   /** model latency for replies that do not give their own; default 0 */
   latencyMs?: number
   /** engine settings for this replay; defaults are the app's */
-  settings?: { minIntervalMs?: number; windowMs?: number; maxLookupsPerMinute?: number }
+  settings?: { minIntervalMs?: number; fastMinMs?: number; windowMs?: number; maxLookupsPerMinute?: number }
 }
 
 export type FailureKind = `http ${number}` | 'timeout' | 'network' | 'parse' | 'error'

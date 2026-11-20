@@ -180,7 +180,7 @@ describe('record a call, export it, replay it (#70 with #66)', () => {
     const input = { name: 'round-trip', meetingTitle: context.meetingTitle!, segments, briefing: { text: context.text, meetingTitle: context.meetingTitle }, tools: live.recorded.tools, turns: live.recorded.turns }
 
     const report = await replayCall(buildReplayFixture(input))
-    expect(report.turns).toEqual({ total: 4, failed: 1, unrecorded: 0 })
+    expect(report.turns).toEqual({ total: 4, failed: 1, unrecorded: 0, fast: 0 })
     expect(report.timeline.find(t => t.failed)?.failed).toBe('http 503')
     expect(report.shown.map(s => s.text)).toEqual(['Certs rotate every 24h by default', 'Daily rotation meets their audit need'])
     expect(report.lookups).toEqual({ asked: 1, made: 1, refused: 0, unrecorded: 0 })

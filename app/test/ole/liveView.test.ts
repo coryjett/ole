@@ -5,8 +5,8 @@ import { beforeYouJoin } from '../../src/renderer/src/ole/OleBriefing'
 import { LiveView } from '../../src/renderer/src/ole/OlePanel'
 
 const text = '## Before you join\n- Kickoff moves POC to production\n- Bedrock fix still owed\n- They want one place for policy\n- extra\n## Who\n- Artem, architect'
-const state = (bullets = [{ id: 'a', text: 'Same 429s at a fintech', source: 'call', at: 0 }]) => ({
-  meetingId: 'm', preparing: false, error: null, blocked: null, unavailable: [], answers: [], bullets,
+const state = (bullets = [{ id: 'a', text: 'Same 429s at a fintech', source: 'call', at: 0 }], lists: { openQuestions?: string[]; commitments?: Array<{ who: string; what: string }> } = {}) => ({
+  meetingId: 'm', preparing: false, error: null, blocked: null, unavailable: [], answers: [], bullets, openQuestions: lists.openQuestions ?? [], commitments: lists.commitments ?? [],
   prepared: { meetingTitle: 'Kickoff', focus: null, preparedAt: 1, text },
 })
 

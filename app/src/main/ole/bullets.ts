@@ -181,6 +181,57 @@ export function parseBullets(content: string | null): Array<{ text: string; sour
 
 const normalise = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 
+/** words that carry no fact of their own, left out when comparing two bullets (#81) */
+const STOP_WORDS = new Set(('a an the and or but nor so of to in on at by for with from into onto over under about as than then '
+  + 'is are was were be been being am do does did done has have had having will would can could should may might must shall '
+  + 'it its it\'s this that these those there here their they them he she his her we our you your i me my us '
+  + 'not no yes also too very just only still already again now same more most less some any all each per via '
+  + 'what which who whom whose when where why how if while after before since until up down out off new').split(' '))
+
+/** a word cut to a rough stem, so "fixes", "fixed" and "fixing" compare equal; "429s" becomes "429" */
+const stem = (w: string) => {
+  if (/^\d[\d.]*s$/.test(w)) return w.slice(0, -1)
+  if (/\d/.test(w) || w.length <= 3) return w
+  const y = w.replace(/(?:ies|ied)$/, 'y')
+  if (y !== w) return y
+  const cut = w.replace(/(?:ing|ed|es|s)$/, '')
+  const base = cut.length >= 3 ? cut : w
+  return base.length > 3 ? base.replace(/e$/, '') : base
+}
+
+/** the content words of a bullet (#81): lower case, stop words out, numbers and versions (2.3, 429s) kept */
+export function contentWords(text: string): Set<string> {
+  const words = text.toLowerCase().match(/[a-z0-9]+(?:[.'’][a-z0-9]+)*/g) ?? []
+  return new Set(words.map(w => w.replace(/[’']s$/, '')).filter(w => !STOP_WORDS.has(w)).map(stem).filter(w => w.length > 1 || /\d/.test(w)))
+}
+
+/** numbers, versions and dates: two bullets that differ in one of these state different facts */
+const SPECIFIC = /\d|^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/
+
+/** share of the smaller bullet's content words that two bullets must share to count as the same fact (#81) */
+export const NEAR_DUPLICATE = 0.6
+/** and at least this many shared words, so one shared product name never makes two bullets the same */
+const NEAR_DUPLICATE_MIN_SHARED = 2
+
+/**
+ * A new bullet that restates an earlier one in other words (#81): most of the smaller one's content words appear in
+ * the other. "Fixed in 2.3" and "2.3 fixes the 429s" match; "Fixed in 2.3" and "Fixed in 2.4" do not.
+ */
+export function nearDuplicate(text: string, earlier: string[], threshold = NEAR_DUPLICATE): boolean {
+  const a = contentWords(text)
+  if (!a.size) return false
+  return earlier.some(e => {
+    const b = contentWords(e)
+    if (!b.size) return false
+    let shared = 0
+    for (const w of a) if (b.has(w)) shared++
+    if (shared < NEAR_DUPLICATE_MIN_SHARED || shared / Math.min(a.size, b.size) < threshold) return false
+    // a number or date each side has and the other lacks is a different fact ("renews 30 June", "renews 30 July")
+    const own = (x: Set<string>, y: Set<string>) => [...x].some(w => SPECIFIC.test(w) && !y.has(w))
+    return !(own(a, b) && own(b, a))
+  })
+}
+
 /** same tool, same arguments: key order, case and spacing in string values do not matter */
 function canonical(v: unknown): unknown {
   if (typeof v === 'string') return normalise(v)
@@ -191,6 +242,66 @@ function canonical(v: unknown): unknown {
 export function callKey(name: string, args: unknown): string {
   return `${name} ${JSON.stringify(canonical(args))}`
 }
+
+/** the shortest gap between turns when the other side asks something or names something new (#79) */
+export const FAST_MIN_MS = 10_000
+
+/** a line that opens like a question: an interrogative first word, after an optional filler ("so", "and", "okay") */
+const INTERROGATIVE = /^(?:(?:so|and|but|ok|okay|um|uh|well|right|also)[,\s]+)?(?:what|how|why|when|where|who|which|can|could|does|do|is|are|will|would|should)\b/i
+/** a capitalised word that names nothing: pronoun contractions, greetings, fillers, days and months */
+const PLAIN_CAPITALISED = new Set(('i i\'m i\'ll i\'ve i\'d ok okay yeah yes no hello hi hey thanks thank sorry please sure right well so '
+  + 'monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december '
+  + 'english mr mrs ms dr god').split(' '))
+/** a number that is not a term: 3rd, 10am, 30s, 5k, 20% */
+const PLAIN_NUMBER = /^\d+(?:st|nd|rd|th|s|am|pm|k|m|x|%)?$/i
+
+/** the words of a text as the trigger compares them: lower case, punctuation at the ends dropped */
+export function knownWords(text: string): Set<string> {
+  return new Set(text.toLowerCase().match(/[a-z0-9][a-z0-9.+#_/-]*[a-z0-9+#]|[a-z0-9]/g) ?? [])
+}
+
+/** a line that asks something: ends with a question mark or opens with an interrogative (#79) */
+export function isQuestion(text: string): boolean {
+  const t = text.trim()
+  return t.endsWith('?') || INTERROGATIVE.test(t)
+}
+
+/**
+ * Terms in a line that look like a product, feature, version, person or organisation (#79): CamelCase (OpenShift,
+ * eBPF), letters with digits or a version (S3, K8s, 2.3), ALLCAPS of 2+ letters (SSO, APIs), or a capitalised word
+ * that doesn't start a sentence. In the order they appear.
+ */
+export function candidateTerms(text: string): string[] {
+  const out: string[] = []
+  const tokens = text.split(/\s+/)
+  tokens.forEach((raw, i) => {
+    const tok = raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9+#]+$/g, '').replace(/[’']s$/, '')
+    if (!tok) return
+    const startsSentence = i === 0 || /[.!?:]["')\]]*$/.test(tokens[i - 1])
+    const code = /\d/.test(tok) && !PLAIN_NUMBER.test(tok) && (/\d\.\d/.test(tok) || /[a-z]/i.test(tok))
+    const caps = /^[A-Z]{2,}\d*s?$/.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
+    const camel = /^[A-Za-z]*[a-z][A-Z][A-Za-z0-9]*$/.test(tok)
+    const capitalised = !startsSentence && /^[A-Z][a-z]{2,}$/.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
+    if (code || caps || camel || capitalised) out.push(tok)
+  })
+  return out
+}
+
+/**
+ * Whether a line from the other side should bring the next bullets turn forward (#79): a question, or a term the
+ * briefing and the bullets so far never mention and that hasn't already done so. Pure string work, no model call.
+ */
+export function fastTrigger(text: string, known: Set<string>, already: Set<string> = new Set()): { kind: 'question' } | { kind: 'term'; term: string } | null {
+  if (isQuestion(text)) return { kind: 'question' }
+  for (const term of candidateTerms(text)) {
+    const key = term.toLowerCase()
+    if (!known.has(key) && !already.has(key)) return { kind: 'term', term: key }
+  }
+  return null
+}
+
+/** the user's own track: only the other side's lines bring a turn forward (#79) */
+const isOwnLine = (speaker: string) => speaker.trim().toLowerCase() === 'me'
 
 /** the pinned bullets as a notes section, so the summary and the notes keep them (#54); '' when none */
 export function pinnedNotes(bullets: OleBullet[]): string {
@@ -216,6 +327,8 @@ export function createBulletsEngine(opts: {
   /** the timer the throttle waits on; the replay harness (#66) passes a virtual one so a call replays at its own pace */
   timers?: { set: (fn: () => void, ms: number) => unknown; clear: (handle: unknown) => void }
   minIntervalMs?: number
+  /** the shorter gap after a question or a new term from the other side (#79); 0 turns fast turns off */
+  fastMinMs?: number
   maxLookupsPerMinute?: number
   windowMs?: number
 }): BulletsEngine {
@@ -233,36 +346,63 @@ export function createBulletsEngine(opts: {
   let lookups: number[] = []
   let stopped = false, running = false, dirty = false, lastRun = -Infinity, seq = 0
   let timer: unknown = null
+  // a question or a new term from the other side brings the next turn forward to fastMinMs (#79), never slower
+  const fastMinMs = Math.min(Math.max(0, opts.fastMinMs ?? FAST_MIN_MS), minIntervalMs)
+  let urgent = false
+  /** terms that already brought a turn forward: each does so once per call */
+  const triggered = new Set<string>()
+  let knownFor: { text: string; list: OleBullet[]; words: Set<string> } | null = null
+  /** the briefing's and the bullets' words, worked out again only when either changes */
+  const known = () => {
+    const text = opts.context()?.text ?? ''
+    if (!knownFor || knownFor.text !== text || knownFor.list !== list) knownFor = { text, list, words: knownWords(`${text}\n${list.map(b => b.text).join('\n')}`) }
+    return knownFor.words
+  }
 
   const schedule = () => {
     if (stopped || running || !dirty || timer !== null) return
-    const wait = lastRun + minIntervalMs - now()
+    const wait = lastRun + (urgent && fastMinMs > 0 ? fastMinMs : minIntervalMs) - now()
     if (wait <= 0) { void run(); return }
     timer = timers.set(() => { timer = null; schedule() }, wait)
   }
 
-  const lookup = async (call: ToolCall, allowed: Set<string>): Promise<string> => {
+  // Lookups asked in the same round, still waiting for the server: an identical one shares the request (#80).
+  const inflight = new Map<string, Promise<string>>()
+  /**
+   * Everything up to the server request runs synchronously, so a round's lookups started together (#80) still take
+   * the per-minute slots in order and an identical call in the same round never reaches the server twice.
+   */
+  const lookup = (call: ToolCall, allowed: Set<string>): Promise<string> => {
     const name = call.function.name
-    if (!allowed.has(name)) return 'not allowed: unknown tool'
+    if (!allowed.has(name)) return Promise.resolve('not allowed: unknown tool')
     let args: unknown
-    try { args = call.function.arguments?.trim() ? JSON.parse(call.function.arguments) : {} } catch { return 'not allowed: invalid arguments' }
-    if (!args || typeof args !== 'object' || Array.isArray(args)) return 'not allowed: invalid arguments'
+    try { args = call.function.arguments?.trim() ? JSON.parse(call.function.arguments) : {} } catch { return Promise.resolve('not allowed: invalid arguments') }
+    if (!args || typeof args !== 'object' || Array.isArray(args)) return Promise.resolve('not allowed: invalid arguments')
     const key = callKey(name, args)
     const kept = results.get(key)
-    if (kept !== undefined) return `${EARLIER_LOOKUP}\n${kept}`
+    if (kept !== undefined) return Promise.resolve(`${EARLIER_LOOKUP}\n${kept}`)
+    const pending = inflight.get(key)
+    if (pending) return pending.then(r => `${EARLIER_LOOKUP}\n${r}`)
     const at = now()
     lookups = lookups.filter(t => at - t < 60_000)
-    if (lookups.length >= maxLookups) return 'not allowed: lookup limit reached, answer from what you have'
+    if (lookups.length >= maxLookups) return Promise.resolve('not allowed: lookup limit reached, answer from what you have')
     lookups.push(at)
-    let result: string
-    try { result = await opts.callTool(name, JSON.stringify(args)) } catch { result = 'lookup failed' }
-    if (results.size >= MAX_KEPT_RESULTS) results.delete(results.keys().next().value!)
-    results.set(key, result)
-    return result
+    let request: Promise<string>
+    try { request = Promise.resolve(opts.callTool(name, JSON.stringify(args))) } catch (e) { request = Promise.reject(e) }
+    const done = request.catch(() => 'lookup failed').then(result => {
+      inflight.delete(key)
+      if (results.size >= MAX_KEPT_RESULTS) results.delete(results.keys().next().value!)
+      results.set(key, result)
+      return result
+    })
+    inflight.set(key, done)
+    return done
   }
 
   const run = async () => {
-    running = true; dirty = false; lastRun = now()
+    // fast: brought forward by a trigger, earlier than the usual rhythm would have run it (#79)
+    const fast = urgent && now() - lastRun < minIntervalMs
+    running = true; dirty = false; urgent = false; lastRun = now()
     try {
       const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.() })
       const offered = opts.tools()
@@ -272,13 +412,17 @@ export function createBulletsEngine(opts: {
       for (let round = 1; reply.tool_calls?.length; round++) {
         if (stopped) return
         messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
-        for (const call of reply.tool_calls) messages.push({ role: 'tool', tool_call_id: call.id, content: await lookup(call, allowed) })
+        // a round's lookups are independent: they run together, answered in the order they were asked (#80)
+        const calls = reply.tool_calls
+        const answered = await Promise.all(calls.map(call => lookup(call, allowed)))
+        calls.forEach((call, i) => messages.push({ role: 'tool', tool_call_id: call.id, content: answered[i] }))
         // The last round offers no tools, so the model has to answer.
         reply = await opts.chat({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
         if (round >= TOOL_ROUNDS) break
       }
       if (stopped) return
       const seen = new Set(list.map(b => normalise(b.text)))
+      const shownTexts = list.map(b => b.text)
       const fresh: OleBullet[] = []
       const headings = briefingHeadings(opts.context()?.text ?? '')
       let dropped = 0, repeated = 0
@@ -287,8 +431,10 @@ export function createBulletsEngine(opts: {
         // a briefing heading isn't a source you can check (#37)
         if (onlyHeadings(b.source, headings)) { dropped++; continue }
         const key = normalise(b.text)
-        if (seen.has(key)) { repeated++; continue }
+        // the same words, or the same fact in other words, as a bullet already shown (#81)
+        if (seen.has(key) || nearDuplicate(b.text, shownTexts)) { repeated++; continue }
         seen.add(key)
+        shownTexts.push(b.text)
         // the excerpts are checked against what Ole actually has; one that doesn't match is left out, never shown (#39)
         const sources = `${opts.context()?.text ?? ''}\n${messages.filter(m => m.role === 'tool').map(m => m.content ?? '').join('\n')}`
         const spoken = recentWindow(lines, windowMs).map(l => l.text).join(' ')
@@ -300,7 +446,7 @@ export function createBulletsEngine(opts: {
       }
       // never silent (#48, #59): every turn says what happened to its bullets
       const lookupsMade = messages.filter(m => m.role === 'tool').length
-      log(`ole bullets: ${back.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups`)
+      log(`ole bullets: ${back.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups${fast ? ', fast' : ''}`)
       if (fresh.length) { list = [...fresh, ...list]; opts.onBullets([...list]) }
     } catch (e) {
       // the panel stays quiet and the next interval tries again; the log says why (#59)
@@ -319,6 +465,15 @@ export function createBulletsEngine(opts: {
       if (lines.length > 1 && lines[lines.length - 2].startMs > line.startMs) lines.sort((a, b) => a.startMs - b.startMs)
       if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES)
       dirty = true
+      if (fastMinMs > 0 && !urgent && !isOwnLine(line.speaker)) {
+        const hit = fastTrigger(line.text, known(), triggered)
+        if (hit) {
+          urgent = true
+          if (hit.kind === 'term') triggered.add(hit.term)
+          // a turn already waiting for the usual rhythm is brought forward
+          if (timer !== null) { timers.clear(timer); timer = null }
+        }
+      }
       schedule()
     },
     stop() {

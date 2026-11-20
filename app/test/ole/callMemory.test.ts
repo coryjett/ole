@@ -41,7 +41,8 @@ describe('a running summary of the call (#75)', () => {
 
   it('updates every few minutes of new conversation from the previous summary and the new lines only', async () => {
     let clock = 0
-    const chat = vi.fn<ChatFn>().mockResolvedValueOnce({ content: 'S1' }).mockResolvedValueOnce({ content: 'S2' })
+    const rec = (summary: string) => ({ content: JSON.stringify({ summary, openQuestions: [], commitments: [] }) })
+    const chat = vi.fn<ChatFn>().mockResolvedValueOnce(rec('S1')).mockResolvedValueOnce(rec('S2'))
     const s = createCallSummarizer({ chat, now: () => clock })
     s.push({ speaker: 'Them', text: 'first topic', startMs: 0 })
     expect(chat).not.toHaveBeenCalled()

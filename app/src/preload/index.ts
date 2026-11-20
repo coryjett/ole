@@ -258,6 +258,7 @@ const api: YogurtApi = {
     rateBullet: (id, rating) => ipcRenderer.invoke('ole:bullet:rate', id, rating),
     ask: (question) => ipcRenderer.invoke('ole:ask', question),
     answers: (id) => ipcRenderer.invoke('ole:answers', id),
+    call: (id) => ipcRenderer.invoke('ole:call', id),
     exportReplay: (id, o) => ipcRenderer.invoke('ole:export-replay', id, o),
   },
   settings: {

@@ -43,6 +43,7 @@ import { hookOleProviders, providersOf } from './ole/providers'
 import { createOpenAIModel } from './ole/openaiModel'
 import { hookOle, testServer } from './ole/session'
 import { parseRecordedCall } from './ole/turnRecorder'
+import { savedCallMemory } from './ole/callSummary'
 import type { OleAnswer } from './ole/types'
 import type { Llm } from './notes/enhance'
 import { hookOleServers } from './ole/servers'
@@ -582,6 +583,9 @@ app.whenReady().then(() => {
     notes: (id) => store.notes(id).mine,
     // the calendar names a default-titled call (#56) and starts auto-prepare (#52)
     upcoming: async (from, to) => (await readCalendar(from, to)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end })),
+    // the call's summary, open questions and commitments (#82)
+    saveCall: (id, memory) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-call.json'), JSON.stringify(memory, null, 2)),
+    loadCall: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-call.json'); return existsSync(p) ? savedCallMemory(JSON.parse(readFileSync(p, 'utf8'))) : null },
     saveBriefing: (id, text) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-briefing.md'), text),
     loadBriefing: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-briefing.md'); return existsSync(p) ? readFileSync(p, 'utf8').slice(0, 50_000) : '' },
     // the call's bullets turns, for Export for replay (#70): on this Mac only

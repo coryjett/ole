@@ -3,7 +3,7 @@
 import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
-import { hasMatchedRecord, latestNotes, NO_RECORD_RULE, readableSource } from './bullets'
+import { callKey, hasMatchedRecord, latestNotes, NO_RECORD_RULE, readableSource } from './bullets'
 
 /** lookup rounds before the model must answer */
 const TOOL_ROUNDS = 2
@@ -46,11 +46,22 @@ export async function answerQuestion(o: {
   let reply = await o.chat({ messages, ...tools, response_format: { type: 'json_object' } })
   for (let round = 1; reply.tool_calls?.length; round++) {
     messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
-    for (const c of reply.tool_calls) {
-      const result = !allowed.has(c.function.name) ? 'not allowed: unknown tool'
-        : await o.call(c.function.name, c.function.arguments?.trim() || '{}').catch(() => 'lookup failed')
-      messages.push({ role: 'tool', tool_call_id: c.id, content: result })
-    }
+    // a round's lookups run together (#80); the same call twice in one round reaches the server once
+    const same = new Map<string, Promise<string>>()
+    const results = await Promise.all(reply.tool_calls.map(c => {
+      if (!allowed.has(c.function.name)) return 'not allowed: unknown tool'
+      const args = c.function.arguments?.trim() || '{}'
+      let key: string
+      try { key = callKey(c.function.name, JSON.parse(args)) } catch { key = `${c.function.name} ${args}` }
+      const running = same.get(key)
+      if (running) return running
+      let p: Promise<string>
+      try { p = Promise.resolve(o.call(c.function.name, args)) } catch (e) { p = Promise.reject(e) }
+      const result = p.catch(() => 'lookup failed')
+      same.set(key, result)
+      return result
+    }))
+    reply.tool_calls.forEach((c, i) => messages.push({ role: 'tool', tool_call_id: c.id, content: results[i] }))
     // the last round offers no tools, so the model has to answer
     reply = await o.chat({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
     if (round >= TOOL_ROUNDS) break

@@ -40,6 +40,12 @@ export type OleBullet = { id: string; text: string; source: string; at: number; 
 /** a question asked during the call and Ole's answer (#53); pending while it is being answered */
 export type OleAnswer = { id: string; question: string; text: string; source?: string; url?: string; at: number; pending?: boolean };
 
+/** someone on the call said they will do something (#82); who: as the call names them, '' when unclear */
+export type OleCommitment = { who: string; what: string };
+
+/** the call's running record (#75, #82): summary text, questions still open, commitments */
+export type OleCallMemory = { summary: string; openQuestions: string[]; commitments: OleCommitment[] };
+
 /** a tool offered to the model: name is the OpenAI function name (`<serverId>__<tool>`, [A-Za-z0-9_-], max 64) */
 export type OleTool = { name: string; serverId: string; serverName: string; tool: string; description: string; parameters: Record<string, unknown> };
 
