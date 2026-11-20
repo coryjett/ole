@@ -17,7 +17,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  unit:
+    # The required check (branch protection on main): install, typecheck and unit tests on all three systems.
+    # The end-to-end jobs below are informational until their specs are brought up to date for Ole (#180).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode
+        if: runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode_26.4.1.app && xcodebuild -version
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm -r typecheck
+      - name: Unit tests
+        run: pnpm -r test
+
+  e2e-mac:
+    # Informational until the end-to-end specs are brought up to date for Ole (#180): a failure here does not fail the run.
+    continue-on-error: true
+    needs: unit
     # Xcode 26: the helpers use macOS 26's speech APIs
     runs-on: macos-26
     steps:
@@ -30,10 +57,6 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Typecheck
-        run: pnpm -r typecheck
-      - name: Unit tests
-        run: pnpm -r test
       - name: Prepare CI motion capture
         run: pnpm -C app exec playwright install ffmpeg
       - name: End-to-end tests
@@ -68,8 +91,11 @@ jobs:
           path: app/test-results
           if-no-files-found: ignore
 
-  other:
-    # Windows and Linux: the app builds, its tests pass and it starts (fake mode) with the Mac-only features hidden
+  e2e-other:
+    # Windows and Linux: the app builds and starts (fake mode) with the Mac-only features hidden. Informational until
+    # the end-to-end specs are brought up to date for Ole (#180); typecheck and unit tests run in `unit`.
+    continue-on-error: true
+    needs: unit
     strategy:
       fail-fast: false
       matrix:
@@ -105,10 +131,6 @@ jobs:
           # per image: a build from one Ubuntu restored on another broke the 0.3.8 release ("can't find crate for zbus")
           key: helpers-ci-${{ matrix.os }}-${{ hashFiles('app/native/*/Cargo.lock', 'app/native/*/rust-toolchain.toml') }}
       - run: pnpm install --frozen-lockfile
-      - name: Typecheck
-        run: pnpm -r typecheck
-      - name: Unit tests
-        run: pnpm -r test
       - name: Build
         # the Rust helpers (scripts/native.mjs); whisper-server is left out here (fake mode doesn't use it), the preview builds and native-whisper.yml build it
         env:

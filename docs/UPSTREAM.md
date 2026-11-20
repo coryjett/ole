@@ -23,6 +23,7 @@ A running ledger of every change Ole makes to Yogurt-owned files: anything outsi
 
 | Change | Ole issue / PR | Yogurt files |
 |---|---|---|
+| CI split into a required `unit` job (install, typecheck, unit tests on macOS, Linux and Windows) and informational end-to-end jobs (`e2e-mac`, `e2e-other`, `continue-on-error`) until the end-to-end specs are brought up to date for Ole; `main` requires the three `unit` checks | #180 | `.github/workflows/ci.yml` |
 | Ole's IPC, settings fields and live-state types | many (#33, #52, #89, #101, #118/#122, #126, #128, …) | `preload/index.ts`, `shared/types.ts`, `main/settings.ts` |
 | Wiring Ole into the app: session, providers, servers, keys, per-meeting files, notes, calendar, capture protection | many | `main/index.ts` |
 | The Agenda and Yogurt's other calendar reads fall back to the meetings server's list when the Mac calendar has no access or no calendars (`readCalendar` through `ole/yogurt/serverCalendar.ts`; `calendar:day`/`calendar:coming-up` report `granted` then; `calendar:list` names the server); Settings > Calendars notes it | #149 | `main/index.ts`, `shared/types.ts`, `renderer/src/components/CalendarSettings.tsx` |
