@@ -15,6 +15,14 @@ export type PrepareCallFn = (name: string, argsJson: string) => Promise<string>
 export const NO_MATCH_PREFIX = "Couldn't match this call"
 const SEARCH_TOOL = /^(search|find|lookup)_/i
 
+/** the kind of a fast-path failure for the log (#95): never the server's own message, which may carry URLs or ids */
+export function failureKind(e: unknown): 'timeout' | 'transport' | 'server error' {
+  const m = e instanceof Error ? e.message : String(e)
+  if (/timed? ?out|timeout|abort/i.test(m)) return 'timeout'
+  if (/fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|network|socket|unreachable/i.test(m)) return 'transport'
+  return 'server error'
+}
+
 export const PREPARE_SYSTEM = [
   'Keep each source\'s web address (issue, docs page, tracker or record link) next to it when the tool result gives one, as a markdown link. Never make up a link.',
   'You prepare the user for an upcoming call. Who the user is and what matters to them comes from the server guidance and their instructions; without those, brief on the meeting, the people and organisations in it, and what is open between them. (#71)',
@@ -130,7 +138,7 @@ export async function prepareContext(opts: {
       return { tool: t, argsJson, result, id: `fast_path_${i}` }
     } catch (e) {
       // a failure costs nothing: the model's loop runs as it would without the tool
-      log(`ole prepare: ${MEETING_CONTEXT_TOOL} on ${t.serverName} failed (${e instanceof Error ? e.message : String(e)}), using the tool loop`)
+      log(`ole prepare: ${MEETING_CONTEXT_TOOL} on ${t.serverName} failed (${failureKind(e)}), using the tool loop`)
       return null
     } finally {
       clearTimeout(timer)
