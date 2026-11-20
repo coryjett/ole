@@ -12,12 +12,15 @@ import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from './bullets'
 import { answerQuestion } from './ask'
 import { createEnricher, type Enricher } from './enrich'
-import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
+import { eventNow, pickAutoPrepare } from './calendarMatch'
+import { createMeetingSource, type Meeting, type SourceCall } from './meetingSource'
 import { feedbackOf, recordRating } from './feedback'
 import { createTurnRecorder, type RecordedCall } from './turnRecorder'
 import { createCallSummarizer, EMPTY_MEMORY, fromOleNotes, isEmptyMemory } from './callSummary'
 import { buildReplayFixture, exportFileName } from './replayExport'
 
+/** tools older than this are gathered again before the meeting source uses them (#98) */
+const TOOLS_FRESH_MS = 10 * 60_000
 /** a prepared briefing older than this is gathered again when a meeting starts */
 const STALE_MS = 2 * 60 * 60_000
 
@@ -98,7 +101,9 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   let tools: OleTool[] = []
   /** enabled servers that failed the last time tools were loaded (#33) */
   let unavailable: Unavailable[] = []
-  let call: (name: string, argsJson: string) => Promise<string> = async () => 'No MCP tools are available'
+  let call: SourceCall = async () => 'No MCP tools are available'
+  /** when the tools were last gathered (0: never) */
+  let toolsLoadedAt = 0
   let prepareSeq = 0
   /** the call's briefing came from a default title, so a real title prepares it once more (#44) */
   let preparedFromDefault = false
@@ -166,10 +171,32 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     tools = servers.length ? await collectTools(servers, u => failed.push(u)) : []
     unavailable = failed
     const runner = createToolRunner(servers, tools)
-    call = (name, argsJson) => runner.call(name, argsJson)
+    call = (name, argsJson, opts) => runner.call(name, argsJson, opts)
+    toolsLoadedAt = host.clock.now()
   }
 
-  async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string; startsAt?: number | null }): Promise<OleLiveState> {
+  /** with Assistant on Local and Prepare not on this Mac, Ole never contacts the servers (#11) */
+  const serversAllowed = () => !(liveBlocked() && providersOf(host.settings.get()).prepareOn !== 'local') && serversOf(host.settings.get()).some(s => s.enabled)
+  /**
+   * Where meetings come from (#98): the meetings list and "what is this meeting". Every server choice is made in
+   * meetingSource.ts; the session only hands it the tools (gathered again when older than the background check) and
+   * the host calendar as the fallback.
+   */
+  const meetings = createMeetingSource({
+    tools: async () => {
+      if (!serversAllowed()) return []
+      if (!toolsLoadedAt || host.clock.now() - toolsLoadedAt > TOOLS_FRESH_MS) {
+        try { await loadTools() } catch (e) { host.log.warn('loading the MCP tools failed', e); return [] }
+      }
+      return tools
+    },
+    call: (name, argsJson, opts) => call(name, argsJson, opts),
+    calendar: host.calendar,
+    now: () => host.clock.now(),
+    warn: (m, e) => host.log.warn(m, e),
+  })
+
+  async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string; startsAt?: number | null; note?: Meeting['note']; noteSource?: string }): Promise<OleLiveState> {
     // enforced here, not only in the panel: Assistant = Local (without local Prepare) never reaches OpenAI or an MCP server
     if (blocked()) { error = null; send(); return state() }
     if (!serversOf(host.settings.get()).some(s => s.enabled)) { error = 'Add an MCP server in Settings'; send(); return state() }
@@ -185,7 +212,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       const serverPrompts = await collectWarmupPrompts(enabledServers(), { meetingTitle, focus })
       // on this Mac (#5) the notes queue runs it, so it never overlaps a summary
       const onMac = providersOf(host.settings.get()).prepareOn === 'local' && local
-      const raw = await prepareContext({ chat: onMac ? createLocalChat(onMac) : prepareChat, tools, call, meetingTitle, focus, startsAt: o.startsAt ?? null, instructions, serverPrompts })
+      const raw = await prepareContext({ chat: onMac ? createLocalChat(onMac) : prepareChat, tools, call, meetingTitle, focus, startsAt: o.startsAt ?? null, instructions, serverPrompts,
+        source: meetings, note: o.note ? { text: o.note, source: o.noteSource } : null })
       // text posing as a mid-call section never reaches the briefing as one (#86): only the enricher adds those
       const result = { ...raw, text: stripMentioned(raw.text) }
       if (seq !== prepareSeq) return state()
@@ -208,8 +236,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   const reported = new Set<string>()
   async function checkServers(): Promise<void> {
     // with Assistant on Local and Prepare not on this Mac, Ole never contacts the servers (#11)
-    if (liveBlocked() && providersOf(host.settings.get()).prepareOn !== 'local') return
-    if (!serversOf(host.settings.get()).some(s => s.enabled) || preparing) return
+    if (!serversAllowed() || preparing) return
     try { await loadTools() } catch (e) { host.log.warn('checking the MCP servers failed', e); return }
     const failing = new Set(unavailable.map(u => u.name))
     for (const u of unavailable) if (!reported.has(u.name)) host.notify?.(`Ole can't use ${u.name}`, `The MCP server ${u.reason === "couldn't be reached" ? "couldn't be reached" : `failed: ${u.reason}`}. Fix it in Settings › Ole before your next call.`)
@@ -219,23 +246,22 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   const every = o.checkEveryMs ?? 10 * 60_000
   if (every > 0) { host.clock.after(5_000, () => void checkServers()); host.clock.every(every, () => void checkServers()) }
 
-  /** the calendar event on now, for a call with a default title (#56); its start goes to a meeting-context tool (#93) */
-  async function calendarEvent(): Promise<Upcoming | null> {
-    if (!host.calendar) return null
-    try { const now = host.clock.now(); return eventNow(await host.calendar.upcoming(now - 12 * 60 * 60_000, now + 60 * 60_000), now) }
+  /** the meeting on now, for a call with a default title (#56); its start goes to a meeting-context tool (#93) */
+  async function calendarEvent(): Promise<Meeting | null> {
+    try { const now = host.clock.now(); return eventNow(await meetings.upcomingMeetings(now - 12 * 60 * 60_000, now + 60 * 60_000), now) }
     catch (e) { host.log.warn('reading the calendar failed', e); return null }
   }
 
   async function autoPrepare(): Promise<void> {
     const p = providersOf(host.settings.get())
-    if (!p.autoPrepare || !host.calendar || meetingId || preparing || blocked()) return
+    if (!p.autoPrepare || meetingId || preparing || blocked()) return
     if (!serversOf(host.settings.get()).some(s => s.enabled)) return
     const now = host.clock.now(), lead = p.autoPrepareLead * 60_000
-    let next: Upcoming | null
-    try { next = pickAutoPrepare(await host.calendar.upcoming(now, now + lead), now, lead, autoDone, host.genericTitle) } catch (e) { host.log.warn('reading the calendar failed', e); return }
+    let next: Meeting | null
+    try { next = pickAutoPrepare(await meetings.upcomingMeetings(now, now + lead), now, lead, autoDone, host.genericTitle) } catch (e) { host.log.warn('reading the calendar failed', e); return }
     if (!next) return
     autoDone.add(next.id)
-    await prepare({ meetingTitle: next.title, startsAt: next.start })
+    await prepare({ meetingTitle: next.title, startsAt: next.start, note: next.note, noteSource: next.source })
     if (prepared?.meetingTitle === next.title && !error) {
       autoTitle = next.title
       host.notify?.('Your briefing is ready', next.title)
@@ -359,7 +385,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
           const event = named ? null : await calendarEvent()
           const title = named ?? event?.title ?? null
           preparedFromDefault = !title
-          await prepare({ meetingTitle: title, forMeeting: m.id, startsAt: event?.start ?? null })
+          await prepare({ meetingTitle: title, forMeeting: m.id, startsAt: event?.start ?? null, note: event?.note, noteSource: event?.source })
         })()
       } else {
         preparedFromDefault = false

@@ -11,7 +11,7 @@ const LONGEST_MS = 12 * 60 * 60_000
 const isMeeting = (e: Upcoming) => e.end - e.start < LONGEST_MS && !!e.title.trim()
 
 /** the event on now or starting within the window; the one whose start is closest to now wins */
-export function eventNow(events: Upcoming[], now: number, windowMs = NOW_WINDOW_MS): Upcoming | null {
+export function eventNow<T extends Upcoming>(events: T[], now: number, windowMs = NOW_WINDOW_MS): T | null {
   const near = events.filter(e => isMeeting(e) && e.start <= now + windowMs && e.end > now)
   near.sort((a, b) => Math.abs(a.start - now) - Math.abs(b.start - now))
   return near[0] ?? null
@@ -19,7 +19,7 @@ export function eventNow(events: Upcoming[], now: number, windowMs = NOW_WINDOW_
 
 /** the soonest meeting starting within the lead time that has a real title and was not prepared yet */
 /** genericTitle: the host's own check (its interface language), English by default */
-export function pickAutoPrepare(events: Upcoming[], now: number, leadMs: number, done: Set<string>, genericTitle: GenericTitle = englishGenericTitle): Upcoming | null {
+export function pickAutoPrepare<T extends Upcoming>(events: T[], now: number, leadMs: number, done: Set<string>, genericTitle: GenericTitle = englishGenericTitle): T | null {
   const due = events.filter(e => isMeeting(e) && e.start > now && e.start <= now + leadMs && !done.has(e.id) && !genericTitle(e.title))
   due.sort((a, b) => a.start - b.start)
   return due[0] ?? null

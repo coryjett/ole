@@ -43,6 +43,7 @@ Ole brings the right context to a call, from whatever systems know your world. Y
 - **Docs during the call.** Add a documentation MCP server (for example Context7 at `https://mcp.context7.com/mcp`, no key) and Ole looks up open-source docs in Prepare, live bullets and Ask.
 - **Your servers set the role.** A server that publishes an MCP prompt named `prepare_for_meeting` tells Ole which tools to call and what a good briefing looks like for its world. Your own warm-up instructions in Settings refine it. Ole's own rules only cover format, sources and privacy.
 - **Servers can hand Ole a meeting's context in one call.** A server with a read-only tool named `get_meeting_context` gets the meeting's title, focus and start time before the model starts, and its answer becomes the briefing's first source, so the model only looks up what is missing.
+- **Meetings from your MCP servers, in the order you set.** A server with a read-only `get_upcoming_meetings` tool supplies the meetings for auto-prepare and for naming a default-titled call (no Mac calendar needed), and the first server in your Settings order that knows a meeting supplies its context.
 - **Careful with names.** Organisations and people your servers mention stay anonymous unless they're part of this meeting, and names never go to a public docs search. When nothing matches the call, bullets stay general.
 - **Never caught out by a broken server.** Ole checks your MCP servers in the background and tells you (on Home and with a notification) when one can't be reached or rejects its key, before the call.
 - **Hidden while you share, if you like.** Turn it on and, while a call records, Ole's windows stay out of screen sharing (and screenshots; macOS can't tell them apart). A few apps may still show them.
@@ -81,7 +82,7 @@ In **Settings > Ole**:
 | Setting | What to put there |
 |---|---|
 | **OpenAI key** | A platform key from platform.openai.com. Needed for the briefing and live bullets, and for OpenAI transcription or summaries. |
-| **MCP servers** | Add each server's name, URL (https, usually ending in `/mcp`) and key, then **Test** to see how many read-only tools Ole can use. |
+| **MCP servers** | Add each server's name, URL (https, usually ending in `/mcp`) and key, then **Test** to see how many read-only tools Ole can use. Move servers up or down: the first one that knows a meeting supplies its context and the meeting list. |
 | **Warm-up instructions** | Optional. How you want Ole to prepare, e.g. "Look up the customer's open tickets and last incident; lead with anything overdue." or "Pull the candidate's profile and interview feedback; list what's still unknown." |
 | **Transcription** | *Local* (whisper.cpp on your Mac) or *OpenAI*. |
 | **Live streaming** | With OpenAI transcription, live calls stream to `gpt-live-transcribe` so text shows within a second or two; if streaming isn't available, Ole falls back to sending the audio in chunks. On by default. |

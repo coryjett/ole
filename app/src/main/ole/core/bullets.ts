@@ -1,5 +1,6 @@
 // Ole: live context bullets. Throttled model calls over the recent transcript and the prepared context.
 import type { OleBullet, OleTool, PreparedContext } from './types'
+import { noteLine } from './meetingSource'
 import { toOpenAiTools } from './tools'
 import { createBulletStream } from './bulletStream'
 
@@ -126,6 +127,8 @@ export function buildBulletsPrompt(args: { context: PreparedContext | null; line
     const about = [context.meetingTitle ? `meeting: ${context.meetingTitle}` : null, context.focus ? `focus: ${context.focus}` : null].filter(Boolean).join(', ')
     parts.push(`Prepared context${about ? ` (${about})` : ''}:\n${context.text}`)
   } else parts.push(`No context prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.focus ? ` Focus: ${context.focus}` : ''}`)
+  // a server's one-line note on the meeting (#98): short extra context, capped where it was read
+  if (context?.note?.text) parts.push(noteLine(context.note))
   if (!hasMatchedRecord(context)) parts.push(noRecordRule(args.mentioned))
   // the person's thumbs from earlier calls tune what is worth surfacing (#55)
   if (feedback?.useful.length) parts.push(`Bullets the user found useful on earlier calls:\n${feedback.useful.map(t => `- ${t}`).join('\n')}`)

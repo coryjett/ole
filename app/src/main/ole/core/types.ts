@@ -59,6 +59,8 @@ export type PreparedContext = {
   focus: string | null;
   text: string;
   preparedAt: number;
+  /** a server's one-line note on the meeting this was prepared for (#98), with the server's name */
+  note?: { text: string; source?: string };
 };
 
 /** what the host's UI sees of the live call companion (never a key) */

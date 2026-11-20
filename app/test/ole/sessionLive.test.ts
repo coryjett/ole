@@ -10,7 +10,8 @@ vi.mock('electron', () => ({
 }))
 vi.mock('../../src/main/ole/core/mcp', async (orig) => {
   const real = await orig<typeof import('../../src/main/ole/core/mcp')>()
-  return { ...real, createMcpClient: () => ({ listTools: async () => [{ name: 'get_upcoming_meetings', inputSchema: { type: 'object' } }], listPrompts: async () => [], getPrompt: async () => '', callTool: async () => '[]' }) }
+  // a server with no meetings list (#98): the host calendar supplies the meetings
+  return { ...real, createMcpClient: () => ({ listTools: async () => [{ name: 'get_account', inputSchema: { type: 'object' } }], listPrompts: async () => [], getPrompt: async () => '', callTool: async () => '[]' }) }
 })
 const openaiChat = vi.fn(async (req: { messages: Array<{ role: string; content: string }> }) => {
   const sys = req.messages[0].content
