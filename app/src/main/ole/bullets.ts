@@ -27,9 +27,12 @@ const clock = (ms: number) => {
 
 export const BULLETS_SYSTEM = [
   'You help a sales engineer during a live customer call by surfacing short context bullets they can glance at.',
-  'Reply with JSON only: {"bullets":[{"text":"...","source":"..."}]}.',
-  'Give 0 to 3 NEW bullets, each under 20 words.',
-  'Every bullet must cite its source: the section of the prepared context it came from, or the tool whose result it came from. With no source, give no bullet. Never invent facts.',
+  'Reply with JSON only: {"bullets":[{"text":"...","source":"...","heard":"...","quote":"..."}]}.',
+  '"heard": the few words from the conversation this bullet answers, copied exactly (under 12 words). "quote": a short excerpt copied exactly from the prepared context or tool result the fact came from (under 25 words).',
+  'Give 0 to 2 NEW bullets. Fewer is better: only what the people on the call do not already know.',
+  'Each bullet is a headline the user can read mid-sentence: 10 words at most, the fact first, no advice verbs (assess, consider, relate, connect, note that). Good: "Same 429s at a fintech, fixed in 2.3". Bad: "Consider relating the rate limiting discussion to the earlier fintech case". Detail belongs in heard and quote.',
+  'Never restate, summarise or comment on what is being said in the call; the user just heard it. "Transcript" is never a source.',
+  'Every bullet must cite the record its fact came from, the way the prepared context or the tool result names it, for example "opportunity: Platform expansion", "call brief, 12 Nov", "issue #412" or "product docs". Copy the source the prepared context gives for that fact. A section heading of the prepared context (such as "Deals" or "Who and why"), "prepared context" and a bare tool name are never sources. With no real source, give no bullet. Never invent facts.',
   'Never repeat or rephrase an earlier bullet.',
   'Anonymise other customers by industry and size, for example "a large financial services customer". Never name another customer; only the current account may be named.',
   'Answer from the prepared context first. You may call the provided tools for facts the prepared context lacks, such as another customer\'s experience or a competitor with no notes. Lookups are limited, so call a tool only for a real gap.',
@@ -51,18 +54,66 @@ export function buildBulletsPrompt(args: { context: PreparedContext | null; line
 }
 
 /** Bullets with both text and source from a model reply; anything malformed is dropped, never thrown. */
-export function parseBullets(content: string | null): Array<{ text: string; source: string }> {
+/** the section headings of a briefing (markdown headings, and short lines ending in a colon), lower-cased */
+export function briefingHeadings(text: string): Set<string> {
+  const out = new Set<string>()
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    const h = line.match(/^#{1,6}\s+(.+?)\s*:?$/) ?? line.match(/^\*\*(.+?)\*\*:?$/) ?? (line.length <= 40 && /:$/.test(line) ? [line, line.slice(0, -1)] : null)
+    if (h) out.add(h[1].replace(/[*_`]/g, '').trim().toLowerCase())
+  }
+  return out
+}
+
+/**
+ * A source a person couldn't look up (#37): empty, or made only of briefing headings, "transcript", "prepared context"
+ * (with or without a heading after it) or bare tool names like "[get_account_health: X]".
+ */
+export function onlyHeadings(source: string, headings: Set<string>): boolean {
+  const parts = source.split(/[;,·]/).map(p => p.replace(/[[\]()]/g, '').trim().toLowerCase()).filter(Boolean)
+  const vague = (p: string) => {
+    const rest = p.replace(/^prepared context\s*(?:[-—:–]\s*)?/, '').trim()
+    return !rest || headings.has(rest) || /^transcript\b/.test(rest) || /^(get|list|search|find|lookup|read|query|fetch|describe)_[a-z0-9_]+(\s*:.*)?$/.test(rest)
+  }
+  return !parts.length || parts.every(vague)
+}
+
+/** words of a span that also appear in the material; 0..1, so a quote can be checked loosely against what Ole has (#39) */
+export function overlap(span: string, material: string): number {
+  const words = span.toLowerCase().match(/[a-z0-9#$%.]{3,}/g) ?? []
+  if (!words.length) return 0
+  const have = material.toLowerCase()
+  return words.filter(w => have.includes(w)).length / words.length
+}
+
+/** share of an excerpt's words that must appear in what Ole has for it to be shown */
+export const EXCERPT_MATCH = 0.7
+/** a bullet longer than this is cut at a word, with an ellipsis */
+export const BULLET_MAX = 90
+
+const clip = (s: string, n: number) => {
+  if (s.length <= n) return s
+  const cut = s.slice(0, n - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > n * 0.6 ? cut.slice(0, space) : cut).replace(/[;,:\s]+$/, '')}…`
+}
+
+export function parseBullets(content: string | null): Array<{ text: string; source: string; heard?: string; quote?: string }> {
   if (!content) return []
   const body = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   let parsed: unknown
   try { parsed = JSON.parse(body) } catch { return [] }
   const list = (parsed as { bullets?: unknown })?.bullets
   if (!Array.isArray(list)) return []
-  const out: Array<{ text: string; source: string }> = []
+  const out: Array<{ text: string; source: string; heard?: string; quote?: string }> = []
   for (const item of list) {
     const text = typeof item?.text === 'string' ? item.text.trim() : ''
     const source = typeof item?.source === 'string' ? item.source.trim() : ''
-    if (text && source) out.push({ text, source })
+    // backstop for a wordy model: a bullet is a headline (#40)
+    const short = clip(text.replace(/\s+/g, ' '), BULLET_MAX)
+    const heard = typeof item?.heard === 'string' ? clip(item.heard.trim().replace(/^["“]|["”]$/g, ''), 100) : ''
+    const quote = typeof item?.quote === 'string' ? clip(item.quote.trim().replace(/^["“]|["”]$/g, ''), 160) : ''
+    if (text && source) out.push({ text: short, source, ...(heard ? { heard } : {}), ...(quote ? { quote } : {}) })
     if (out.length === 3) break
   }
   return out
@@ -93,7 +144,8 @@ export function createBulletsEngine(opts: {
   windowMs?: number
 }): BulletsEngine {
   const now = opts.now ?? Date.now
-  const minIntervalMs = opts.minIntervalMs ?? 20_000
+  // about every 45 s of new conversation: enough to keep up, few enough to read (#38)
+  const minIntervalMs = opts.minIntervalMs ?? 45_000
   const maxLookups = opts.maxLookupsPerMinute ?? 3
   const windowMs = opts.windowMs ?? WINDOW_MS
   const lines: TranscriptLine[] = []
@@ -146,11 +198,19 @@ export function createBulletsEngine(opts: {
       if (stopped) return
       const seen = new Set(list.map(b => normalise(b.text)))
       const fresh: OleBullet[] = []
+      const headings = briefingHeadings(opts.context()?.text ?? '')
       for (const b of parseBullets(reply.content)) {
+        // a briefing heading isn't a source you can check (#37)
+        if (onlyHeadings(b.source, headings)) continue
         const key = normalise(b.text)
         if (seen.has(key)) continue
         seen.add(key)
-        fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now() })
+        // the excerpts are checked against what Ole actually has; one that doesn't match is left out, never shown (#39)
+        const sources = `${opts.context()?.text ?? ''}\n${messages.filter(m => m.role === 'tool').map(m => m.content ?? '').join('\n')}`
+        const spoken = recentWindow(lines, windowMs).map(l => l.text).join(' ')
+        const heard = b.heard && overlap(b.heard, spoken) >= EXCERPT_MATCH ? b.heard : undefined
+        const quote = b.quote && overlap(b.quote, sources) >= EXCERPT_MATCH ? b.quote : undefined
+        fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}) })
       }
       if (fresh.length) { list = [...fresh, ...list]; opts.onBullets([...list]) }
     } catch {

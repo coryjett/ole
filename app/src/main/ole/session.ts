@@ -21,6 +21,9 @@ type Deps = {
   file: string; send: (s: OleLiveState) => void; save?: (meetingId: string, bullets: OleBullet[]) => void
   /** a finished meeting's bullets from disk (Ole was restarted since) */
   load?: (meetingId: string) => OleBullet[]
+  /** the briefing a meeting had when it ended, saved with it and read back (#35) */
+  saveBriefing?: (meetingId: string, text: string) => void
+  loadBriefing?: (meetingId: string) => string
   /** a macOS notification, for a server that just stopped working (#33) */
   notify?: (title: string, body: string) => void
   /** how often the servers are checked in the background; 0 turns the background check off (tests) */
@@ -49,6 +52,7 @@ export function hookOle(d: Deps): {
   let call: (name: string, argsJson: string) => Promise<string> = async () => 'No MCP tools are available'
   let prepareSeq = 0
   const finished = new Map<string, OleBullet[]>()
+  const finishedBriefings = new Map<string, string>()
 
   /** the Mac's own model for Prepare (#5), handed over once Yogurt's notes queue exists */
   let local: LocalRun | null = null
@@ -69,7 +73,7 @@ export function hookOle(d: Deps): {
   }
   const state = (): OleLiveState => ({
     meetingId, preparing, error, bullets, blocked: blocked(), unavailable,
-    prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt } : null,
+    prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt, text: prepared.text } : null,
   })
   const send = () => d.send(state())
 
@@ -144,6 +148,13 @@ export function hookOle(d: Deps): {
   if (every > 0) { setTimeout(() => void checkServers(), 5_000).unref?.(); setInterval(() => void checkServers(), every).unref?.() }
 
   ipcMain.handle('ole:state', () => state())
+  ipcMain.handle('ole:briefing', (_e, id: unknown) => {
+    if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) return ''
+    if (id === meetingId) return prepared?.text ?? ''
+    const found = finishedBriefings.get(id)
+    if (found !== undefined) return found
+    try { return d.loadBriefing?.(id) ?? '' } catch { return '' }
+  })
   ipcMain.handle('ole:retry-servers', async () => { try { await loadTools() } catch (e) { console.warn('loading the MCP tools failed', e) } send(); return state() })
   // a saved meeting's context bullets, newest first; ids are Yogurt's meeting UUIDs
   ipcMain.handle('ole:bullets', (_e, id: unknown) => {
@@ -185,6 +196,7 @@ export function hookOle(d: Deps): {
       engine?.stop()
       finished.set(id, bullets)
       try { d.save?.(id, bullets) } catch (e) { console.warn('saving the context bullets failed', e) }
+      if (prepared?.text) { finishedBriefings.set(id, prepared.text); try { d.saveBriefing?.(id, prepared.text) } catch (e) { console.warn('saving the briefing failed', e) } }
       engine = null
       meetingId = null
       prepared = null

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { OleLiveState } from '../../../shared/types'
 import { OleBullets } from './OleBullets'
+import { OleBriefing } from './OleBriefing'
 
 /** The live state from the main process, kept current. */
 export function useOleState(): OleLiveState | null {
@@ -29,8 +30,10 @@ export function OlePanel({ compact = false }: { compact?: boolean }) {
           maxLength={200} onChange={e => setFocus(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !state.preparing) prepare() }} />
         {focus && <button aria-label="Clear" className="workspace-button" onClick={() => setFocus('')}>×</button>}
       </div>
-      <button data-testid="ole-prepare" className="workspace-button settings-action" disabled={state.preparing || !!state.blocked} onClick={prepare}>
-        {state.preparing ? 'Preparing…' : state.prepared ? 'Prepare again' : 'Prepare for next call'}</button>
+      {/* during a call it rebuilds the briefing the bullets work from, and keeps the bullets (#36) */}
+      <button data-testid="ole-prepare" className="workspace-button settings-action" disabled={state.preparing || !!state.blocked} onClick={prepare}
+        title={state.meetingId ? 'Rebuilds the briefing for a new focus; bullets so far stay.' : undefined}>
+        {state.preparing ? 'Preparing…' : state.meetingId ? 'Refresh briefing' : state.prepared ? 'Prepare again' : 'Prepare for next call'}</button>
     </div>
     {/* a server Ole couldn't use is never skipped silently (#33) */}
     {state.unavailable?.length > 0 && <p data-testid="ole-unavailable" role="alert" className="settings-description" style={{ color: '#e5a50a' }}>
@@ -41,5 +44,7 @@ export function OlePanel({ compact = false }: { compact?: boolean }) {
     {/* bullets belong to a call: shown while one records; a finished call keeps them on its note page */}
     {state.meetingId ? <div className="mt-2"><OleBullets bullets={state.bullets} prepared={state.prepared} /></div>
       : state.prepared && <p data-testid="ole-prepared" className="settings-description mt-2">Prepared for: {[state.prepared.meetingTitle, state.prepared.focus].filter(Boolean).join(' · ') || 'the next call'}</p>}
+    {/* the briefing is readable from the start: open until the first bullets arrive (#35) */}
+    {state.prepared?.text && <OleBriefing key={state.prepared.preparedAt} text={state.prepared.text} defaultOpen={!state.bullets.length} />}
   </section>
 }

@@ -469,7 +469,8 @@ export type UpdateStatus = { version: string; available: boolean; on: boolean; s
 export type OleLiveState = {
   meetingId: string | null
   preparing: boolean
-  prepared: { meetingTitle: string | null; focus: string | null; preparedAt: number } | null
+  /** the briefing, text included so it can be read from the start of the call (#35) */
+  prepared: { meetingTitle: string | null; focus: string | null; preparedAt: number; text: string } | null
   error: string | null
   bullets: import('../main/ole/types').OleBullet[]
   /** why Prepare and live context are off (Assistant on Local, or no OpenAI key); null when they can run */
@@ -486,4 +487,6 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   retryServers(): Promise<OleLiveState>
   /** a meeting's context bullets from the call, newest first; [] when there were none */
   bullets(meetingId: string): Promise<import('../main/ole/types').OleBullet[]>
+  /** a meeting's briefing as it stood when the call ended; '' when there was none (#35) */
+  briefing(meetingId: string): Promise<string>
 }
