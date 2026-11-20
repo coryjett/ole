@@ -194,4 +194,5 @@ export function narrowForPrepare(tools: OleTool[], prompts: WarmupPrompt[] = [])
 }
 
 /** the lookup-style tools live bullets may call (#15): a name rule, so a new search or get tool is included by itself */
-export const isLiveTool = (t: Pick<OleTool, 'tool'>) => /^(search|get|find|lookup|list)(_|$)/i.test(t.tool)
+/** lookup-style tools for live bullets and Ask (#15); query/resolve/fetch/read and dashed names count too (#64) */
+export const isLiveTool = (t: Pick<OleTool, 'tool'>) => /^(search|get|find|lookup|list|query|resolve|fetch|read)([_-]|$)/i.test(t.tool)

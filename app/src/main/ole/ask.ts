@@ -18,6 +18,7 @@ export const ASK_SYSTEM = [
   '"answer": one to three short sentences, the fact first. No preamble, no advice unless asked.',
   '"source": the record the answer came from, named the way the briefing or the tool result names it. "url": its web address exactly as given there; leave it out when there is none. Never make one up.',
   'Answer from the briefing and the call first; call a tool only when they lack the answer.',
+  "Never put a customer's or person's name in a search of public documentation.",
   'Anonymise other customers by industry and size. Never invent facts: when you cannot find the answer, say so in the answer and leave source out.',
 ].join('\n')
 

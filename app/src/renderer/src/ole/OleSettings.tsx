@@ -184,7 +184,7 @@ function AddServer({ disabled, onAdd }: { disabled: boolean; onAdd: (name: strin
     <div data-testid="ole-server-add" className="settings-row">
       <div className="settings-row-copy">
         <p className="settings-label">Add server</p>
-        <p className="settings-description">A name, and its https address (often ending in /mcp).</p>
+        <p className="settings-description">A name, and its https address (often ending in /mcp). During a call Ole sends each server short search phrases from the conversation, so add only servers you trust with that.</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <input data-testid="ole-server-add-name" aria-label="Server name" placeholder="Name" value={name} maxLength={40} disabled={disabled}
