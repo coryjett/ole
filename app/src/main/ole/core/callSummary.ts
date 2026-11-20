@@ -20,7 +20,7 @@ export const SUMMARY_SYSTEM = [
   '{"summary":"...","openQuestions":["..."],"commitments":[{"who":"...","what":"...","done":false}]}',
   '"summary": plain short lines, about 150 words at most. Keep topics discussed, decisions and names of things (products, features, numbers, dates). Drop small talk.',
   '"openQuestions": questions raised on the call that are still unanswered, each one short line. Drop a question once it has been answered.',
-  '"commitments": what someone on the call said they will do. "who" is the person or side as the call names them ("Me" for the user), "what" one short line. Return every earlier commitment, in the same words.',
+  '"commitments": what someone on the call said they will do. "who" is the person or side as the call names them ("Me" for the user), "what" one short line. Return every earlier commitment, in the same words. If the call clearly takes one back, return it with "withdrawn": true.',
   '"done": true only when the newest part of the call shows the commitment was actually carried out on the call (it was shown, sent, answered or done while everyone was there), otherwise false. Never guess and never mark one done because it was only discussed or promised again. A commitment already marked done stays done unless the conversation clearly reopens it. Return every earlier commitment with its done flag.',
   `At most ${LIST_MAX} of each. Never invent anything; when the new part adds nothing, return the record unchanged.`,
 ].join('\n')
@@ -53,7 +53,8 @@ function commitments(v: unknown): OleCommitment[] {
     if (seen.has(key)) continue
     // only a real true is done (#158): a missing, string or other flag reads as open
     seen.add(key); out.push(o?.done === true ? { who, what, done: true } : { who, what })
-    if (out.length === LIST_MAX) break
+    // the reply may run past the cap (old ones plus new); mergeCommitments applies the cap (#160)
+    if (out.length === LIST_MAX * 2) break
   }
   return out
 }
@@ -67,26 +68,45 @@ const sameWhat = (c: OleCommitment) => c.what.toLowerCase().replace(/[^\p{L}\p{N
  * reopens it). Under the cap, new commitments give way to kept ones.
  */
 function mergeCommitments(reply: OleCommitment[], previous: OleCommitment[], raw: unknown[]): OleCommitment[] {
-  const before = new Map(previous.map(c => [sameWhat(c), c]))
-  // which reply items said done at all, by their words (raw, since the parsed item drops a non-true flag)
-  const flagged = new Set<string>()
-  for (const item of raw) {
+  const whoOf = (c: { who: string }) => c.who.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+  // what the raw reply said about each item: an explicit done flag, and whether it was taken back (#160)
+  const rawInfo = raw.map(item => {
     const o = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : null
-    if (o && typeof o.done === 'boolean') flagged.add(sameWhat({ who: '', what: clip(line(o.what), ITEM_MAX) }))
+    return o ? { who: whoOf({ who: line(o.who) }), what: sameWhat({ who: '', what: clip(line(o.what), ITEM_MAX) }), flagged: typeof o.done === 'boolean', withdrawn: o.withdrawn === true } : null
+  }).filter((x): x is NonNullable<typeof x> => !!x)
+  const infoFor = (c: OleCommitment) => rawInfo.find(r => r.what === sameWhat(c) && r.who === whoOf(c)) ?? rawInfo.find(r => r.what === sameWhat(c))
+  // match by who and what; by what alone only when exactly one earlier commitment has those words (#160)
+  const used = new Set<number>()
+  const find = (c: OleCommitment): number => {
+    const w = sameWhat(c), who = whoOf(c)
+    if (who) { const i = previous.findIndex((p, j) => !used.has(j) && sameWhat(p) === w && whoOf(p) === who); if (i >= 0) return i }
+    const same = previous.map((_, j) => j).filter(j => !used.has(j) && sameWhat(previous[j]) === w)
+    return same.length === 1 ? same[0] : -1
   }
-  const matched = new Set<string>()
+  // the reply's order, then what it left out
   const out: Array<{ c: OleCommitment; fresh: boolean }> = []
   for (const c of reply) {
-    const k = sameWhat(c), prev = before.get(k)
-    if (!prev) { out.push({ c, fresh: true }); continue }
-    if (matched.has(k)) continue
-    matched.add(k)
-    out.push({ c: !flagged.has(k) && prev.done && !c.done ? { ...c, done: true } : c, fresh: false })
+    const info = infoFor(c)
+    const i = find(c)
+    if (i < 0) { if (!info?.withdrawn) out.push({ c, fresh: true }); continue }
+    used.add(i)
+    if (info?.withdrawn) continue
+    const prev = previous[i]
+    // one the reply carries without a done flag keeps its done; only an explicit false reopens it (#158)
+    out.push({ c: !info?.flagged && prev.done && !c.done ? { ...c, done: true } : c, fresh: false })
   }
-  const missing = previous.filter(c => !matched.has(sameWhat(c)))
-  let room = LIST_MAX - out.filter(o => !o.fresh).length - missing.length
-  // the reply's order, then what it left out
-  return [...out.filter(o => !o.fresh || room-- > 0).map(o => o.c), ...missing]
+  // a previous commitment the reply left out is kept as it was, never silently dropped (#158)
+  for (let j = 0; j < previous.length; j++) if (!used.has(j)) out.push({ c: previous[j], fresh: false })
+  // at the cap, done commitments (oldest first) make room for new ones before any open one is dropped (#160)
+  const freshCount = () => out.filter(o => o.fresh).length
+  while (out.length > LIST_MAX && freshCount() > 0) {
+    const d = out.findIndex(o => !o.fresh && o.c.done)
+    if (d < 0) break
+    out.splice(d, 1)
+  }
+  // still over: the newest additions give way
+  let room = LIST_MAX - out.filter(o => !o.fresh).length
+  return out.filter(o => !o.fresh || room-- > 0).map(o => o.c)
 }
 
 /**

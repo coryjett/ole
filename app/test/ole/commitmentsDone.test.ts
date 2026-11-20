@@ -45,12 +45,11 @@ describe('reading the done flag (#158)', () => {
     expect(parseCallMemory(reply([{ who: 'Me', what: 'Show the full tool list in the next module', done: false }]), before)!.commitments[0].done).toBeUndefined()
   })
 
-  it('keeps the cap: new commitments give way to kept ones', () => {
+  it('keeps the cap: with every kept one open, new commitments give way (done ones make room first, #160)', () => {
     const full: OleCallMemory = { ...EMPTY_MEMORY, commitments: Array.from({ length: LIST_MAX }, (_, i) => ({ who: '', what: `Old ${i}` })) }
-    const m = parseCallMemory(reply([{ who: '', what: 'New one' }, { who: '', what: 'Old 0', done: true }]), full)!
+    const m = parseCallMemory(reply([{ who: '', what: 'New one' }, { who: '', what: 'Old 0' }]), full)!
     expect(m.commitments).toHaveLength(LIST_MAX)
     expect(m.commitments.map(c => c.what)).not.toContain('New one')
-    expect(m.commitments[0]).toEqual({ who: '', what: 'Old 0', done: true })
   })
 
   it('a saved record keeps done; one saved before the flag reads as open', () => {
