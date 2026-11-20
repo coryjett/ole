@@ -61,6 +61,12 @@ export type OleSession = {
    * the person set. Unchanged for an unmatched call, the live one, or a meeting Ole kept no organization for.
    */
   generatedTitle(meetingId: string, title: string): string
+  /**
+   * what Ole kept of a finished call, as markdown for the summary writer: pinned bullets, then the call's summary, open
+   * questions, commitments and the questions asked. Given to the writer directly, never saved into the person's own
+   * notes (#168). '' for the live call, an unknown id or a call where Ole kept nothing
+   */
+  notesInput(meetingId: string): string
   segment(seg: { meetingId: string; track: 'me' | 'them'; speaker?: string | null; text: string; startMs: number }): void
   bulletsOf(id: string): OleBullet[]
   /** hands over the host's own model for Prepare once it exists (#5; Yogurt: its notes queue) */
@@ -731,10 +737,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       if (!isEmptyMemory(memory)) { finishedCalls.set(id, memory); try { host.files.saveCall?.(id, memory) } catch (e) { host.log.warn('saving the call summary failed', e) } }
       finished.set(id, bullets)
       try { host.files.saveBullets?.(id, bullets) } catch (e) { host.log.warn('saving the context bullets failed', e) }
-      // pinned bullets join the person's own notes, so the summary and the notes keep them (#54); then what Ole kept of
-      // the call: summary, open questions, commitments and the questions asked (#83). One append, so one notes write.
-      const md = [pinnedNotes(bullets), fromOleNotes(memory, answers)].filter(Boolean).join('\n\n')
-      if (md) try { host.notes?.append?.(id, md) } catch (e) { host.log.warn('adding Ole\'s notes to the meeting failed', e) }
+      // pinned bullets (#54) and what Ole kept of the call (#83) reach the summary through notesInput, not the person's
+      // own notes (#168)
       if (answers.length) { finishedAnswers.set(id, answers); try { host.files.saveAnswers?.(id, answers) } catch (e) { host.log.warn('saving the answers failed', e) } }
       answers = []
       if (recorder) {
@@ -757,6 +761,14 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       send()
       // Home shows the next meeting again (#126); with the background timers off (tests) only on request
       if (autoEvery > 0) void refreshNext()
+    },
+    notesInput(id) {
+      if (typeof id !== 'string' || !ID.test(id) || id === meetingId) return ''
+      const read = <T>(load: (() => T) | undefined, none: T): T => { try { return load?.() ?? none } catch { return none } }
+      const kept = finished.get(id) ?? read(host.files.loadBullets ? () => host.files.loadBullets!(id) : undefined, [] as OleBullet[])
+      const memory = finishedCalls.get(id) ?? read(host.files.loadCall ? () => host.files.loadCall!(id) : undefined, null) ?? EMPTY_MEMORY
+      const asked = finishedAnswers.get(id) ?? read(host.files.loadAnswers ? () => host.files.loadAnswers!(id) : undefined, [] as OleAnswer[])
+      return [pinnedNotes(kept), fromOleNotes(memory, asked)].filter(Boolean).join('\n\n')
     },
     generatedTitle(id, title) {
       if (typeof id !== 'string' || !ID.test(id) || id === meetingId) return title

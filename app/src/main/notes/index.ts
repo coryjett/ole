@@ -47,6 +47,8 @@ export function hookNotes(p: {
   me?: () => string
   /** a title written from the notes, as it is saved (Ole: the call's organization in front, #154); as it is without */
   generatedTitle?: (id: string, title: string) => string
+  /** Ole: its record of the call, given to the writer with the person's notes and never saved into them (#168) */
+  extraNotes?: (id: string) => string
 }) {
   const stopped = new Set<string>()
   const stopping = new Map<string, Promise<void>>()
@@ -123,7 +125,9 @@ export function hookNotes(p: {
     const m = p.store.meeting(id)
     if (!m || m.state === 'recording' || resuming.has(id)) return
     const was = currentNotes(id)
-    const mine = was.mine
+    // Ole: its record of the call goes in after the person's own notes, for the writer only (#168)
+    const extra = (() => { try { return p.extraNotes?.(id).trim() ?? '' } catch { return '' } })()
+    const mine = extra ? (was.mine.trim() ? `${was.mine.trimEnd()}\n\n${extra}` : extra) : was.mine
     const segments = p.store.segments(id)
     // nothing said and nothing typed: there is nothing to write up
     if (!segments.length && !mine.trim()) { if (!quiet) finish(m, 'empty'); return }

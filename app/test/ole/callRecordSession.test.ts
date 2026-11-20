@@ -85,16 +85,16 @@ describe('open questions and commitments during and after the call (#82)', () =>
   })
 })
 
-describe('the "From Ole" section when the call ends (#83)', () => {
-  it('goes into the notes after the pinned bullets, in one append', async () => {
+describe('the "From Ole" section when the call ends (#83): an input to the summary, not My notes (#168)', () => {
+  it('is given to the summary writer, and My notes stays untouched', async () => {
     const { ole, appendNotes } = await setup()
     ole.meetingStarted({ id: ID, title: 'Rate limits' })
     ole.segment({ meetingId: ID, track: 'them', text: 'do you have a free tier', startMs: 0 })
     await vi.waitFor(() => expect(state().openQuestions).toHaveLength(1), { timeout: 3000 })
     await handlers.get('ole:ask')!({}, 'what shipped in 2.3?')
     ole.meetingStopped(ID)
-    expect(appendNotes).toHaveBeenCalledTimes(1)
-    expect(appendNotes).toHaveBeenCalledWith(ID, [
+    expect(appendNotes).not.toHaveBeenCalled()
+    expect(ole.notesInput(ID)).toBe([
       '## From Ole',
       'They want rate limits for the morning burst.',
       '',
@@ -109,7 +109,7 @@ describe('the "From Ole" section when the call ends (#83)', () => {
     ].join('\n'))
   })
 
-  it('pinned bullets come first, in the same append', async () => {
+  it('pinned bullets come first', async () => {
     openaiChat.mockImplementation(async (req: { messages: Array<{ role: string; content: string }> }) => {
       const sys = req.messages[0].content
       if (sys.includes('surfacing short context bullets')) return { role: 'assistant', content: JSON.stringify({ bullets: [{ text: 'Renewal is in March', source: 'opportunity: Renewal' }] }) }
@@ -124,8 +124,8 @@ describe('the "From Ole" section when the call ends (#83)', () => {
     await vi.waitFor(() => expect(state().openQuestions).toHaveLength(1), { timeout: 3000 })
     await handlers.get('ole:bullet:pin')!({}, bullets()[0].id, true)
     ole.meetingStopped(ID)
-    expect(appendNotes).toHaveBeenCalledTimes(1)
-    const md = appendNotes.mock.calls[0][1] as string
+    expect(appendNotes).not.toHaveBeenCalled()
+    const md = ole.notesInput(ID)
     expect(md.startsWith('## Pinned from the call\n- Renewal is in March (opportunity: Renewal)\n\n## From Ole\n')).toBe(true)
   })
 
@@ -136,5 +136,6 @@ describe('the "From Ole" section when the call ends (#83)', () => {
     ole.segment({ meetingId: ID, track: 'them', text: 'hello', startMs: 0 })
     ole.meetingStopped(ID)
     expect(appendNotes).not.toHaveBeenCalled()
+    expect(ole.notesInput(ID)).toBe('')
   })
 })
