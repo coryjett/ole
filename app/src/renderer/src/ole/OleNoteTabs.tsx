@@ -1,11 +1,12 @@
 // Ole on the note page as tabs beside Transcript and My notes (#108). During a call: Live (the "Before you join"
-// strip, bullets with pin and rate, open questions and commitments, Ask) and Briefing. On a saved meeting: Context
+// strip, bullets with pin and rate, open questions and commitments, the call's answers) and Briefing. Questions go
+// to the bottom-bar Ask, which answers from the call during one (#118). On a saved meeting: Context
 // (what Ole kept) and Briefing, each only when Ole has something. Plus the quick-note bar shown during a call.
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, MessageSquareText, Radio } from 'lucide-react'
 import type { OleAnswer, OleBullet, OleCallMemory } from '../../../main/ole/core/types'
 import type { OleLiveState } from '../../../shared/types'
-import { OleAsk } from './OleAsk'
+import { OleAnswers } from './OleAsk'
 import { BeforeYouJoinStrip, OleBriefing } from './OleBriefing'
 import { OleBullets } from './OleBullets'
 import { OleCallLists } from './OleCallLists'
@@ -77,7 +78,7 @@ export function OleTabLabel({ tab, unseen = 0 }: { tab: OleTab; unseen?: number 
   </>
 }
 
-/** Live: Prepare and its warnings, the strip, the bullets, the call's lists, Ask; the page scrolls, nothing is capped */
+/** Live: Prepare and its warnings, the strip, the bullets, the call's lists, the answers from Ask (#118); the page scrolls, nothing is capped */
 export function OleLiveTab({ state }: { state: OleLiveState }) {
   const [focus, setFocus] = useState('')
   const text = state.prepared?.text ?? ''
@@ -87,7 +88,7 @@ export function OleLiveTab({ state }: { state: OleLiveState }) {
     <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight="none"
       onPin={(id, on) => void window.yogurt.ole.pinBullet(id, on)} onRate={(id, r) => void window.yogurt.ole.rateBullet(id, r)} />
     <OleCallLists openQuestions={state.openQuestions} commitments={state.commitments} />
-    <OleAsk answers={state.answers ?? []} disabled={!!state.blocked} />
+    <OleAnswers answers={state.answers ?? []} />
   </div>
 }
 

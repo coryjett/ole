@@ -22,6 +22,7 @@ import { useFollowLatest } from '../useFollowLatest'
 import { Swap, SwapText } from './Swap'
 import { attachAskTracer } from '../askTracer'
 import { mentionPosition, textareaMentionRect } from '../mentionPlacement'
+import { OleAnswerSource } from '../ole/OleBullets'
 
 const drafts = new Map<string, string>()
 const starters = (chips: ContextTarget[], recording: boolean) => chips.length === 1 && chips[0].kind === 'meeting'
@@ -359,6 +360,7 @@ function Turn({ turn, chat, panel, showCopy, onSource, onRetry }: { showCopy: bo
       ? <NotesModelWait downloading={percent => <p role="status" className="text-sm text-muted">{t("Your question is waiting for Yogurt's AI to download.")} <span className="whitespace-nowrap">{percent}</span></p>}><p role="status" className="text-sm text-muted">{t('Getting ready to answer. Yogurt is still setting up.')}</p></NotesModelWait>
       : <p className="chat-progress" role="status">{chat.waitsForMeeting && turn.status === 'waiting' ? t('Yogurt will answer once the meeting ends.') : <><ThinkingDots /><StepText step={turn.status === 'waiting' ? undefined : turn.step} /></>}</p>)}
     {answer && <div data-testid={`${prefix}-answer`} dir="auto" data-streaming={live || undefined} className={`note-prose chat-answer${live ? ' stream-caret' : ''}`}><AnswerText md={answer} live={live} sources={turn.sources} onSource={onSource} /></div>}
+    {answer && <OleAnswerSource source={turn.oleSource} />}
     {answer && !live && <div className="chat-answer-actions"><button className="ghost-btn chat-copy-action" data-testid="chat-copy-answer" aria-label={copied ? t('Copied') : t('Copy answer')} onClick={() => {
       void navigator.clipboard.writeText(turn.answer).then(() => { setCopied(true); setFailed(false) }).catch(() => setFailed(true))
     }}><Swap show={copied ? 'done' : 'copy'} options={{ copy: <Copy size={13} />, done: <Check size={13} /> }} /><SwapText text={copied ? t('Copied') : t('Copy')} widest={t('Copied')} /></button>{turn.scope && <AnswerScope chips={turn.scope} />}<span role="status" className={failed ? 'text-danger' : 'sr-only'}>{failed ? t("Yogurt couldn't copy.") : copied ? t('Copied') : ''}</span></div>}
