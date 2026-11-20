@@ -30,10 +30,12 @@ export async function answerQuestion(o: {
   chat: ChatFn; question: string; context: PreparedContext | null; lines: TranscriptLine[]; tools: OleTool[]; call: CallToolFn
   /** the running summary (#75), the user's notes (#77) and earlier questions in this call, oldest first (#76) */
   summary?: string; notes?: string; earlier?: Array<{ question: string; text: string }>
+  /** the enricher added sections to the briefing this call (#86), from the session's state */
+  mentioned?: boolean
 }): Promise<{ text: string; source?: string; url?: string; ok: boolean }> {
   // what doesn't change during the call first, so prompt caching covers it (#77)
   const parts = [o.context?.text ? `Briefing:\n${o.context.text}` : 'No briefing.']
-  if (!hasMatchedRecord(o.context)) parts.push(noRecordRule(o.context))
+  if (!hasMatchedRecord(o.context)) parts.push(noRecordRule(o.mentioned))
   if (o.summary?.trim()) parts.push(`The call so far (summary):\n${o.summary.trim()}`)
   if (o.notes?.trim()) parts.push(`The user's notes so far:\n${latestNotes(o.notes)}`)
   parts.push(o.lines.length ? `Recent lines (latest):\n${o.lines.slice(-RECENT_LINES).map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}` : 'Nothing said yet.')

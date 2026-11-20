@@ -50,7 +50,8 @@ export type OleCommitment = { who: string; what: string };
 export type OleCallMemory = { summary: string; openQuestions: string[]; commitments: OleCommitment[] };
 
 /** a tool offered to the model: name is the OpenAI function name (`<serverId>__<tool>`, [A-Za-z0-9_-], max 64) */
-export type OleTool = { name: string; serverId: string; serverName: string; tool: string; description: string; parameters: Record<string, unknown> };
+/** openWorld: the server's openWorldHint, when it gave one (#86: names only go to tools marked closed-world, or record lookups) */
+export type OleTool = { name: string; serverId: string; serverName: string; tool: string; description: string; parameters: Record<string, unknown>; openWorld?: boolean };
 
 export type PreparedContext = {
   meetingTitle: string | null;

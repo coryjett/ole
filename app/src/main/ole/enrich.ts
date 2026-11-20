@@ -4,7 +4,7 @@
 // the rest of the call. Never blocks a bullets turn: one lookup at a time, started only while no turn is running.
 import type { OleTool, PreparedContext } from './types'
 import { isLiveTool, toOpenAiTools } from './tools'
-import { callKey, EXCERPT_MATCH, knownWords, MENTIONED_HEADING, nameTerms, onlyHeadings, overlap, readableSource, type CallToolFn, type ChatFn, type ChatMessage, type TranscriptLine } from './bullets'
+import { callKey, EXCERPT_MATCH, isRecordTool, knownWords, MENTIONED_HEADING, nameTerms, onlyHeadings, overlap, readableSource, type CallToolFn, type ChatFn, type ChatMessage, type TranscriptLine } from './bullets'
 import { classifyFailure } from './replayFormat'
 
 /** names looked up per call */
@@ -29,20 +29,41 @@ export const ENRICH_SYSTEM = [
   'Only facts the tool results state about this name. If the tools find nothing about it, or it is a product, a place or a common word rather than an organisation, person or project, reply {"facts":[]}. Never invent facts.',
 ].join('\n')
 
-/** a tool that searches documentation, judged by its name or description: names never go to one */
-export function isDocsTool(t: Pick<OleTool, 'tool' | 'description'>): boolean {
-  return /doc|librar|readme|manual|wiki|web_?search|page/i.test(t.tool) || /\bdocumentation\b|\bdocs\b/i.test(t.description)
+/** a name or description that suggests the tool reaches the internet or searches documentation */
+export const OUTWARD = /web|internet|http|url|fetch|browse|google|bing|brave|tavily|perplexity|doc|librar|readme|manual|wiki|page/i
+const OUTWARD_DESCRIPTION = /\b(?:web|internet|online|documentation|docs)\b/i
+
+/**
+ * Whether a name may go to this tool (#86). An allowlist: the server marked it closed-world (openWorldHint false), or,
+ * with no hint, it is named like a record lookup (#57) and nothing in its name or description suggests the web or a
+ * documentation search. A tool marked open-world, or of unknown kind, never gets a name.
+ */
+export function mayGetNames(t: Pick<OleTool, 'tool' | 'description' | 'openWorld'>): boolean {
+  if (t.openWorld === false) return true
+  if (t.openWorld === true) return false
+  return isRecordTool(t) && !OUTWARD.test(t.tool) && !OUTWARD_DESCRIPTION.test(t.description)
 }
 
-/** the tools a name may be looked up with: lookup-style (#15), never one that searches documentation */
+/** the tools a name may be looked up with: lookup-style (#15) and allowed to get names */
 export function enrichTools(tools: OleTool[]): OleTool[] {
-  return tools.filter(t => isLiveTool(t) && !isDocsTool(t))
+  return tools.filter(t => isLiveTool(t) && mayGetNames(t))
 }
 
-/** one line, no markdown at its start, no headings or bold of its own */
+/**
+ * One line of plain text: no line breaks, no markdown at its start, no headings, bold, links, images or bare URLs of
+ * its own. A link reaches the section only through a fact's url, checked against this lookup's results.
+ */
 const flat = (s: string, max: number) => {
-  const one = s.replace(/\s+/g, ' ').replace(/\*\*/g, '').replace(/^(?:[#>*+-]+|\d+[.)])\s*/, '').trim()
-  return one.length <= max ? one : `${one.slice(0, max - 1).trimEnd()}…`
+  const one = s.replace(/\s+/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\]\s*\(/g, ' ')
+    .replace(/\b(?:https?|ftp|file|data|javascript|vbscript):\S*/gi, '')
+    .replace(/[[\]<>]/g, '').replace(/\(\s*\)/g, '')
+    .replace(/\*\*|`+/g, '')
+    .replace(/\s+/g, ' ').trim()
+  let out = one
+  for (;;) { const next = out.replace(/^(?:#+|>+|[-*+](?=\s|$)|\d+[.)](?=\s|$))\s*/, '').trim(); if (next === out) break; out = next }
+  return out.length <= max ? out : `${out.slice(0, max - 1).trimEnd()}…`
 }
 
 /** the section a name's facts become, or '' when there are none */
@@ -69,7 +90,7 @@ export function parseFacts(content: string | null, material: string): Array<{ te
     const quote = typeof o.quote === 'string' ? o.quote.trim() : ''
     // sourced: a real record name, and an excerpt Ole can find in the lookups' results (#37, #39)
     if (!text || !source || onlyHeadings(source, new Set()) || !quote || overlap(quote, material) < EXCERPT_MATCH) continue
-    const url = typeof o.url === 'string' && /^https:\/\/[^\s"<>()]{3,500}$/.test(o.url.trim()) && material.includes(o.url.trim()) ? o.url.trim() : undefined
+    const url = typeof o.url === 'string' && /^https:\/\/[^\s"<>()[\]]{3,500}$/.test(o.url.trim()) && material.includes(o.url.trim()) ? o.url.trim() : undefined
     out.push({ text, source, ...(url ? { url } : {}) })
     if (out.length === FACTS_MAX) break
   }

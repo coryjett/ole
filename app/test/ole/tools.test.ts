@@ -65,6 +65,16 @@ describe('collectTools', () => {
     expect(servers[1].client.listTools).not.toHaveBeenCalled()
   })
 
+  it('carries the server\'s openWorldHint, when it gives one, onto the tool (#86)', async () => {
+    const tools = await collectTools([{ config: cfg('crm', 'CRM'), client: client([
+      { name: 'search_people', annotations: { openWorldHint: false } },
+      { name: 'search_web', annotations: { openWorldHint: true } },
+      { name: 'get_contact' },
+    ]) }])
+    expect(tools.map(t => [t.tool, t.openWorld])).toEqual([['search_people', false], ['search_web', true], ['get_contact', undefined]])
+    expect('openWorld' in tools[2]).toBe(false)
+  })
+
   it('skips a failing server and keeps the others', async () => {
     const tools = await collectTools([
       { config: cfg('bad'), client: client(new McpError('MCP server unreachable', 'unreachable')) },

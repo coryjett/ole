@@ -80,13 +80,22 @@ export function hasMatchedRecord(context: PreparedContext | null): boolean {
 export const NO_RECORD_RULE = 'Nothing in the tools matches this call. Give general facts only: documentation, known issues, how something works, and patterns seen across many records, generalised and anonymised (for example "a common pattern among fintech startups"). Never details from one organisation\'s or person\'s records.'
 /** on such a call, the sections looked up for names the other side said (#86) may still be used */
 export const MENTIONED_RULE = 'Exception: a briefing section headed "Mentioned during the call" was looked up for a name said on this call; its facts may be used, with their sources.'
-/** the rule for a call with no matching record, with the exception when the briefing has a section added mid-call */
-export function noRecordRule(context: PreparedContext | null): string {
-  return context?.text?.includes(MENTIONED_HEADING) ? `${NO_RECORD_RULE}\n${MENTIONED_RULE}` : NO_RECORD_RULE
+/**
+ * The rule for a call with no matching record. The exception comes only from trusted state: the session says the
+ * enricher added sections (#86), never because the briefing's text happens to contain the heading.
+ */
+export function noRecordRule(mentioned = false): string {
+  return mentioned ? `${NO_RECORD_RULE}\n${MENTIONED_RULE}` : NO_RECORD_RULE
+}
+/** Prepare's output with any text posing as a mid-call section taken out of heading form, before it is stored (#86) */
+export function stripMentioned(text: string): string {
+  return text.replace(/#+[ \t]*Mentioned during the call:/gi, 'Mentioned during the call:')
 }
 
 /** tools that fetch one organisation's or person's records (CRM-style names): left out of a call with no matching record (#57) */
 const SINGLE_RECORD = /account|opportunit|deal|contact|action_item|interaction|customer|pipeline|poc|tracker|call_brief|transcript|note/i
+/** a tool named like a lookup of one organisation's or person's records (#57, #86) */
+export const isRecordTool = (t: Pick<OleTool, 'tool'>) => SINGLE_RECORD.test(t.tool)
 export function generalTools(tools: OleTool[]): OleTool[] {
   return tools.filter(t => !SINGLE_RECORD.test(t.tool))
 }
@@ -108,14 +117,16 @@ export function latestNotes(notes: string, max = NOTES_IN_PROMPT): string {
  * past-call feedback) so prompt caching covers it; then what changes: the running summary (#75), the user's notes
  * (#77), earlier bullets and the recent transcript.
  */
-export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[]; feedback?: BulletFeedback; summary?: string; notes?: string }): ChatMessage[] {
+export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[]; feedback?: BulletFeedback; summary?: string; notes?: string
+  /** the enricher added sections to the briefing this call (#86); from the session, never from the text */
+  mentioned?: boolean }): ChatMessage[] {
   const { context, lines, previous, feedback, summary, notes } = args
   const parts: string[] = []
   if (context?.text) {
     const about = [context.meetingTitle ? `meeting: ${context.meetingTitle}` : null, context.focus ? `focus: ${context.focus}` : null].filter(Boolean).join(', ')
     parts.push(`Prepared context${about ? ` (${about})` : ''}:\n${context.text}`)
   } else parts.push(`No context prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.focus ? ` Focus: ${context.focus}` : ''}`)
-  if (!hasMatchedRecord(context)) parts.push(noRecordRule(context))
+  if (!hasMatchedRecord(context)) parts.push(noRecordRule(args.mentioned))
   // the person's thumbs from earlier calls tune what is worth surfacing (#55)
   if (feedback?.useful.length) parts.push(`Bullets the user found useful on earlier calls:\n${feedback.useful.map(t => `- ${t}`).join('\n')}`)
   if (feedback?.notUseful.length) parts.push(`Bullets the user found not useful on earlier calls (give none like these):\n${feedback.notUseful.map(t => `- ${t}`).join('\n')}`)
@@ -382,6 +393,8 @@ export function createBulletsEngine(opts: {
   /** the running summary of the call (#75) and the user's notes (#77), read at each turn */
   summary?: () => string
   notes?: () => string
+  /** the enricher added sections to the briefing (#86), from the session's own state */
+  mentioned?: () => boolean
   /** one line per turn, counts only, never transcript or bullet text (#59) */
   log?: (line: string) => void
   now?: () => number
@@ -465,7 +478,7 @@ export function createBulletsEngine(opts: {
     const fast = urgent && now() - lastRun < minIntervalMs
     running = true; dirty = false; urgent = false; lastRun = now()
     try {
-      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.() })
+      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.(), mentioned: opts.mentioned?.() })
       const offered = opts.tools()
       const allowed = new Set(offered.map(t => t.name))
       const tools = offered.length ? { tools: toOpenAiTools(offered) } : {}

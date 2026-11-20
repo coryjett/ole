@@ -13,7 +13,7 @@ import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, is
 import { prepareContext } from './prepare'
 import { genericTitle } from '../titles'
 import { createLocalChat, type LocalRun } from './localChat'
-import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, type BulletsEngine, type ChatFn } from './bullets'
+import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from './bullets'
 import { answerQuestion } from './ask'
 import { createEnricher, type Enricher } from './enrich'
 import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
@@ -184,7 +184,9 @@ export function hookOle(d: Deps): {
       const serverPrompts = await collectWarmupPrompts(enabledServers(), { meetingTitle, focus })
       // on this Mac (#5) the notes queue runs it, so it never overlaps a summary
       const onMac = providersOf(loadSettings(d.file)).prepareOn === 'local' && local
-      const result = await prepareContext({ chat: onMac ? createLocalChat(onMac) : prepareChat, tools, call, meetingTitle, focus, instructions, serverPrompts })
+      const raw = await prepareContext({ chat: onMac ? createLocalChat(onMac) : prepareChat, tools, call, meetingTitle, focus, instructions, serverPrompts })
+      // text posing as a mid-call section never reaches the briefing as one (#86): only the enricher adds those
+      const result = { ...raw, text: stripMentioned(raw.text) }
       if (seq !== prepareSeq) return state()
       // the meeting ended while this was loading: the next call prepares fresh
       if (o.forMeeting !== undefined && o.forMeeting !== meetingId) { preparing = false; send(); return state() }
@@ -281,7 +283,7 @@ export function hookOle(d: Deps): {
       // the call's memory: running summary (#75), the user's notes (#77), earlier questions oldest first (#76)
       const earlier = answers.filter(a => !a.pending && a.id !== id).slice(0, 3).reverse().map(a => ({ question: a.question, text: a.text }))
       got = await answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(), call: (n, a) => call(n, a),
-        summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier })
+        summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier, mentioned: sections.length > 0 })
     } catch (e) { got = { text: `Couldn't answer: ${e instanceof Error ? e.message : String(e)}`, ok: false } }
     // the call ended while answering: the answer belongs to it, not to the next call
     const done = (a: OleAnswer): OleAnswer => a.id === id ? { id, question, at: a.at, ...got } : a
@@ -373,6 +375,7 @@ export function hookOle(d: Deps): {
         feedback: () => { try { return feedbackOf(d.file) } catch { return { useful: [], notUseful: [] } } },
         summary: () => summarizer?.summary() ?? '',
         notes: () => notesNow(m.id),
+        mentioned: () => sections.length > 0,
       }) : null
       // the running summary updates in the background from the live model (#75)
       // open questions and commitments show in the panel as they change (#82)
