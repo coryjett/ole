@@ -7,7 +7,7 @@ import { isLiveTool, toOpenAiTools } from './tools'
 import { anonymityFor, callKey, EXCERPT_MATCH, isRecordTool, knownWords, MENTIONED_HEADING, nameTerms, onlyHeadings, overlap, readableSource, type CallToolFn, type ChatFn, type ChatMessage, type TranscriptLine } from './bullets'
 import { classifyFailure } from './replayFormat'
 import { keepLink, receivedUrls } from './links'
-import { anonymiseSourceLink } from './anonymise'
+import { anonymizeSourceLink } from './anonymize'
 
 /** names looked up per call */
 export const ENRICH_MAX_TERMS = 6
@@ -233,8 +233,8 @@ export function createEnricher(o: {
       const material = messages.filter(m => m.role === 'tool' && !EMPTY_RESULT.test((m.content ?? '').trim())).map(m => m.content ?? '').join('\n')
       // sources name no organisation but the meeting's own and the one looked up (#109)
       const rules = anonymityFor(o.context(), [o.context()?.text ?? '', material], [item.term])
-      // the fact's own link is replaced by what anonymising kept, never spread back over it (#116)
-      const facts = parseFacts(reply.content, material).map(f => ({ text: f.text, ...anonymiseSourceLink(f.source, f.url, rules) }))
+      // the fact's own link is replaced by what anonymizing kept, never spread back over it (#116)
+      const facts = parseFacts(reply.content, material).map(f => ({ text: f.text, ...anonymizeSourceLink(f.source, f.url, rules) }))
       const section = material.trim() ? mentionedSection(item.term, facts) : ''
       log(`ole enrich: name of ${item.term.length} chars, ${lookups} lookups, ${section ? `${section.split('\n').length - 1} facts added` : 'nothing found'}`)
       if (section && !stopped) o.onSection(section)

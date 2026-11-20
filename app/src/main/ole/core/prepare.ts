@@ -3,7 +3,7 @@
 import type { OleTool, PreparedContext } from './types'
 import type { ChatMessage, ToolCall } from './bullets'
 import { MEETING_CONTEXT_TOOL, MORE_TOOLS, MORE_TOOLS_DEF, narrowForPrepare, toOpenAiTools, type WarmupPrompt } from './tools'
-import { knownOrganisations, rankOrgs, recordNames } from './anonymise'
+import { knownOrganisations, rankOrgs, recordNames } from './anonymize'
 import { hasMatchedRecord } from './bullets'
 import { createMeetingSource, cleanNote, failureKind as failureKindOf, noteLine, type MeetingContext, type MeetingSource } from './meetingSource'
 
@@ -11,7 +11,7 @@ import { createMeetingSource, cleanNote, failureKind as failureKindOf, noteLine,
 export { cleanNote, failureKind, meetingContextArgs, NOTE_PREFIX, noteLine, serverMatched } from './meetingSource'
 
 export const TOTAL_CAP = 24_000
-/** organisations kept from Prepare's results for anonymising sources during the call (#109) */
+/** organisations kept from Prepare's results for anonymizing sources during the call (#109) */
 export const ORGS_KEPT = 200
 export const INSTRUCTIONS_CAP = 8000
 export const NO_TOOLS_TEXT = 'No MCP tools are available. Add an MCP server in Settings to prepare from its data.'

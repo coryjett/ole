@@ -335,12 +335,12 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       if (found) return found
       try { return host.files.loadAnswers?.(id) ?? [] } catch { return [] }
     },
-    // a saved call as a replay fixture (#70), written where the person picks; anonymised unless asked otherwise
+    // a saved call as a replay fixture (#70), written where the person picks; anonymized unless asked otherwise
     exportReplay: async (id: unknown, opts: unknown): Promise<OleExportResult> => {
       const failed = (error: string): OleExportResult => ({ status: 'failed', error })
       if (typeof id !== 'string' || !ID.test(id) || !host.meetingForExport || !host.saveExport) return failed("Couldn't export this meeting.")
       if (id === meetingId) return failed('The call is still recording. Export it once it ends.')
-      const anonymise = !(opts && typeof opts === 'object' && (opts as Record<string, unknown>).anonymise === false)
+      const anonymize = !(opts && typeof opts === 'object' && (opts as Record<string, unknown>).anonymize === false)
       let m: ReturnType<NonNullable<OleHost['meetingForExport']>> = null
       try { m = host.meetingForExport(id) } catch (e) { host.log.warn('reading the meeting for export failed', e) }
       if (!m) return failed("Couldn't find this meeting.")
@@ -351,7 +351,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       if (briefing === undefined) try { briefing = host.files.loadBriefing?.(id) ?? '' } catch { briefing = '' }
       const name = exportFileName(m.startedAt)
       const fixture = buildReplayFixture({
-        name: name.replace(/\.json$/, ''), meetingTitle: m.title, attendees: m.attendees, segments: m.segments, anonymise, genericTitle: host.genericTitle,
+        name: name.replace(/\.json$/, ''), meetingTitle: m.title, attendees: m.attendees, segments: m.segments, anonymize, genericTitle: host.genericTitle,
         briefing: { text: briefing, meetingTitle: kept?.briefing ? kept.briefing.meetingTitle : m.title, focus: kept?.briefing?.focus ?? null },
         // a call from before turns were kept: the tools the servers offer now, as the app would offer them live
         tools: kept ? kept.tools : tools.filter(isLiveTool).map(t => t.name),

@@ -42,10 +42,12 @@ export function uploadDayAllowed(at:number,now=Date.now()) {
 export function uploadClock(value:string,at:number,locale:string):number|undefined {
   let text=value.trim().toLocaleLowerCase(locale).replace(/[\u200e\u200f\u061c]/g,'').replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-0x660)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-0x6f0))
   for(let n=0;n<10;n++)text=text.replaceAll(new Intl.NumberFormat(locale,{useGrouping:false}).format(n),String(n))
-  const periods=[0,12].map(hour=>new Intl.DateTimeFormat(locale,{hour:'numeric',hour12:true}).formatToParts(new Date(2026,0,1,hour)).find(p=>p.type==='dayPeriod')?.value.toLocaleLowerCase(locale))
+  const periods=[6,18].map(hour=>new Intl.DateTimeFormat(locale,{hour:'numeric',minute:'2-digit'}).formatToParts(new Date(2026,0,1,hour)).find(p=>p.type==='dayPeriod')?.value.toLocaleLowerCase(locale))
   let half:number|undefined
-  for(const [i,period] of periods.entries())if(period&&text.includes(period)){half=i; text=text.replace(period,'').trim();break}
-  const match=/^(\d{1,2})\s*[:.：]\s*(\d{2})$/.exec(text)
+  if(periods[0]&&periods[1]&&periods[0]!==periods[1]){
+   for(const [i,period] of periods.entries())if(period&&text.includes(period)){half=i; text=text.replace(period,'').trim();break}
+  }else for(const period of new Set(periods))if(period)text=text.replace(period,'').trim()
+  const match=/^(\d{1,2})\s*[:.：]\s*(\d{2})(?:\s*[^\d]*)?$/.exec(text)
   if(!match)return
   let hour=Number(match[1]);const minute=Number(match[2])
   if(minute>59||hour>23||half!=null&&(hour<1||hour>12))return

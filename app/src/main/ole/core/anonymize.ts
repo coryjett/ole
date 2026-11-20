@@ -323,16 +323,16 @@ function applied(label: string, rs: Array<{ name: string; with: string }>, allow
  * "Kind: Name" in the label itself, and when the cap was hit any text after a "Kind:" (#116). Longest names first,
  * whole words, any case; an address-style label ("crm.example.com › example-corp") is matched too.
  */
-export function anonymiseSource(label: string, o: AnonymityRules): string {
+export function anonymizeSource(label: string, o: AnonymityRules): string {
   return applied(label, replacements(label, o), o.allowed)
 }
 
 /**
- * A source and its link after anonymising (#109, #116): the link is dropped when its address, decoded, names any
+ * A source and its link after anonymizing (#109, #116): the link is dropped when its address, decoded, names any
  * organisation Ole can identify that isn't allowed (whole words, any case, with or without a legal suffix), whether
  * or not the label named one, since hovering it would show the name.
  */
-export function anonymiseSourceLink(source: string, url: string | undefined, o: AnonymityRules): { source: string; url?: string } {
+export function anonymizeSourceLink(source: string, url: string | undefined, o: AnonymityRules): { source: string; url?: string } {
   const rs = replacements(source, o)
   const shown = rs.length ? applied(source, rs, o.allowed) : source
   if (!url) return { source: shown }

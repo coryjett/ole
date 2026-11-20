@@ -260,7 +260,7 @@ describe('bullets engine', () => {
     expect(engine.bullets()[0].text).toBe('ok')
   })
 
-  it('prompt includes anonymise, financial services, tools, earlier bullets and transcript format', () => {
+  it('prompt includes anonymize, financial services, tools, earlier bullets and transcript format', () => {
     const messages = buildBulletsPrompt({
       context: { meetingTitle: 'Kickoff', focus: 'Acme', text: 'notes', preparedAt: 1 },
       lines: [line('Ana', 'hello', 65_000)],

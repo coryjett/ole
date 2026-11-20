@@ -3,7 +3,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createBulletsEngine, type ChatFn, type ChatMessage } from '../../src/main/ole/core/bullets'
 import { createTurnRecorder, parseRecordedCall, TURNS_MAX, type RecordedTurn } from '../../src/main/ole/core/turnRecorder'
-import { accountFromTitle, anonymiser, buildReplayFixture, exportFileName, type ExportSegment } from '../../src/main/ole/core/replayExport'
+import { accountFromTitle, anonymizer, buildReplayFixture, exportFileName, type ExportSegment } from '../../src/main/ole/core/replayExport'
 import { replayCall, virtualClock } from '../../src/main/ole/core/replay'
 import { RESULT_CAP } from '../../src/main/ole/core/tools'
 import type { OleBullet, OleTool, PreparedContext } from '../../src/main/ole/core/types'
@@ -114,8 +114,8 @@ describe('a saved call as a replay fixture (#70)', () => {
     expect(f.transcript).toHaveLength(3)
   })
 
-  it('anonymised: speakers become Speaker 1, 2…, the account and title become Account, links and addresses are replaced', () => {
-    const f = buildReplayFixture({ name: 'x', meetingTitle: 'Copperline Parcel: security review', attendees: [{ name: 'Sam Okafor', email: 'sam@copperline.example' }, { name: 'Lee Grant' }], segments: segs, briefing: { text: briefingText, meetingTitle: 'Copperline Parcel: security review', focus: 'Copperline Parcel renewal' }, tools: ['docs__search_docs'], turns, anonymise: true })
+  it('anonymized: speakers become Speaker 1, 2…, the account and title become Account, links and addresses are replaced', () => {
+    const f = buildReplayFixture({ name: 'x', meetingTitle: 'Copperline Parcel: security review', attendees: [{ name: 'Sam Okafor', email: 'sam@copperline.example' }, { name: 'Lee Grant' }], segments: segs, briefing: { text: briefingText, meetingTitle: 'Copperline Parcel: security review', focus: 'Copperline Parcel renewal' }, tools: ['docs__search_docs'], turns, anonymize: true })
     expect(f.transcript.map(l => l.speaker)).toEqual(['Me', 'Speaker 1', 'Speaker 2'])
     expect(f.transcript.map(l => l.text)).toEqual(['Thanks for joining, Speaker 1.', 'Account wants daily rotation. See https://example.com/link-2 or mail [email]', 'And Speaker 1 asked about rate limits.'])
     expect(f.briefing).toEqual({ meetingTitle: 'Account', focus: 'Account renewal', text: '## Who\n- Speaker 1 at Account, security review (https://example.com/link-1)\n## Deals\n- Account pilot' })
@@ -128,7 +128,7 @@ describe('a saved call as a replay fixture (#70)', () => {
   })
 
   it('a default title ("Meeting", "Zoom call") is not treated as a name; only a title with a separator gives an account', () => {
-    const a = anonymiser({ meetingTitle: 'Zoom call', speakers: [], attendees: [] })
+    const a = anonymizer({ meetingTitle: 'Zoom call', speakers: [], attendees: [] })
     expect(a.text('This meeting is a Zoom call')).toBe('This meeting is a Zoom call')
     expect(accountFromTitle('Copperline Parcel: security review')).toBe('Copperline Parcel')
     expect(accountFromTitle('Copperline <> Us')).toBe('Copperline')
@@ -186,8 +186,8 @@ describe('record a call, export it, replay it (#70 with #66)', () => {
     expect(report.lookups).toEqual({ asked: 1, made: 1, refused: 0, unrecorded: 0 })
     expect(report.excerpts).toEqual({ heard: { given: 1, verified: 1 }, quote: { given: 1, verified: 1 }, url: { given: 1, kept: 1 } })
 
-    // anonymised, the same replacements run everywhere, so the excerpts and the link still check out
-    const anon = await replayCall(buildReplayFixture({ ...input, anonymise: true }))
+    // anonymized, the same replacements run everywhere, so the excerpts and the link still check out
+    const anon = await replayCall(buildReplayFixture({ ...input, anonymize: true }))
     expect(anon.bullets).toEqual(report.bullets)
     expect(anon.excerpts).toEqual(report.excerpts)
     expect(anon.turns).toEqual(report.turns)
@@ -195,13 +195,13 @@ describe('record a call, export it, replay it (#70 with #66)', () => {
 })
 
 describe('Export for replay on a saved meeting (#70)', () => {
-  const view = (p: Partial<Parameters<typeof OleExportReplayView>[0]> = {}) => renderToStaticMarkup(createElement(OleExportReplayView, { anonymise: true, busy: false, result: null, onAnonymise: () => {}, onExport: () => {}, ...p }))
-  it('has the button, Anonymise checked by default, and the note', () => {
+  const view = (p: Partial<Parameters<typeof OleExportReplayView>[0]> = {}) => renderToStaticMarkup(createElement(OleExportReplayView, { anonymize: true, busy: false, result: null, onAnonymize: () => {}, onExport: () => {}, ...p }))
+  it('has the button, Anonymize checked by default, and the note', () => {
     const html = view()
     expect(html).toContain('Export for replay')
     expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/)
-    expect(html).toContain('Anonymise')
-    expect(html).toContain('Saves the call&#x27;s transcript and Ole&#x27;s turns to a file for the replay tool. Anonymise replaces names and removes links.')
+    expect(html).toContain('Anonymize')
+    expect(html).toContain('Saves the call&#x27;s transcript and Ole&#x27;s turns to a file for the replay tool. Anonymize replaces names and removes links.')
     expect(html).not.toContain('ole-export-replay-result')
   })
   it('says how it went', () => {

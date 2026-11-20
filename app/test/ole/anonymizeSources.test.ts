@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { ANOTHER_ORG, anonymiseSource, anonymiseSourceLink, describeOrg, kindNames, knownOrganisations, recordNames } from '../../src/main/ole/core/anonymise'
+import { ANOTHER_ORG, anonymizeSource, anonymizeSourceLink, describeOrg, kindNames, knownOrganisations, recordNames } from '../../src/main/ole/core/anonymize'
 import { anonymityFor, BULLETS_SYSTEM, createBulletsEngine, SOURCE_ANONYMITY, type ChatFn } from '../../src/main/ole/core/bullets'
 import { answerQuestion, ASK_SYSTEM } from '../../src/main/ole/core/ask'
 import { createEnricher, ENRICH_SYSTEM, productTerm } from '../../src/main/ole/core/enrich'
@@ -47,39 +47,39 @@ describe('which organisations Ole can identify (#109)', () => {
   })
 })
 
-describe('anonymiseSource (#109)', () => {
+describe('anonymizeSource (#109)', () => {
   const known = knownOrganisations(RESULT)
   it('a source naming another company becomes a description', () => {
-    expect(anonymiseSource('From call records: Globex Bank', { allowed: ['Example Corp'], known })).toBe('From call records: a large financial services company')
-    expect(anonymiseSource('Initech call, 3 Oct', { allowed: ['Example Corp'], known })).toBe('a small company call, 3 Oct')
+    expect(anonymizeSource('From call records: Globex Bank', { allowed: ['Example Corp'], known })).toBe('From call records: a large financial services company')
+    expect(anonymizeSource('Initech call, 3 Oct', { allowed: ['Example Corp'], known })).toBe('a small company call, 3 Oct')
   })
   it("the matched record's own name stays", () => {
-    expect(anonymiseSource('account: Example Corp', { allowed: ['Example Corp'], known: [...known, 'Example Corp'] })).toBe('account: Example Corp')
+    expect(anonymizeSource('account: Example Corp', { allowed: ['Example Corp'], known: [...known, 'Example Corp'] })).toBe('account: Example Corp')
     // the record with or without its legal suffix; a longer text such as the meeting title allows nothing (#116)
-    expect(anonymiseSource('account: Example', { allowed: ['Example Corp'], known: ['Example'] })).toBe('account: Example')
-    expect(anonymiseSource('account: Example Corp', { allowed: ['Example Corp weekly'], known: ['Example Corp'] })).toBe(`account: ${ANOTHER_ORG}`)
+    expect(anonymizeSource('account: Example', { allowed: ['Example Corp'], known: ['Example'] })).toBe('account: Example')
+    expect(anonymizeSource('account: Example Corp', { allowed: ['Example Corp weekly'], known: ['Example Corp'] })).toBe(`account: ${ANOTHER_ORG}`)
   })
-  it('a "Kind: Name" in the label is anonymised even when no result named it', () => {
-    expect(anonymiseSource('From call records: Umbrella Group', { allowed: ['Example Corp'], known: [] })).toBe(`From call records: ${ANOTHER_ORG}`)
+  it('a "Kind: Name" in the label is anonymized even when no result named it', () => {
+    expect(anonymizeSource('From call records: Umbrella Group', { allowed: ['Example Corp'], known: [] })).toBe(`From call records: ${ANOTHER_ORG}`)
   })
   it('matches any case, the name without its suffix, and an address-style label; the link spelling it is dropped', () => {
-    expect(anonymiseSource('notes on GLOBEX BANK', { allowed: [], known })).toBe('notes on a large financial services company')
-    expect(anonymiseSource('Globex renewal notes', { allowed: [], known: ['Globex Corporation'] })).toBe(`${ANOTHER_ORG} renewal notes`)
-    expect(anonymiseSourceLink('crm.example.com › globex bank', 'https://crm.example.com/accounts/globex-bank', { allowed: [], known }))
+    expect(anonymizeSource('notes on GLOBEX BANK', { allowed: [], known })).toBe('notes on a large financial services company')
+    expect(anonymizeSource('Globex renewal notes', { allowed: [], known: ['Globex Corporation'] })).toBe(`${ANOTHER_ORG} renewal notes`)
+    expect(anonymizeSourceLink('crm.example.com › globex bank', 'https://crm.example.com/accounts/globex-bank', { allowed: [], known }))
       .toEqual({ source: 'crm.example.com › a large financial services company' })
     // a link that doesn't spell the name is kept
-    expect(anonymiseSourceLink('call records: Globex Bank', 'https://crm.example.com/a/42', { allowed: [], known }))
+    expect(anonymizeSourceLink('call records: Globex Bank', 'https://crm.example.com/a/42', { allowed: [], known }))
       .toEqual({ source: 'call records: a large financial services company', url: 'https://crm.example.com/a/42' })
   })
   it('leaves a source with no organisation alone', () => {
-    expect(anonymiseSource('ticket #4821', { allowed: [], known })).toBe('ticket #4821')
-    expect(anonymiseSource('product docs', { allowed: [], known })).toBe('product docs')
+    expect(anonymizeSource('ticket #4821', { allowed: [], known })).toBe('ticket #4821')
+    expect(anonymizeSource('product docs', { allowed: [], known })).toBe('product docs')
   })
   it('on a call with no matching record nothing is allowed, not even the title', () => {
     const none: PreparedContext = { meetingTitle: 'Example Corp intro', focus: null, preparedAt: 1, text: 'No matching record for this call.' }
     const rules = anonymityFor(none, 'Account: Example Corp')
     expect(rules.allowed).toEqual([])
-    expect(anonymiseSource('account: Example Corp', rules)).toBe(`account: ${ANOTHER_ORG}`)
+    expect(anonymizeSource('account: Example Corp', rules)).toBe(`account: ${ANOTHER_ORG}`)
   })
 })
 
@@ -92,7 +92,7 @@ describe('the prompts carry the rule (#109)', () => {
 })
 
 describe('bullets and Ask enforce it (#109)', () => {
-  it('bullet sources from a lookup are anonymised; the record\'s own stays', async () => {
+  it('bullet sources from a lookup are anonymized; the record\'s own stays', async () => {
     const chat = vi.fn<ChatFn>()
       .mockImplementationOnce(async () => ({ content: null, tool_calls: [{ id: '1', type: 'function', function: { name: 's__search_accounts', arguments: '{"query":"429"}' } }] }))
       .mockImplementation(async () => ({ content: JSON.stringify({ bullets: [
@@ -107,7 +107,7 @@ describe('bullets and Ask enforce it (#109)', () => {
     expect(engine.lookedUp()).toContain('Globex Bank')
     engine.stop()
   })
-  it('an organisation Prepare saw is anonymised even when this turn looked nothing up', async () => {
+  it('an organisation Prepare saw is anonymized even when this turn looked nothing up', async () => {
     const chat = vi.fn<ChatFn>(async () => ({ content: JSON.stringify({ bullets: [{ text: 'Similar rollout went fine', source: 'Initech notes' }] }) }))
     let got: OleBullet[] = []
     const context = matched({ orgs: [{ name: 'Initech', description: 'a small company' }], text: '## Before you join\n- Rollout (account: Example Corp)\n- Similar rollout went fine (Initech notes)' })
@@ -117,7 +117,7 @@ describe('bullets and Ask enforce it (#109)', () => {
     expect(got[0].source).toBe('a small company notes')
     engine.stop()
   })
-  it('Ask sources are anonymised too', async () => {
+  it('Ask sources are anonymized too', async () => {
     const chat = vi.fn<ChatFn>()
       .mockImplementationOnce(async () => ({ content: null, tool_calls: [{ id: '1', type: 'function', function: { name: 's__search_accounts', arguments: '{}' } }] }))
       .mockImplementation(async () => ({ content: JSON.stringify({ answer: 'Fixed in 2.3.', source: 'call records: Globex Bank' }) }))
@@ -129,7 +129,7 @@ describe('bullets and Ask enforce it (#109)', () => {
 describe('mid-call sections (#86, #109)', () => {
   const clock = () => { let t = 0; return { now: () => t, timers: { set: (fn: () => void) => { queueMicrotask(fn); return 0 }, clear: () => {} }, tick: (ms: number) => { t += ms } } }
 
-  it("section sources naming a third organisation are anonymised; the looked-up name and the record's own stay", async () => {
+  it("section sources naming a third organisation are anonymized; the looked-up name and the record's own stay", async () => {
     const result = JSON.stringify({ accounts: [{ name: 'Northwind Traders', industry: 'Retail' }, { name: 'Globex Bank', industry: 'Financial Services', segment: 'Enterprise' }] })
     const chat = vi.fn<ChatFn>()
       .mockImplementationOnce(async () => ({ content: null, tool_calls: [{ id: '1', type: 'function', function: { name: 's__search_accounts', arguments: '{"query":"Northwind Traders"}' } }] }))
@@ -193,8 +193,8 @@ describe('Prepare records which organisation is the meeting\'s own (#109)', () =
     const ctx = await prepareContext({ chat, tools: [meetingTool, searchTool], call: async () => RESULT, meetingTitle: 'Weekly sync', source: { meetingContext: async () => fast }, log: () => {} })
     expect(ctx.records).toEqual(['Example Corp'])
     expect(ctx.orgs?.map(o => o.name)).toEqual(expect.arrayContaining(['Example Corp', 'Globex Bank', 'Initech']))
-    expect(anonymiseSource('account: Example Corp', anonymityFor(ctx, ''))).toBe('account: Example Corp')
-    expect(anonymiseSource('call records: Globex Bank', anonymityFor(ctx, ''))).toBe('call records: a large financial services company')
+    expect(anonymizeSource('account: Example Corp', anonymityFor(ctx, ''))).toBe('account: Example Corp')
+    expect(anonymizeSource('call records: Globex Bank', anonymityFor(ctx, ''))).toBe('call records: a large financial services company')
   })
   it('without a server match, the organisation the briefing names most is the record', () => {
     const known = [{ name: 'Example Corp' }, { name: 'Globex Bank' }]

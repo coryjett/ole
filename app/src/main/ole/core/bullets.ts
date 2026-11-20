@@ -4,7 +4,7 @@ import { noteLine } from './meetingSource'
 import { toOpenAiTools } from './tools'
 import { createBulletStream } from './bulletStream'
 import { linkAndLabel, receivedUrls } from './links'
-import { anonymiseSourceLink, knownOrganisations, type AnonymityRules } from './anonymise'
+import { anonymizeSourceLink, knownOrganisations, type AnonymityRules } from './anonymize'
 
 export type TranscriptLine = { speaker: string; text: string; startMs: number }
 export type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
@@ -48,7 +48,7 @@ const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-/** sources follow the bullet text's anonymity rule (#109); Ole also enforces it after the fact (anonymise.ts) */
+/** sources follow the bullet text's anonymity rule (#109); Ole also enforces it after the fact (anonymize.ts) */
 export const SOURCE_ANONYMITY = 'Sources follow the same rule: a "source" names an organisation only if it is part of this meeting; any other organisation is described by kind and size there too, for example "call records: a large financial services company".'
 
 export const BULLETS_SYSTEM = [
@@ -86,7 +86,7 @@ export function hasMatchedRecord(context: PreparedContext | null): boolean {
   return !!first && !NO_RECORD_LINES.some(r => r.test(first))
 }
 
-export const NO_RECORD_RULE = 'Nothing in the tools matches this call. Give general facts only: documentation, known issues, how something works, and patterns seen across many records, generalised and anonymised (for example "a common pattern among fintech startups"). Never details from one organisation\'s or person\'s records.'
+export const NO_RECORD_RULE = 'Nothing in the tools matches this call. Give general facts only: documentation, known issues, how something works, and patterns seen across many records, generalised and anonymized (for example "a common pattern among fintech startups"). Never details from one organisation\'s or person\'s records.'
 /** on such a call, the sections looked up for names the other side said (#86) may still be used */
 export const MENTIONED_RULE = 'Exception: a briefing section headed "Mentioned during the call" was looked up for a name said on this call; its facts may be used, with their sources.'
 /**
@@ -534,7 +534,7 @@ export function createBulletsEngine(opts: {
         const linked = linkAndLabel(b.url, b.source, receivedUrls(sources))
         // the source names no organisation but the meeting's own (#109)
         const looked = messages.filter(m => m.role === 'tool').map(m => m.content ?? '')
-        const shown = anonymiseSourceLink(linked.source ?? b.source, linked.url, anonymityFor(opts.context(), [opts.context()?.text ?? '', ...looked]))
+        const shown = anonymizeSourceLink(linked.source ?? b.source, linked.url, anonymityFor(opts.context(), [opts.context()?.text ?? '', ...looked]))
         const url = shown.url
         const source = shown.source
         fresh.push({ id: `b${++seq}`, text: b.text, source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })

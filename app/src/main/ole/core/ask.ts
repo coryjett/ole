@@ -4,7 +4,7 @@ import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
 import { anonymityFor, callKey, hasMatchedRecord, latestNotes, noRecordRule, readableSource, SOURCE_ANONYMITY } from './bullets'
-import { anonymiseSourceLink } from './anonymise'
+import { anonymizeSourceLink } from './anonymize'
 import { linkAndLabel, receivedUrls } from './links'
 
 /** lookup rounds before the model must answer */
@@ -82,7 +82,7 @@ export async function answerQuestion(o: {
   const linked = linkAndLabel(typeof parsed.url === 'string' ? parsed.url : undefined, source, receivedUrls(material))
   // the source names no organisation but the meeting's own (#109)
   const looked = messages.filter(m => m.role === 'tool').map(m => m.content ?? '')
-  const anon = linked.source ? anonymiseSourceLink(linked.source, linked.url, anonymityFor(o.context, [o.context?.text ?? '', ...looked])) : { source: undefined, url: linked.url }
+  const anon = linked.source ? anonymizeSourceLink(linked.source, linked.url, anonymityFor(o.context, [o.context?.text ?? '', ...looked])) : { source: undefined, url: linked.url }
   const url = anon.url
   const shown = anon.source
   return { text, ...(shown ? { source: shown } : {}), ...(url ? { url } : {}), ok: true }

@@ -488,8 +488,8 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   call(meetingId: string): Promise<import('../main/ole/core/types').OleCallMemory | null>
   /** a meeting's questions and answers; [] when none */
   answers(meetingId: string): Promise<import('../main/ole/core/types').OleAnswer[]>
-  /** writes a saved call as a replay fixture where the person picks (#70); anonymise unless it is false */
-  exportReplay(meetingId: string, o: { anonymise: boolean }): Promise<OleExportResult>
+  /** writes a saved call as a replay fixture where the person picks (#70); anonymize unless it is false */
+  exportReplay(meetingId: string, o: { anonymize: boolean }): Promise<OleExportResult>
 }
 
 /** how an Export for replay went (#70); defined in Ole's core */
