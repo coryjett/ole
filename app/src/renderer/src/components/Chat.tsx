@@ -8,6 +8,7 @@ import { setToastDialog } from './TrashToast'
 import { AskConversation } from './AskConversation'
 import { motion as timing } from '../motion'
 import { rememberScrollPositions } from '../useScrollMemory'
+import { oleAskTakesOver } from '../ole/oleAskDock'
 
 /** The existing panel shell; its conversation and composer are shared with the Ask page. */
 export function Ask({ id, recording, anchor, onSource }: { id: string; recording: boolean; anchor: HTMLElement | null; onSource: (s: LibrarySource, match?: string) => void }) {
@@ -129,6 +130,8 @@ export function Ask({ id, recording, anchor, onSource }: { id: string; recording
     <button id="meeting-ask" ref={trigger} data-testid="chat-open" className="workspace-button chat-trigger" type="button" aria-expanded={open} aria-controls="meeting-chat"
       title={onMac() ? t('Ask Yogurt (⌘J)') : `${t('Ask Yogurt')} (${keys('⌘J')})`} onClick={() => {
         if (open && !closing.current) { close(); return }
+        // Ole (#122): during a call on this note, Ole's docked Ask takes the button and ⌘J
+        if (oleAskTakesOver(id)) return
         // Programmatic and pointer opens share the same anchored motion.
         if (closing.current) { closing.current = false; morph(true) }
         animateOpen.current = true; setError(false); setOpen(true)

@@ -1,5 +1,6 @@
 import { TranscriptionControl, TranscriptionNotice } from '../components/Transcription'
 import { OleQuickNote, OleTabLabel, OleTabPanels, useOleNote } from '../ole/OleNoteTabs'
+import { OleAskPanel } from '../ole/OleAsk'
 import { appendQuickNote, callElapsedMs, fitTab, isOleTab, type NoteTab, type OleTab } from '../ole/oleTabs'
 import { transcriptionBusy } from '../../../shared/transcription'
 import { citationTargetIndex } from '../../../shared/citations'
@@ -465,6 +466,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
           </div>
         </div>
         <footer ref={setFooter} className="note-footer">
+          {recording && ole.state && <OleAskPanel docked meetingId={id} state={ole.state} />}
           {recording && primary !== 'notes' && <OleQuickNote onAdd={addQuickNote} />}
             {m.stopSavePending && (
               <div data-testid="note-stop-unsaved" role="alert" className="mt-5 flex flex-wrap items-start gap-3 rounded-xl border border-line bg-card px-4 py-3 text-[13px] leading-relaxed">

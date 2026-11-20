@@ -13,8 +13,9 @@ export type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; cont
  * onDelta (#84): stream the answer, each content piece as it arrives. A ChatFn may ignore it and answer whole; the
  * reply it resolves with is the whole message either way.
  */
-export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; onDelta?: (text: string) => void }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
-export type CallToolFn = (name: string, argsJson: string) => Promise<string>
+export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; onDelta?: (text: string) => void; signal?: AbortSignal }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
+/** opts.signal: the caller stopped waiting (#122, Ask's Stop) */
+export type CallToolFn = (name: string, argsJson: string, opts?: { signal?: AbortSignal }) => Promise<string>
 export type BulletsEngine = {
   push(line: TranscriptLine): void; stop(): void; bullets(): OleBullet[]
   /** pin (#54) or rate (#55) a bullet in place; null rating or false pin clears it. null: no such bullet */
