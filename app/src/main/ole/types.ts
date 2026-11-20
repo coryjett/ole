@@ -23,7 +23,7 @@ export type OleProviders = {
   customModel: string;
   /** where Prepare runs: with the Assistant (OpenAI or Custom server), or on the Mac's own model (#5); live bullets never run locally */
   prepareOn: 'assistant' | 'local';
-  /** keep Ole's windows out of screen sharing and recordings (#51); on unless turned off */
+  /** keep Ole's windows out of screen sharing and screenshots while a call records (#51, #61); off unless turned on */
   hideWhileSharing: boolean;
   /** prepare by itself shortly before calendar meetings (#52) */
   autoPrepare: boolean;

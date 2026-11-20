@@ -4,7 +4,7 @@ import { expect, it, vi } from 'vitest'
 import { OleSettings, type OleSettingsApi, type SecretStatus } from '../../src/renderer/src/ole/OleSettings'
 import type { McpServerConfig } from '../../src/main/ole/types'
 
-const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: true, autoPrepare: true, autoPrepareLead: 10 } as const
+const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: false, autoPrepare: true, autoPrepareLead: 10 } as const
 const servers: McpServerConfig[] = [
   { id: 'crm', name: 'CRM', url: 'https://crm.example/mcp', enabled: true },
   { id: 'docs', name: 'Docs', url: 'https://docs.example/mcp', enabled: false },

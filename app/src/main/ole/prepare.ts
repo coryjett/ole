@@ -11,6 +11,10 @@ export const NO_TOOLS_TEXT = 'No MCP tools are available. Add an MCP server in S
 export type PrepareChatFn = (req: { messages: ChatMessage[]; tools?: unknown[] }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
 export type PrepareCallFn = (name: string, argsJson: string) => Promise<string>
 
+/** how the one-line "no match" reply starts (#44) */
+export const NO_MATCH_PREFIX = "Couldn't match this call"
+const SEARCH_TOOL = /^(search|find|lookup)_/i
+
 export const PREPARE_SYSTEM = [
   'Keep each source\'s web address (issue, docs page, tracker or record link) next to it when the tool result gives one, as a markdown link. Never make up a link.',
   'You prepare a salesperson or engineer for an upcoming call.',
@@ -24,6 +28,7 @@ export const PREPARE_SYSTEM = [
   '- After each fact, its source as a short markdown link or record name, e.g. ([opportunity](https://...)) or (call, 19 Nov). Never tool names, never square-bracket citations.',
   'Leave out anything no tool returned. Never invent facts, names or numbers.',
   'If the meeting has no customer account (an internal, partner or new-contact call with no account record), make the first line exactly "No customer account for this call." and brief only the meeting, its people and its topic: no account, deal or other customers\' details. (#57)',
+  'When a focus is given or the meeting title names a company, search for it with the tools before you may say there is no match; a meeting lookup alone is not enough. (#62)',
   'If you cannot match the call to a meeting or an account, reply with exactly this one line and nothing else: "Couldn\'t match this call to a meeting or account. Type a company in Focus and press Refresh briefing." (#44)',
 ].join('\n')
 
@@ -58,13 +63,24 @@ export async function prepareContext(opts: {
   now?: number
   maxToolCalls?: number
   maxRounds?: number
+  /** one line when the briefing is done: tool names and counts, never arguments or results (#62) */
+  log?: (line: string) => void
 }): Promise<PreparedContext> {
   const now = opts.now ?? Date.now()
   const meetingTitle = opts.meetingTitle?.trim() || null
   const focus = opts.focus?.trim() || null
   const maxToolCalls = opts.maxToolCalls ?? 10
   const maxRounds = opts.maxRounds ?? 6
-  const done = (text: string): PreparedContext => ({ meetingTitle, focus, text: cap(text.trim()), preparedAt: now })
+  const log = opts.log ?? ((line: string) => console.info(line))
+  const counts = new Map<string, number>()
+  let nudged = false
+  const toolOf = (name: string) => opts.tools.find(t => t.name === name)?.tool ?? name
+  const done = (text: string): PreparedContext => {
+    const total = [...counts.values()].reduce((a, b) => a + b, 0)
+    const list = [...counts].map(([n, c]) => `${n} ${c}`).join(', ')
+    log(`ole prepare: ${total} tool calls${list ? ` (${list})` : ''}${nudged ? ', searched again once' : ''}`)
+    return { meetingTitle, focus, text: cap(text.trim()), preparedAt: now }
+  }
 
   if (!opts.tools.length) return done(NO_TOOLS_TEXT)
 
@@ -90,7 +106,19 @@ export async function prepareContext(opts: {
 
   for (let round = 0; round < maxRounds && used < maxToolCalls; round++) {
     const reply = await opts.chat({ messages, tools: toolsNow() })
-    if (!reply.tool_calls?.length) return done(reply.content ?? '')
+    if (!reply.tool_calls?.length) {
+      // "no match" before any search for the focus or title: sent back once to search (#62)
+      const searched = [...counts.keys()].some(n => SEARCH_TOOL.test(n))
+      const target = focus ?? meetingTitle
+      if (!nudged && target && !searched && (reply.content ?? '').trim().startsWith(NO_MATCH_PREFIX) && opts.tools.some(t => SEARCH_TOOL.test(t.tool))) {
+        nudged = true
+        if (!widened) { widened = true; offered = [...offered, ...narrowed.rest] }
+        messages.push({ role: 'assistant', content: reply.content })
+        messages.push({ role: 'user', content: `You have not searched for "${target}" yet. Search for it with the tools before deciding there is no match.` })
+        continue
+      }
+      return done(reply.content ?? '')
+    }
     messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
     // every call gets an answer (the API requires it); calls past the budget are refused, the rest run in parallel
     const results = await Promise.all(reply.tool_calls.map(async c => {
@@ -105,6 +133,7 @@ export async function prepareContext(opts: {
       if (prior) return prior
       if (used >= maxToolCalls) return 'not run: the tool call limit is reached, write the briefing from what you have'
       used++
+      counts.set(toolOf(c.function.name), (counts.get(toolOf(c.function.name)) ?? 0) + 1)
       const result = opts.call(c.function.name, c.function.arguments).catch(e => `error: ${e instanceof Error ? e.message : String(e)}`)
       seen.set(key, result)
       return result

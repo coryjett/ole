@@ -70,7 +70,7 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   oleWarmupInstructions?: string
   /** Ole: the MCP servers the person added (ole/servers.ts); each key is the secret `mcp:<id>` */
   oleMcpServers?: import('./ole/types').McpServerConfig[]
-  /** Ole: windows hidden from screen sharing (#51); unset is on */
+  /** Ole: windows hidden from capture during calls (#51, #61); unset is off */
   oleHideWhileSharing?: boolean
   /** Ole: prepare before calendar meetings (#52); unset is on, and the lead time in minutes */
   oleAutoPrepare?: boolean
