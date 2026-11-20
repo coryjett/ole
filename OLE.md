@@ -34,6 +34,20 @@ Expect conflicts only at the seams. `app/package.json` `version` is Ole's own (k
 
 Updates install only when the new build is signed by the same certificate as the installed one, so keep the "Ole Local" identity (login keychain) safe. Losing it means everyone reinstalls by hand.
 
+## Releases and updates
+
+`sh app/scripts/ole-release.sh` is the only way to publish. It refuses a version that isn't above the newest release, creates the release as a **draft**, downloads it again and verifies it (checksums against `latest-mac.yml`, signed by the "Ole Local" certificate, update feed `coryjett/ole`, version), and only then publishes. A draft that fails is deleted, so a half-made release is never public.
+
+`sh app/scripts/ole-update-check.sh` checks what installed copies see right now (add `--full` to download and verify the newest release too). Run it after any change on the Releases page.
+
+**A bad release:** never delete or edit the newest release; installed copies would have nothing valid to update to. Fix forward: bump the version and release again. Copies that took the bad one update to the fix on their next check.
+
+### The signing certificate
+
+Installed copies only accept an update signed by the same certificate as the one they run. It lives in the login keychain as **"Ole Local"** (SHA-1 `67687C2215D46786F3C86CB788FAFE925F1480B2`). **If it's lost, no installed copy can update again: everyone reinstalls by hand.** Back it up, with its private key, somewhere safe and offline: in **Keychain Access › login › My Certificates**, right-click **Ole Local › Export "Ole Local"…**, save as `.p12` with a passphrase. Keep the file and the passphrase apart, and never commit them.
+
+Restore on another Mac with `security import ole-local-signing.p12 -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign`, then trust it for code signing (Keychain Access › the certificate › Trust › Code Signing: Always Trust).
+
 ## Seams (Yogurt files Ole edits)
 
 - `app/electron-builder.yml`: app id, names, usage strings, publish to `coryjett/ole`
