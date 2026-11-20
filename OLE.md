@@ -181,6 +181,9 @@ For scale: the Yogurt adapter is about 340 lines (`yogurt/` without the two tran
 
 ## Seams (Yogurt files Ole edits)
 
+Every change to a Yogurt-owned file is also recorded in [docs/UPSTREAM.md](docs/UPSTREAM.md), split into upstream candidates and Ole-only changes. A PR that touches a Yogurt file updates that ledger in the same PR.
+
+
 - `app/electron-builder.yml`: app id, names, usage strings, publish to `coryjett/ole`
 - `app/package.json`: productName, version
 - `app/src/shared/i18n.ts`: `t()` brands the message
