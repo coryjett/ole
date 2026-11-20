@@ -88,7 +88,7 @@ describe('Prepare: meeting-context fast path (#93)', () => {
     expect(chat.mock.calls[0][0].messages.some(m => m.tool_call_id?.startsWith('fast_path') || m.tool_calls?.some(c => c.id.startsWith('fast_path')))).toBe(false)
     expect(chat.mock.calls[0][0].messages.find(m => m.role === 'user' && m.content?.startsWith('Now:'))!.content).not.toContain(SERVER_MATCHED_LINE)
     expect(log.mock.calls.map(c => c[0])).toEqual([
-      'ole prepare: get_meeting_context on S failed (the server returned 500), using the tool loop',
+      'ole prepare: get_meeting_context on S failed (server error), using the tool loop',
       'ole prepare: 1 tool calls (get_upcoming_meetings 1)',
     ])
   })
@@ -104,8 +104,8 @@ describe('Prepare: meeting-context fast path (#93)', () => {
       await vi.advanceTimersByTimeAsync(FAST_PATH_TIMEOUT_MS + 1)
       expect((await done).text).toBe('brief')
       expect(log.mock.calls.map(c => c[0])).toEqual([
-        'ole prepare: get_meeting_context on A failed (boom), using the tool loop',
-        'ole prepare: get_meeting_context on B failed (timed out), using the tool loop',
+        'ole prepare: get_meeting_context on A failed (server error), using the tool loop',
+        'ole prepare: get_meeting_context on B failed (timeout), using the tool loop',
         'ole prepare: 0 tool calls',
       ])
     } finally {
@@ -182,5 +182,14 @@ describe('meetingContextArgs', () => {
   it('leaves out what the schema does not declare, and sends all when it declares nothing', () => {
     expect(meetingContextArgs(tool('s', 'get_meeting_context', { meeting_title: {} }), { meetingTitle: 'Sync', focus: 'f', startsAt })).toEqual({ meeting_title: 'Sync' })
     expect(meetingContextArgs(tool('s', 'get_meeting_context'), { meetingTitle: 'Sync', focus: 'f', startsAt })).toEqual({ meeting_title: 'Sync', focus: 'f', starts_at: '2026-11-19T15:30:00.000Z' })
+  })
+})
+
+describe('fast-path failure kinds in the log (#95)', () => {
+  it('classifies without echoing the server message', async () => {
+    const { failureKind } = await import('../../src/main/ole/prepare')
+    expect(failureKind(new Error('request timed out after 20 s'))).toBe('timeout')
+    expect(failureKind(new Error('fetch failed: ECONNREFUSED'))).toBe('transport')
+    expect(failureKind(new Error('500 at https://internal.example/x?token=abc'))).toBe('server error')
   })
 })
