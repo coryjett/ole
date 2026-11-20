@@ -22,7 +22,7 @@ describe('OpenAI model list (#8)', () => {
 
 describe('model dropdown (#8)', () => {
   const render = (value: string, options?: string[], note?: string) =>
-    renderToStaticMarkup(createElement(ModelSelect, { id: 'm', label: 'Prepare model', hint: 'h', value, options, note, disabled: false, onChange: () => {} }))
+    renderToStaticMarkup(createElement(ModelSelect, { id: 'm', label: 'Prepare model', hint: 'h', role: 'prepare', value, options, note, disabled: false, onChange: () => {} }))
   it('lists the models with the saved one selected', () => {
     const html = render('gpt-5.6-terra', ['gpt-5.6-terra', 'gpt-5.6-luna'])
     expect(html).toContain('<select')
