@@ -6,7 +6,8 @@ import { useState, type ReactNode } from 'react'
 export type OleOpenAIStepApi = {
   setSecret(name: 'openai', value: string): Promise<unknown>
   testOpenAI(): Promise<{ ok: boolean; error?: string }>
-  setProviders(p: { transcription?: 'openai'; assistant?: 'openai' }): Promise<unknown>
+  /** Local providers the person never chose become OpenAI (#10) */
+  adoptOpenAI(): Promise<unknown>
 }
 
 /** Onboarding's Layout, passed in so this screen looks like every other first-run screen */
@@ -20,7 +21,7 @@ export async function saveOpenAIKey(api: OleOpenAIStepApi, key: string, useForAl
     await api.setSecret('openai', k)
     const r = await api.testOpenAI()
     if (!r.ok) return { ok: false, error: r.error || "That key didn't work" }
-    if (useForAll) await api.setProviders({ transcription: 'openai', assistant: 'openai' })
+    if (useForAll) await api.adoptOpenAI()
     return { ok: true }
   } catch {
     return { ok: false, error: "Couldn't save the key" }

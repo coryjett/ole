@@ -18,6 +18,10 @@ export type OleSettingsApi = {
   testOpenAI(): Promise<import('../../../main/ole/openaiTest').OpenAITestResult>
   /** the models the saved key can use (#8) */
   openaiModels(): Promise<import('../../../main/ole/openaiTest').OpenAIModels>
+  /** after a working key is saved: Local providers the person never chose become OpenAI (#10) */
+  adoptOpenAI(): Promise<{ switched: Array<'transcription' | 'assistant'>; providers: OleProviders }>
+  /** undo the switch (undo: true also keeps Local as the person's choice), or put it back when the key is removed */
+  revertOpenAI(undo: boolean): Promise<{ reverted: Array<'transcription' | 'assistant'>; providers: OleProviders }>
 }
 
 const CHOICES: Array<[ProviderChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI']]
@@ -56,9 +60,33 @@ function TestBadge({ ok, text, testId }: { ok: boolean; text: string; testId: st
 type OpenAITest = Awaited<ReturnType<OleSettingsApi['testOpenAI']>>
 const modelLine = (m?: { name: string; found: boolean }) => !m ? '' : m.found ? `${m.name} available` : `${m.name} not on this account`
 
-export function OpenAIKeyRow({ status, save, test }: { status?: { set: boolean; masked: string }; save: (name: SecretName, value: string) => Promise<boolean>; test: () => Promise<OpenAITest> }) {
+const switchedText = (k: Array<'transcription' | 'assistant'>) => k.length === 2 ? 'transcription and summaries' : k[0] === 'transcription' ? 'transcription' : 'summaries'
+
+export function OpenAIKeyRow({ status, save, test, adopt, revert }: {
+  status?: { set: boolean; masked: string }; save: (name: SecretName, value: string) => Promise<boolean>; test: () => Promise<OpenAITest>
+  adopt?: () => Promise<{ switched: Array<'transcription' | 'assistant'> }>; revert?: (undo: boolean) => Promise<{ reverted: Array<'transcription' | 'assistant'> }>
+}) {
   const [result, setResult] = useState<OpenAITest | null>(null)
   const [testing, setTesting] = useState(false)
+  const [notice, setNotice] = useState<{ text: string; undo: boolean } | null>(null)
+  // a saved key that works switches Local providers to OpenAI and says so; removing it puts them back (#10)
+  const saveKey = async (name: SecretName, value: string) => {
+    const ok = await save(name, value)
+    if (!ok) return ok
+    setNotice(null)
+    if (!value) {
+      const r = await revert?.(false).catch(() => null)
+      if (r?.reverted.length) setNotice({ text: `OpenAI key removed: ${switchedText(r.reverted)} back to Local from the next meeting.`, undo: false })
+      return ok
+    }
+    const t = await test().catch(() => null)
+    if (t) setResult(t)
+    if (!t?.ok) return ok
+    const r = await adopt?.().catch(() => null)
+    if (r?.switched.length) setNotice({ text: `Switched ${switchedText(r.switched)} to OpenAI. Your key is used from the next meeting.`, undo: true })
+    return ok
+  }
+  const undo = async () => { await revert?.(true).catch(() => null); setNotice({ text: 'Kept Local. You can change this any time below.', undo: false }) }
   const run = async () => {
     setTesting(true); setResult(null)
     try { setResult(await test()) } catch { setResult({ ok: false, error: 'Test failed' }) } finally { setTesting(false) }
@@ -69,11 +97,13 @@ export function OpenAIKeyRow({ status, save, test }: { status?: { set: boolean; 
       <div className="settings-row-copy">
         <label htmlFor="ole-key-openai" className="settings-label">OpenAI key</label>
         <p data-testid="ole-key-openai-status" className="settings-description">{keyStatusText(status)}</p>
+        {notice && <p data-testid="ole-openai-switched" role="status" className="settings-description" style={{ marginTop: 6 }}>
+          {notice.text}{notice.undo && <> <button data-testid="ole-openai-undo" className="text-action" onClick={() => void undo()}>Undo</button></>}</p>}
         {result && <TestBadge testId="ole-openai-result" ok={!!result.ok && !missing}
           text={result.ok ? ['Key works', modelLine(result.chatModel), modelLine(result.transcribeModel)].filter(Boolean).join(' · ') : (result.error || 'Test failed')} />}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2">
-        <KeyFields name="openai" label="OpenAI key" status={status} save={save} />
+        <KeyFields name="openai" label="OpenAI key" status={status} save={saveKey} />
         <button data-testid="ole-openai-test" className="workspace-button" disabled={testing} onClick={() => void run()}>{testing ? 'Testing…' : 'Test'}</button>
       </div>
     </div>
@@ -276,9 +306,11 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
       <div data-testid="ole-settings" className="settings-group">
         <ChoiceRow id="ole-transcription" label="Transcription" description="Who turns meeting audio into text."
           value={providers?.transcription ?? 'local'} disabled={off} onChange={(v) => patch({ transcription: v })} />
-        <ChoiceRow id="ole-assistant" label="Assistant" description="Who writes notes and answers questions. Anthropic and Vertex: coming later"
+        <ChoiceRow id="ole-assistant" label="Assistant" description="Who writes notes and answers questions. Prepare and live context need OpenAI: with Local they are off and your MCP servers are not used. Anthropic and Vertex: coming later"
           value={providers?.assistant ?? 'local'} disabled={off} onChange={(v) => patch({ assistant: v })} />
-        <OpenAIKeyRow status={status?.openai} save={saveKey} test={() => api.testOpenAI()} />
+        <OpenAIKeyRow status={status?.openai} save={saveKey} test={() => api.testOpenAI()}
+          adopt={async () => { const r = await api.adoptOpenAI(); setProviders(r.providers); return r }}
+          revert={async (undo) => { const r = await api.revertOpenAI(undo); setProviders(r.providers); return r }} />
         <ModelSelect id="ole-transcribe-model" label="Transcription model" hint="Turns call audio into text."
           value={providers?.openaiTranscribeModel ?? ''} options={models?.transcribe} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiTranscribeModel: v })} />
         <ModelSelect id="ole-prepare-model" label="Prepare model" hint="Writes the briefing before a call. A larger model picks tools and writes better."
@@ -288,6 +320,7 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
       </div>
       <h3 className="settings-section-heading">MCP servers</h3>
       <div data-testid="ole-servers" className="settings-group">
+        {providers?.assistant === 'local' && <div className="settings-row"><p data-testid="ole-servers-local" role="status" className="settings-description">Used only when Assistant is OpenAI. With Local, Ole doesn't call these servers.</p></div>}
         {servers?.length === 0 && <div className="settings-row"><p className="settings-description">No MCP servers yet. Add one below; the assistant finds its tools by itself.</p></div>}
         {servers?.map((s) => (
           <ServerRow key={s.id} server={s} status={status?.[`mcp:${s.id}`]} saveKey={saveKey} test={(id) => api.testServer(id)}

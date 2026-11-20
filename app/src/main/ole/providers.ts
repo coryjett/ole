@@ -64,12 +64,19 @@ export function setProviders(file: string, patch: unknown): OleProviders {
   const p = patch as Partial<OleProviders>
   const settingsPatch: Partial<OleProviderSettings> = {}
 
+  // a dropdown the person changed is their choice: the OpenAI key never switches it again (#10)
+  const auto = new Set(loadSettings(file).oleAutoSwitched ?? [])
   if ('transcription' in p && isProviderChoice(p.transcription)) {
     settingsPatch.oleTranscription = p.transcription
+    settingsPatch.oleTranscriptionChosen = true
+    auto.delete('transcription')
   }
   if ('assistant' in p && isProviderChoice(p.assistant)) {
     settingsPatch.oleAssistant = p.assistant
+    settingsPatch.oleAssistantChosen = true
+    auto.delete('assistant')
   }
+  if ('transcription' in p || 'assistant' in p) settingsPatch.oleAutoSwitched = auto.size ? [...auto] : undefined
   if ('openaiTranscribeModel' in p) {
     const model = typeof p.openaiTranscribeModel === 'string' ? p.openaiTranscribeModel.trim() : ''
     if (isValidModelName(model)) {
@@ -95,6 +102,31 @@ export function setProviders(file: string, patch: unknown): OleProviders {
   return providersOf(updateSettings(file, settingsPatch as Partial<Settings>))
 }
 
+type Kind = 'transcription' | 'assistant'
+const KINDS: Kind[] = ['transcription', 'assistant']
+const keyOf = (k: Kind) => k === 'transcription' ? 'oleTranscription' : 'oleAssistant'
+const chosenOf = (k: Kind) => k === 'transcription' ? 'oleTranscriptionChosen' : 'oleAssistantChosen'
+
+/** a working OpenAI key was saved: Local providers the person never chose become OpenAI (#10) */
+export function adoptOpenAI(file: string): { switched: Kind[]; providers: OleProviders } {
+  const s = loadSettings(file)
+  const now = providersOf(s)
+  const switched = KINDS.filter(k => now[k] === 'local' && !s[chosenOf(k)])
+  if (!switched.length) return { switched, providers: now }
+  const patch: Partial<Settings> = { oleAutoSwitched: [...new Set([...(s.oleAutoSwitched ?? []), ...switched])] }
+  for (const k of switched) patch[keyOf(k)] = 'openai'
+  return { switched, providers: providersOf(updateSettings(file, patch)) }
+}
+
+/** what the key switched goes back to Local; undo also records Local as the person's choice */
+export function revertOpenAI(file: string, o: { undo: boolean }): { reverted: Kind[]; providers: OleProviders } {
+  const s = loadSettings(file)
+  const reverted = (s.oleAutoSwitched ?? []).filter(k => providersOf(s)[k] === 'openai')
+  const patch: Partial<Settings> = { oleAutoSwitched: undefined }
+  for (const k of reverted) { patch[keyOf(k)] = 'local'; if (o.undo) patch[chosenOf(k)] = true }
+  return { reverted, providers: providersOf(updateSettings(file, patch)) }
+}
+
 export function hookOleProviders(d: { file: string }): void {
   ipcMain.handle('ole:providers:get', () => providersOf(loadSettings(d.file)))
 
@@ -104,5 +136,7 @@ export function hookOleProviders(d: { file: string }): void {
     const p = providersOf(loadSettings(d.file))
     return testOpenAI({ key: readSecret(d.file, 'openai'), chatModel: p.openaiChatModel, transcribeModel: p.openaiTranscribeModel })
   })
+  ipcMain.handle('ole:openai:adopt', () => adoptOpenAI(d.file))
+  ipcMain.handle('ole:openai:revert', (_e, undo: unknown) => revertOpenAI(d.file, { undo: undo === true }))
   ipcMain.handle('ole:openai:models', () => listOpenAIModels({ key: readSecret(d.file, 'openai') }))
 }

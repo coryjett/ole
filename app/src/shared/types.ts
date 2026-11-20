@@ -472,6 +472,8 @@ export type OleLiveState = {
   prepared: { meetingTitle: string | null; focus: string | null; preparedAt: number } | null
   error: string | null
   bullets: import('../main/ole/types').OleBullet[]
+  /** why Prepare and live context are off (Assistant on Local, or no OpenAI key); null when they can run */
+  blocked: string | null
 }
 export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & {
   state(): Promise<OleLiveState>
