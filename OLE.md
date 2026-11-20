@@ -138,6 +138,7 @@ type MeetingSource = {
   upcomingMeetings(fromMs: number, toMs: number): Promise<Meeting[]>  // [] when nothing can be read
   meetingNow(atMs: number): Promise<Meeting | null>  // the meeting on now, for a default-titled call (#56)
   meetingContext(q: { title: string | null; focus: string | null; startsAt: number | null }): Promise<MeetingContext | null>
+  serverMeetings(fromMs: number, toMs: number): Promise<{ serverName: string; meetings: Meeting[] } | null>  // servers only (#149)
 }
 type Meeting = { id; title; start; end; attendees?; link?; recordId?; note?; source? }   // source: the server's name
 type MeetingContext = { tool: OleTool; serverName: string; argsJson: string; result: string }
@@ -150,6 +151,10 @@ Today's design, `createMeetingSource({ tools, call, calendar, now, log, warn })`
 - `meetingNow`: the meeting on now from the same list; when a server's list has none (a server may leave out meetings already started), the host calendar is checked too. Auto-prepare uses `upcomingMeetings` only.
 - A meeting's note goes to Prepare and to the live bullets as one line, `Note about this meeting from <server>: …` (`PreparedContext.note`), cleaned first by `cleanNote`: flattened to one line, markdown links and images reduced to their text, bare URLs dropped, leading `#`, `>`, `-`, `*` removed from each line, `**` dropped, capped at 200 chars.
 - The session hands the source its tools (gathered again when older than 10 minutes) and never lets it contact a server while the Assistant is on Local and Prepare is not on this Mac (#11); the host calendar is still read then.
+
+- `serverMeetings` (#149): the same server list and cache as `upcomingMeetings`, with the name of the server that supplied it, but never the host calendar; `null` when no server offers a list, all failed, or the servers may not be used (#11). The session exposes it as `OleSession.serverMeetings`.
+
+**The Agenda from your meetings server (#149).** When the Mac calendar has no access or no calendars (calendar links count as calendars), Yogurt's calendar reads fall back to `serverMeetings`: `ole/yogurt/serverCalendar.ts` maps each meeting to Yogurt's `CalEvent` (id `ole-server:<server id>:<meeting id>`, title, start, end, no attendees since a server gives at most a count, `url` only for an https call link, calendar `{ id: 'ole-server', name: 'From <server>', source: 'server' }`), applies Hide events without a call link, and `index.ts`'s `readCalendar` uses it. Every reader of `readCalendar` sees these meetings: the Agenda and coming up (`calendar:day` and `calendar:coming-up` report `granted` while the server is the source), starting and preparing notes from an event, linking a recording to its event, call detection's event match, and the menu bar's coming-up list and join. When the Mac calendar has calendars it is the only source, even on a day with no meetings: no merging, no duplicates. Whether the Mac has calendars is asked at most once a minute (again on any calendar change). A server failure is "No meetings" (or the access prompt, with no access). Ole's own host calendar (`OleHost.calendar`) is the Mac calendar alone (`readMacCalendar`), and `serverMeetings` never reads the host calendar, so there is no loop. Settings > Calendars shows "Meetings from <server>. It may list only some of your meetings." while the server is the source (`calendar:list` returns `server`, rendered by `ole/OleCalendarNote.tsx`).
 
 **Replacing it.** Another design (a dedicated meetings server, per-server roles, merged sources) is a new implementation of `MeetingSource` in this file: keep the interface and the types, change `createMeetingSource`. Nothing else picks a server, so Prepare, auto-prepare and the session need no change; `test/ole/meetingSource.test.ts` pins today's choices and is the test to rewrite.
 
@@ -200,7 +205,8 @@ Every change to a Yogurt-owned file is also recorded in [docs/UPSTREAM.md](docs/
 - `app/package.json`: productName, version
 - `app/src/shared/i18n.ts`: `t()` brands the message
 - `app/src/main/paths.ts`: data folder `Ole`
-- `app/src/main/index.ts`: app name and id; Ole keys, providers and session hooks (from `ole/yogurt/`); OpenAI notes model wrapper; transcription options
+- `app/src/main/index.ts`: app name and id; Ole keys, providers and session hooks (from `ole/yogurt/`); OpenAI notes model wrapper; transcription options; `readCalendar` falls back to the meetings server when the Mac calendar has none (#149)
+- `app/src/renderer/src/components/CalendarSettings.tsx`: mounts `OleCalendarNote` under the Calendars summary (#149)
 - `app/src/main/asr/index.ts`: OpenAI transcriber branch in `open()`, model gate in `recorded()`; the live recording's audio also goes to the OpenAI stream (`stream.push` before the pipeline's, `flush`/`close` in `finishSession`)
 - `app/src/main/settings.ts`: Ole settings fields
 - `app/src/main/trayMenu.ts`: tooltip name

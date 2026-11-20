@@ -236,7 +236,8 @@ export type YogurtApi = {
   /** the Mac's calendar: what is still to come today and tomorrow */
   calendar: {
     /** status: any calendar at all; systemStatus: the Mac's own calendars, apart from calendar links. link: a calendar link (removable) */
-    list(): Promise<{ status: CalendarStatus; systemStatus?: CalendarStatus; calendars: (CalendarSource & { enabled: boolean; link?: boolean })[]; hideEventsWithoutCallLink: boolean }>
+    /** server (Ole, #149): the meetings server whose list the Agenda shows while this Mac's calendar has none */
+    list(): Promise<{ status: CalendarStatus; systemStatus?: CalendarStatus; calendars: (CalendarSource & { enabled: boolean; link?: boolean })[]; hideEventsWithoutCallLink: boolean; server?: string }>
     setEnabled(id: string, enabled: boolean): Promise<boolean>
     setHideWithoutLink(hide: boolean): Promise<boolean>
     onChange(cb: () => void): () => void

@@ -172,3 +172,31 @@ describe('note hygiene before any prompt (#98)', () => {
     expect(line).not.toContain('\n')
   })
 })
+
+describe('serverMeetings: the server-only read the host calendar falls back to (#149)', () => {
+  const list = (title: string) => JSON.stringify({ meetings: [{ title, startTime: '2026-11-20T15:30:00Z', endTime: '2026-11-20T16:00:00Z' }] })
+
+  it('gives the first succeeding server\'s list with its name, filtered to the window', async () => {
+    const tools = [tool('a', 'get_upcoming_meetings'), tool('b', 'get_upcoming_meetings')]
+    const call = vi.fn(async (name: string) => name.startsWith('a') ? 'error: down' : list('Weekly sync'))
+    const calendar = { upcoming: vi.fn(async () => []) }
+    const src = createMeetingSource({ tools: () => tools, call, calendar, now: () => T0, warn: () => {} })
+    expect(await src.serverMeetings(T0, T0 + 3600_000)).toMatchObject({ serverName: 'B', meetings: [{ title: 'Weekly sync', source: 'B' }] })
+    expect(await src.serverMeetings(T0 + 7200_000, T0 + 9000_000)).toEqual({ serverName: 'B', meetings: [] })
+    // one list call shared with upcomingMeetings through the cache
+    await src.upcomingMeetings(T0, T0 + 3600_000)
+    expect(call).toHaveBeenCalledTimes(2)
+    expect(calendar.upcoming).not.toHaveBeenCalled()
+  })
+
+  it('null, and the host calendar never read, when no server offers a list or every server fails', async () => {
+    const calendar = { upcoming: vi.fn(async () => [{ id: 'mac', title: 'Mac', start: T0, end: T0 + 1 }]) }
+    const none = createMeetingSource({ tools: () => [tool('a', 'get_meeting_context')], call: vi.fn(), calendar, now: () => T0 })
+    expect(await none.serverMeetings(T0, T0 + 3600_000)).toBeNull()
+    const failing = createMeetingSource({ tools: () => [tool('a', 'get_upcoming_meetings')], call: vi.fn(async () => 'error: 500'), calendar, now: () => T0, warn: () => {} })
+    expect(await failing.serverMeetings(T0, T0 + 3600_000)).toBeNull()
+    const blocked = createMeetingSource({ tools: () => [], call: vi.fn(), calendar, now: () => T0 })
+    expect(await blocked.serverMeetings(T0, T0 + 3600_000)).toBeNull()
+    expect(calendar.upcoming).not.toHaveBeenCalled()
+  })
+})

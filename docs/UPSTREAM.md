@@ -24,6 +24,7 @@ A running ledger of every change Ole makes to Yogurt-owned files: anything outsi
 |---|---|---|
 | Ole's IPC, settings fields and live-state types | many (#33, #52, #89, #101, #118/#122, #126, #128, …) | `preload/index.ts`, `shared/types.ts`, `main/settings.ts` |
 | Wiring Ole into the app: session, providers, servers, keys, per-meeting files, notes, calendar, capture protection | many | `main/index.ts` |
+| The Agenda and Yogurt's other calendar reads fall back to the meetings server's list when the Mac calendar has no access or no calendars (`readCalendar` through `ole/yogurt/serverCalendar.ts`; `calendar:day`/`calendar:coming-up` report `granted` then; `calendar:list` names the server); Settings > Calendars notes it | #149 | `main/index.ts`, `shared/types.ts`, `renderer/src/components/CalendarSettings.tsx` |
 | OpenAI transcription (chunked and streaming) behind the Transcribe seam | #85, #89 | `main/asr/index.ts` |
 | Ole tabs, quick-note bar and docked Ask on the note page; the Ask column beside the tab panels on a wide note, and the width measurement it needs | #108, #122, #148 | `renderer/src/screens/Note.tsx` |
 | Ask button hands over to Ole's docked Ask during a call (one line) | #122 | `renderer/src/components/Chat.tsx` |

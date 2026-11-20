@@ -44,7 +44,16 @@ export type MeetingSource = {
    * tools it refuses (the #126 subject lookups send a heard name, so only tools allowed to receive names, #91)
    */
   meetingContext(q: MeetingQuery, o?: { allow?: (tool: OleTool) => boolean }): Promise<MeetingContext | null>
+  /**
+   * the meetings server's own list (#149): the first server whose get_upcoming_meetings succeeds, with its name, from
+   * the same cache as upcomingMeetings. Never reads the host calendar, so the host may use it as its own calendar's
+   * fallback without a loop. null when no server offers a list or all failed.
+   */
+  serverMeetings(fromMs: number, toMs: number): Promise<ServerMeetings | null>
 }
+
+/** a server's meeting list and the server's name (as Settings shows it) */
+export type ServerMeetings = { serverName: string; meetings: Meeting[] }
 
 export const UPCOMING_TOOL = 'get_upcoming_meetings'
 /** one server's meeting-context call may take this long before the next server is tried */
@@ -94,7 +103,7 @@ export function createMeetingSource(o: {
 }): MeetingSource {
   const now = o.now ?? (() => Date.now())
   const log = o.log ?? ((line: string) => console.info(line))
-  let cache: { at: number; to: number; key: string; meetings: Meeting[] | null } | null = null
+  let cache: { at: number; to: number; key: string; list: ServerMeetings | null } | null = null
 
   const timed = async (p: Promise<string>, ms: number): Promise<string> => {
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -104,29 +113,30 @@ export function createMeetingSource(o: {
   }
 
   /** the first server whose list succeeds, or null when none offers one or all failed */
-  async function fromServers(fromMs: number, toMs: number): Promise<Meeting[] | null> {
+  async function fromServers(fromMs: number, toMs: number): Promise<ServerMeetings | null> {
     const offering = (await o.tools()).filter(t => t.tool === UPCOMING_TOOL)
     const key = offering.map(t => t.name).join('\n')
     const t = now()
-    if (cache && cache.key === key && t - cache.at < UPCOMING_CACHE_MS && toMs <= cache.to) return cache.meetings
+    if (cache && cache.key === key && t - cache.at < UPCOMING_CACHE_MS && toMs <= cache.to) return cache.list
     if (!offering.length) { cache = null; return null }
     const to = Math.max(toMs, t + AHEAD_MS)
-    let meetings: Meeting[] | null = null
+    let found: ServerMeetings | null = null
     for (const tool of offering) {
       try {
         const result = await timed(o.call(tool.name, JSON.stringify(upcomingArgs(tool, t, to)), { timeoutMs: UPCOMING_TIMEOUT_MS }), UPCOMING_TIMEOUT_MS)
         const list = parseMeetings(result, tool.serverId, tool.serverName)
-        if (list) { meetings = list; break }
+        if (list) { found = { serverName: tool.serverName, meetings: list }; break }
       } catch (e) { o.warn?.(`reading meetings from ${tool.serverName} failed`, e) }
     }
-    cache = { at: t, to, key, meetings }
-    return meetings
+    cache = { at: t, to, key, list: found }
+    return found
   }
+  const within = (list: Meeting[], fromMs: number, toMs: number) => list.filter(m => m.end > fromMs && m.start < toMs)
 
   return {
     async upcomingMeetings(fromMs, toMs) {
       const servers = await fromServers(fromMs, toMs)
-      if (servers) return servers.filter(m => m.end > fromMs && m.start < toMs)
+      if (servers) return within(servers.meetings, fromMs, toMs)
       if (!o.calendar) return []
       return o.calendar.upcoming(fromMs, toMs)
     },
@@ -134,7 +144,7 @@ export function createMeetingSource(o: {
     async meetingNow(atMs) {
       const from = atMs - 12 * 60 * 60_000, to = atMs + 60 * 60_000
       const servers = await fromServers(from, to)
-      const found = eventNow((servers ?? []).filter(m => m.end > from && m.start < to), atMs)
+      const found = eventNow(within(servers?.meetings ?? [], from, to), atMs)
       if (found || !o.calendar) return found
       return eventNow(await o.calendar.upcoming(from, to), atMs)
     },
@@ -154,6 +164,11 @@ export function createMeetingSource(o: {
         }
       }
       return null
+    },
+
+    async serverMeetings(fromMs, toMs) {
+      const servers = await fromServers(fromMs, toMs)
+      return servers && { serverName: servers.serverName, meetings: within(servers.meetings, fromMs, toMs) }
     },
   }
 }
