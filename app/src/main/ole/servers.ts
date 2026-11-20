@@ -8,7 +8,8 @@ export const MAX_SERVERS = 10
 export const MAX_NAME = 40
 export const MAX_URL = 300
 
-export type ServerTest = (server: McpServerConfig, key: string | null) => Promise<{ ok: boolean; tools: number; error?: string }>
+export type ServerToolInfo = { name: string; description: string }
+export type ServerTest = (server: McpServerConfig, key: string | null) => Promise<{ ok: boolean; tools: number; error?: string; toolList?: ServerToolInfo[] }>
 
 /** an https URL with no spaces or credentials, at most 300 characters */
 export function isValidServerUrl(v: unknown): v is string {
@@ -98,7 +99,11 @@ export function hookOleServers(d: { file: string; test: ServerTest }): void {
     if (!server) return { ok: false, tools: 0, error: 'No such server' }
     try {
       const r = await d.test(server, readSecret(d.file, `mcp:${id}` as SecretName))
-      return { ok: !!r.ok, tools: Number.isFinite(r.tools) ? r.tools : 0, ...(r.error ? { error: String(r.error).slice(0, 300) } : {}) }
+      // the list crosses IPC: capped, and every string bounded
+      const toolList = Array.isArray(r.toolList)
+        ? r.toolList.slice(0, 200).map(t => ({ name: String(t.name).slice(0, 100), description: String(t.description ?? '').slice(0, 300) }))
+        : undefined
+      return { ok: !!r.ok, tools: Number.isFinite(r.tools) ? r.tools : 0, ...(r.error ? { error: String(r.error).slice(0, 300) } : {}), ...(toolList ? { toolList } : {}) }
     } catch (err) {
       return { ok: false, tools: 0, error: err instanceof Error ? err.message.slice(0, 300) : 'Test failed' }
     }

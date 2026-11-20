@@ -21,3 +21,23 @@ describe("Settings' Test button", () => {
     expect(Date.now() - started).toBeLessThan(2000)
   })
 })
+
+describe('the tool list Test returns (#1)', () => {
+  it('lists only the read-only tools, sorted, with descriptions', async () => {
+    const tools = [
+      { name: 'search_calls', description: 'Search calls', inputSchema: { type: 'object' } },
+      { name: 'add_note', description: 'Add a note', inputSchema: { type: 'object' } },
+      { name: 'get_account_details', description: 'Account', inputSchema: { type: 'object' } },
+    ]
+    const f = vi.fn<typeof fetch>(async (_u, init) => {
+      const req = JSON.parse(String(init?.body))
+      if (req.id === undefined) return new Response(null, { status: 202 })
+      const result = req.method === 'tools/list' ? { tools } : { protocolVersion: '2025-06-18', capabilities: { tools: {} } }
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: req.id, result }), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    const r = await testServer(server, 'k-123456', { fetch: f })
+    expect(r.ok).toBe(true)
+    expect(r.toolList?.map(t => t.name)).toEqual(['get_account_details', 'search_calls'])
+    expect(r.tools).toBe(2)
+  })
+})

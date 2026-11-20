@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react'
 import type { McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/types'
 
 export type SecretStatus = Partial<Record<SecretName, { set: boolean; masked: string }>>
-export type ServerTestResult = { ok: boolean; tools: number; error?: string }
+export type ServerTestResult = { ok: boolean; tools: number; error?: string; toolList?: Array<{ name: string; description: string }> }
 export type OleSettingsApi = {
   getProviders(): Promise<OleProviders>
   setProviders(p: Partial<OleProviders>): Promise<OleProviders>
@@ -96,6 +96,7 @@ function ServerRow({ server, status, saveKey, onToggle, onRemove, test }: {
 }) {
   const [result, setResult] = useState<ServerTestResult | null>(null)
   const [testing, setTesting] = useState(false)
+  const [showTools, setShowTools] = useState(false)
   const name: SecretName = `mcp:${server.id}`
   const id = `ole-server-${server.id}`
   const runTest = async () => {
@@ -116,6 +117,13 @@ function ServerRow({ server, status, saveKey, onToggle, onRemove, test }: {
             {result.ok ? `✓ Connected: ${result.tools} read-only ${result.tools === 1 ? 'tool' : 'tools'}` : `✕ ${result.error || 'Test failed'}`}
           </p>
         )}
+        {result?.ok && !!result.toolList?.length && <>
+          <button data-testid={`${id}-show-tools`} className="text-action block text-[13px]" style={{ marginTop: 4 }} onClick={() => setShowTools(v => !v)}>
+            {showTools ? 'Hide tools' : 'Show tools'}</button>
+          {showTools && <ul data-testid={`${id}-tools`} className="settings-description" style={{ marginTop: 4, maxHeight: 260, overflowY: 'auto' }}>
+            {result.toolList.map(t => <li key={t.name} style={{ marginBottom: 4 }}><code>{t.name}</code>{t.description ? ` · ${t.description.length > 140 ? `${t.description.slice(0, 140)}…` : t.description}` : ''}</li>)}
+          </ul>}
+        </>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2">
         <KeyFields name={name} label={`${server.name} key`} status={status} save={saveKey} />
