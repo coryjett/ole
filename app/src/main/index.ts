@@ -49,6 +49,7 @@ import { savedCallMemory } from './ole/core/callSummary'
 import type { OleAnswer } from './ole/core/types'
 import type { Llm } from './notes/enhance'
 import { hookOleServers } from './ole/yogurt/servers'
+import { oleMeetingFile } from './ole/yogurt/meetingFiles'
 import { protectFromCapture, shouldProtect } from './ole/yogurt/capture'
 import { loginItemOn, openedAtLogin, setLoginItem, syncLoginItem } from './loginItem'
 import { createMedia } from './media'
@@ -593,13 +594,13 @@ app.whenReady().then(() => {
   const ole = hookOle({
     file: settingsFile,
     send: (s) => { win?.webContents.send('ole:state', s); sendWidgetTranscript('ole:state', s) },
-    save: (id, bullets) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-bullets.json'), JSON.stringify(bullets, null, 2)),
+    save: (id, bullets) => writeFileSync(oleMeetingFile(userDataDir(), id, 'ole-bullets.json'), JSON.stringify(bullets, null, 2)),
     notify: (title, body) => { if (Notification.isSupported()) new Notification({ title, body }).show() },
     // pinned bullets join the meeting's own notes (#54); notes is ready long before a call ends
     appendNotes: (id, md) => { const mine = store.notes(id).mine.trimEnd(); notes.setMine(id, mine ? `${mine}\n\n${md}` : md) },
-    saveAnswers: (id, list) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-answers.json'), JSON.stringify(list, null, 2)),
+    saveAnswers: (id, list) => writeFileSync(oleMeetingFile(userDataDir(), id, 'ole-answers.json'), JSON.stringify(list, null, 2)),
     loadAnswers: (id) => {
-      const path = join(userDataDir(), 'meetings', id, 'ole-answers.json')
+      const path = oleMeetingFile(userDataDir(), id, 'ole-answers.json')
       if (!existsSync(path)) return []
       const list: unknown = JSON.parse(readFileSync(path, 'utf8'))
       return Array.isArray(list) ? list.slice(0, 200).filter((a): a is OleAnswer => !!a && typeof a === 'object' && typeof a.id === 'string' && typeof a.question === 'string' && typeof a.text === 'string' && typeof a.at === 'number') : []
@@ -610,17 +611,17 @@ app.whenReady().then(() => {
     // the Mac calendar only: Ole's meeting source already asks the servers first (#149: no loop through the fallback)
     upcoming: async (from, to) => (await readMacCalendar(from, to)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end })),
     // the call's summary, open questions and commitments (#82)
-    saveCall: (id, memory) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-call.json'), JSON.stringify(memory, null, 2)),
-    loadCall: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-call.json'); return existsSync(p) ? savedCallMemory(JSON.parse(readFileSync(p, 'utf8'))) : null },
+    saveCall: (id, memory) => writeFileSync(oleMeetingFile(userDataDir(), id, 'ole-call.json'), JSON.stringify(memory, null, 2)),
+    loadCall: (id) => { const p = oleMeetingFile(userDataDir(), id, 'ole-call.json'); return existsSync(p) ? savedCallMemory(JSON.parse(readFileSync(p, 'utf8'))) : null },
     // the organization the call matched, for the title written after it (#154)
-    saveOrg: (id, org) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-org.json'), JSON.stringify({ org })),
-    loadOrg: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-org.json'); if (!existsSync(p)) return null; const o: unknown = JSON.parse(readFileSync(p, 'utf8')); return o && typeof o === 'object' && typeof (o as { org?: unknown }).org === 'string' ? (o as { org: string }).org : null },
-    saveBriefing: (id, text) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-briefing.md'), text),
-    loadBriefing: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-briefing.md'); return existsSync(p) ? readFileSync(p, 'utf8').slice(0, 50_000) : '' },
+    saveOrg: (id, org) => writeFileSync(oleMeetingFile(userDataDir(), id, 'ole-org.json'), JSON.stringify({ org })),
+    loadOrg: (id) => { const p = oleMeetingFile(userDataDir(), id, 'ole-org.json'); if (!existsSync(p)) return null; const o: unknown = JSON.parse(readFileSync(p, 'utf8')); return o && typeof o === 'object' && typeof (o as { org?: unknown }).org === 'string' ? (o as { org: string }).org : null },
+    saveBriefing: (id, text) => writeFileSync(oleMeetingFile(userDataDir(), id, 'ole-briefing.md'), text),
+    loadBriefing: (id) => { const p = oleMeetingFile(userDataDir(), id, 'ole-briefing.md'); return existsSync(p) ? readFileSync(p, 'utf8').slice(0, 50_000) : '' },
     // the call's bullets turns, for Export for replay (#70): on this Mac only
-    saveTurns: (id, call) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-turns.json'), JSON.stringify(call), { mode: 0o600 }),
+    saveTurns: (id, call) => writeFileSync(oleMeetingFile(userDataDir(), id, 'ole-turns.json'), JSON.stringify(call), { mode: 0o600 }),
     loadTurns: (id) => {
-      const path = join(userDataDir(), 'meetings', id, 'ole-turns.json')
+      const path = oleMeetingFile(userDataDir(), id, 'ole-turns.json')
       return existsSync(path) ? parseRecordedCall(JSON.parse(readFileSync(path, 'utf8'))) : null
     },
     meetingForExport: (id) => {
@@ -635,7 +636,7 @@ app.whenReady().then(() => {
       return 'saved'
     },
     load: (id) => {
-      const path = join(userDataDir(), 'meetings', id, 'ole-bullets.json')
+      const path = oleMeetingFile(userDataDir(), id, 'ole-bullets.json')
       if (!existsSync(path)) return []
       const list: unknown = JSON.parse(readFileSync(path, 'utf8'))
       return Array.isArray(list) ? list.slice(0, 500).filter((b): b is { id: string; text: string; source: string; at: number } =>

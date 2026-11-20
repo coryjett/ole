@@ -10,7 +10,8 @@ export const ORG_MAX = 120
 /** an organization name as saved and shown: one line, single spaces, capped; '' when there is none */
 export function cleanOrg(org: unknown): string {
   if (typeof org !== 'string') return ''
-  const s = org.replace(/\s+/g, ' ').trim()
+  // no control, zero-width or direction characters in a saved name or a title (#156)
+  const s = org.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').replace(/\s+/g, ' ').trim()
   return s.length > ORG_MAX ? '' : s
 }
 
