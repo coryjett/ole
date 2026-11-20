@@ -64,13 +64,13 @@
     <rect x="400" y="442" width="320" height="42" rx="21" fill="#ffffff" fill-opacity=".08"/>
     <circle cx="424" cy="463" r="5" fill="#7aa7ff"/><text x="440" y="468" font-weight="700" fill="#fff">After</text><text x="510" y="468" fill="#c8cfe0">summary, transcript, notes</text>
   </g>
-  <text x="560" y="506" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="1" fill="#9fb0c9">STORED ON YOUR MAC · KEYS IN THE KEYCHAIN</text>
+  <text x="560" y="506" text-anchor="middle" font-size="11" font-weight="600" letter-spacing=".5" fill="#9fb0c9">STORED ON YOUR MAC · KEYS IN THE KEYCHAIN</text>
   <rect x="880" y="96" width="290" height="200" rx="24" fill="#ffffff" fill-opacity=".06" stroke="#7aa7ff" stroke-opacity=".55"/>
   <text x="1025" y="136" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="2" fill="#a78bfa">THE BRAINS</text>
   <text x="1025" y="164" text-anchor="middle" font-size="20" font-weight="800" fill="#fff">AI model</text>
-  <rect x="902" y="184" width="118" height="38" rx="19" fill="#7aa7ff" fill-opacity=".14" stroke="#7aa7ff" stroke-opacity=".7"/>
+  <rect x="898" y="184" width="124" height="38" rx="19" fill="#7aa7ff" fill-opacity=".14" stroke="#7aa7ff" stroke-opacity=".7"/>
   <text x="961" y="208" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">OpenAI</text>
-  <rect x="1030" y="184" width="118" height="38" rx="19" fill="#a78bfa" fill-opacity=".14" stroke="#a78bfa" stroke-opacity=".7"/>
+  <rect x="1028" y="184" width="124" height="38" rx="19" fill="#a78bfa" fill-opacity=".14" stroke="#a78bfa" stroke-opacity=".7"/>
   <text x="1089" y="208" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">Your server</text>
   <text x="1025" y="252" text-anchor="middle" font-size="12" fill="#9fb0c9">or Local: summaries only</text>
   <text x="1025" y="272" text-anchor="middle" font-size="12" fill="#9fb0c9">(no briefing, no bullets)</text>
@@ -79,10 +79,10 @@
   <text x="1025" y="438" text-anchor="middle" font-size="20" font-weight="800" fill="#fff">Your MCP servers</text>
   <text x="1025" y="466" text-anchor="middle" font-size="13" fill="#c8cfe0">accounts · deals · issues</text>
   <text x="1025" y="488" text-anchor="middle" font-size="13" fill="#c8cfe0">past calls · notes</text>
-  <rect x="937" y="506" width="176" height="28" rx="14" fill="#4fd18b" fill-opacity=".12"/>
-  <text x="1025" y="525" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="1" fill="#9be15d">READ ONLY · ANY NUMBER</text>
+  <rect x="915" y="506" width="220" height="28" rx="14" fill="#4fd18b" fill-opacity=".12"/>
+  <text x="1025" y="525" text-anchor="middle" font-size="11" font-weight="700" letter-spacing=".5" fill="#9be15d">READ ONLY · UP TO 10</text>
   <rect x="880" y="600" width="290" height="46" rx="23" fill="none" stroke="#ffffff" stroke-opacity=".22" stroke-dasharray="5 6"/>
   <text x="1025" y="628" text-anchor="middle" font-size="12" fill="#9fb0c9">CRM · call recordings · tickets · docs</text>
-  <rect x="440" y="600" width="240" height="46" rx="23" fill="#ffffff" fill-opacity=".06" stroke="#ffffff" stroke-opacity=".2"/>
+  <rect x="420" y="600" width="280" height="46" rx="23" fill="#ffffff" fill-opacity=".06" stroke="#ffffff" stroke-opacity=".2"/>
   <text x="560" y="628" text-anchor="middle" font-size="13" font-weight="600" fill="#c8cfe0">Updates from GitHub releases</text>
 </svg>

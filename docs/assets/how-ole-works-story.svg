@@ -31,7 +31,7 @@
   <text x="146" y="197" font-size="14" fill="#e8f5e4">Pulling your briefing… ☕</text>
   <g font-size="14">
     <rect x="56" y="250" width="304" height="62" rx="16" fill="#fff"/><text x="76" y="276" font-weight="700" fill="#0b2240">🔁 Renewal in 30 days</text><text x="76" y="297" font-size="12" fill="#5b6475">from: the deal record</text>
-    <rect x="56" y="324" width="304" height="62" rx="16" fill="#fff" transform="rotate(-1.5 208 355)"/><text x="76" y="350" font-weight="700" fill="#0b2240" transform="rotate(-1.5 208 355)">🐛 Open issue #412, still open</text><text x="76" y="371" font-size="12" fill="#5b6475" transform="rotate(-1.5 208 355)">from: the ticket tracker</text>
+    <rect x="56" y="324" width="304" height="62" rx="16" fill="#fff" transform="rotate(-1.5 208 355)"/><text x="76" y="350" font-weight="700" fill="#0b2240" transform="rotate(-1.5 208 355)">🐛 Issue #412: 429s on bursts</text><text x="76" y="371" font-size="12" fill="#5b6475" transform="rotate(-1.5 208 355)">from: the ticket tracker</text>
     <rect x="56" y="398" width="304" height="62" rx="16" fill="#fff" transform="rotate(1 208 429)"/><text x="76" y="424" font-weight="700" fill="#0b2240" transform="rotate(1 208 429)">🗣️ Last call: asked about SSO</text><text x="76" y="445" font-size="12" fill="#5b6475" transform="rotate(1 208 429)">from: call notes, 3 Nov</text>
   </g>
   <text x="56" y="510" font-size="14" fill="#cfe9c9">Ole asks your MCP servers</text>
@@ -59,21 +59,21 @@
   <text x="458" y="377" font-size="13" fill="#0b2240">"We keep hitting rate limits</text>
   <text x="458" y="396" font-size="13" fill="#0b2240">when traffic spikes…"</text>
   <!-- Ole widget -->
-  <rect x="566" y="430" width="242" height="150" rx="16" fill="#0b2240" stroke="#9be15d" stroke-opacity=".6"/>
-    <text x="582" y="454" font-size="12" font-weight="800" letter-spacing="1.5" fill="#9be15d">OLE · LIVE</text>
-  <g class="pop"><rect x="578" y="464" width="218" height="34" rx="10" fill="#ffffff" fill-opacity=".1"/><text x="588" y="485" font-size="12" fill="#fff">💡 Same issue at a fintech, fixed in 2.3</text></g>
-  <g class="pop b"><rect x="578" y="504" width="218" height="34" rx="10" fill="#ffffff" fill-opacity=".1"/><text x="588" y="525" font-size="12" fill="#fff">⚠️ Their renewal is in 30 days</text></g>
-  <g class="pop c"><rect x="578" y="544" width="218" height="28" rx="10" fill="#ffffff" fill-opacity=".1"/><text x="588" y="562" font-size="11" fill="#c8cfe0">sources: call 3 Nov · deal record</text></g>
-  <text x="432" y="470" font-size="14" fill="#f3d6e8">Bullets pop in</text>
-  <text x="432" y="492" font-size="14" fill="#f3d6e8">while they talk,</text>
-  <text x="432" y="514" font-size="14" fill="#f3d6e8">each with its</text>
-  <text x="432" y="536" font-size="14" fill="#f3d6e8">source. No bot</text>
-  <text x="432" y="558" font-size="14" fill="#f3d6e8">joins the call.</text>
+  <rect x="548" y="424" width="262" height="160" rx="16" fill="#0b2240" stroke="#9be15d" stroke-opacity=".6"/>
+    <text x="564" y="447" font-size="12" font-weight="800" letter-spacing="1" fill="#9be15d">OLE · LIVE</text>
+  <g class="pop"><rect x="558" y="456" width="242" height="38" rx="10" fill="#ffffff" fill-opacity=".1"/><text x="568" y="472" font-size="12" fill="#fff">💡 A fintech hit this, fixed in 2.3</text><text x="568" y="487" font-size="10" fill="#c8cfe0">call, 3 Nov</text></g>
+  <g class="pop b"><rect x="558" y="498" width="242" height="38" rx="10" fill="#ffffff" fill-opacity=".1"/><text x="568" y="514" font-size="12" fill="#fff">🐛 Matches open issue #412</text><text x="568" y="529" font-size="10" fill="#c8cfe0">ticket tracker</text></g>
+  <g class="pop c"><rect x="558" y="540" width="242" height="38" rx="10" fill="#ffffff" fill-opacity=".1"/><text x="568" y="556" font-size="12" fill="#fff">📘 Guide: per-route rate limits</text><text x="568" y="571" font-size="10" fill="#c8cfe0">product docs</text></g>
+  <text x="432" y="466" font-size="13" fill="#f3d6e8">Context pops</text>
+  <text x="432" y="486" font-size="13" fill="#f3d6e8">in while they</text>
+  <text x="432" y="506" font-size="13" fill="#f3d6e8">talk, each bit</text>
+  <text x="432" y="526" font-size="13" fill="#f3d6e8">with a source.</text>
+  <text x="432" y="556" font-size="13" fill="#f3d6e8">No bot joins.</text>
 
   <!-- PANEL 3: AFTER -->
   <rect x="848" y="40" width="320" height="560" rx="26" fill="url(#p3)" stroke="#7aa7ff" stroke-opacity=".4"/>
   <text x="872" y="84" font-size="13" font-weight="800" letter-spacing="3" fill="#7aa7ff">3 · AFTER</text>
-  <text x="872" y="118" font-size="24" font-weight="800" fill="#fff">Notes write themselves</text>
+  <text x="872" y="118" font-size="22" font-weight="800" fill="#fff">Notes, done for you</text>
   <rect x="872" y="146" width="272" height="330" rx="16" fill="#fff"/>
   <text x="892" y="178" font-size="15" font-weight="800" fill="#0b2240">Acme sync · 32 min</text>
   <text x="892" y="206" font-size="11" font-weight="800" letter-spacing="1.5" fill="#5b6475">SUMMARY</text>
@@ -85,8 +85,8 @@
     <rect x="892" y="334" width="16" height="16" rx="4" fill="none" stroke="#c4c9d4" stroke-width="1.5"/><text x="916" y="347">Renewal check-in</text>
   </g>
   <text x="892" y="384" font-size="11" font-weight="800" letter-spacing="1.5" fill="#5b6475">CONTEXT FROM THE CALL</text>
-  <rect x="892" y="394" width="232" height="26" rx="8" fill="#eef7ec"/><text x="902" y="412" font-size="12" fill="#2f6b2a">💡 Same issue at a fintech…</text>
-  <rect x="892" y="426" width="232" height="26" rx="8" fill="#fff4ec"/><text x="902" y="444" font-size="12" fill="#9a4a1c">⚠️ Renewal in 30 days</text>
+  <rect x="892" y="394" width="232" height="26" rx="8" fill="#eef7ec"/><text x="902" y="412" font-size="12" fill="#2f6b2a">💡 A fintech hit this, fixed in 2.3</text>
+  <rect x="892" y="426" width="232" height="26" rx="8" fill="#fff4ec"/><text x="902" y="444" font-size="12" fill="#9a4a1c">🐛 Matches open issue #412</text>
   <text x="872" y="520" font-size="14" fill="#d6e2f5">Summary, transcript, your notes</text>
   <text x="872" y="542" font-size="14" fill="#d6e2f5">and the bullets, saved on</text>
   <text x="872" y="564" font-size="14" fill="#d6e2f5">your Mac. 🌶️</text>
