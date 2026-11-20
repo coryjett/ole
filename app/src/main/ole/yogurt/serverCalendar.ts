@@ -4,6 +4,7 @@
 // server's list instead, mapped to Yogurt's event shape. When the Mac calendar has calendars it stays the only source:
 // no merging, no duplicates. Read-only, and the server list comes from core meetingSource's server-only read, which
 // never reads the host calendar, so there is no loop back into this module.
+import { createHash } from 'node:crypto'
 import type { CalEvent, CalendarSource, CalendarStatus } from '../../calendar'
 import { meetingLink } from '../../calendar'
 import type { Meeting, ServerMeetings } from '../core/meetingSource'
@@ -17,10 +18,15 @@ export const MAC_CALENDARS_TTL_MS = 60_000
 export const serverCalendar = (serverName: string): CalendarSource => ({ id: SERVER_CALENDAR_ID, name: `From ${serverName}`, source: 'server' })
 
 /** one server meeting as a Yogurt event: no attendees (a server gives at most a count), a call link only when it is one */
+/** a server's id never becomes part of a key as-is: a fixed-length hash of it (#152) */
+const safeId = (id: string) => createHash('sha256').update(id).digest('hex').slice(0, 32)
+/** titles without control or direction characters, capped (#152) */
+const safeTitle = (t: string) => t.replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim().slice(0, 200)
+
 export function serverEvent(m: Meeting, serverName: string): CalEvent {
   const link = m.link && /^https:\/\//.test(m.link) ? meetingLink(m.link) : null
   return {
-    id: `${SERVER_EVENT_PREFIX}${m.id}`, title: m.title, start: m.start, end: m.end, attendees: [],
+    id: `${SERVER_EVENT_PREFIX}${safeId(m.id)}`, title: safeTitle(m.title), start: m.start, end: m.end, attendees: [],
     url: link && /^https:\/\//.test(link) ? link : null, calendar: serverCalendar(serverName),
   }
 }
@@ -49,10 +55,8 @@ export function createServerCalendar(d: {
     if (d.status() !== 'granted') return false
     const t = now()
     if (known && t - known.at < MAC_CALENDARS_TTL_MS) return known.has
-    let has = false
-    try { has = (await d.calendars()).length > 0 } catch { has = false }
-    known = { at: t, has }
-    return has
+    // a failed check isn't remembered as "no calendars": the next read tries again (#152)
+    try { const has = (await d.calendars()).length > 0; known = { at: t, has }; return has } catch { return false }
   }
 
   /** the server's list, or null on any failure (the reader then shows what the Mac gave: nothing) */
