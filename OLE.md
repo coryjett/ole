@@ -12,12 +12,12 @@ New versions download in the background and macOS shows "Ole x is ready"; Settin
 
 ## Lower-latency OpenAI transcription
 
-With Transcription on OpenAI, a live call streams each track over the Realtime API (`gpt-live-transcribe`, `app/src/main/ole/openaiStream.ts`, #85), so a line lands once the pause that ends it is heard (no upload and full re-read after it) and quick readings show while people talk; any chunk the stream can't give, and the rest of the recording after an auth, model or repeated connection error, goes through the chunked `/audio/transcriptions` path instead. Settings > Ole > Live streaming turns it off.
+With Transcription on OpenAI, a live call streams each track over the Realtime API (`gpt-live-transcribe`, `app/src/main/ole/yogurt/openaiStream.ts`, #85), so a line lands once the pause that ends it is heard (no upload and full re-read after it) and quick readings show while people talk; any chunk the stream can't give, and the rest of the recording after an auth, model or repeated connection error, goes through the chunked `/audio/transcriptions` path instead. Settings > Ole > Live streaming turns it off.
 
 ## Fork rules
 
 - Tracking fork: Yogurt is the `upstream` remote. Never rewrite its history.
-- Ole code lives in `app/src/main/ole/`, `app/src/renderer/src/ole/`, `app/test/ole/`.
+- Ole code lives in `app/src/main/ole/` (`core/` and `yogurt/`, see Layout and porting), `app/src/renderer/src/ole/`, `app/test/ole/`.
 - Yogurt files change only at small seams (listed below). Internal names stay Yogurt's (`window.yogurt`, `YOGURT_*`, `yogurt.db`, `native/yogurt-*`) so merges stay cheap.
 - User-visible text goes through `shared/brand.ts`: `t()` shows "Yogurt" as "Ole" in messages, never in values filled into them.
 
@@ -54,7 +54,7 @@ Restore on another Mac with `security import ole-local-signing.p12 -k ~/Library/
 
 ## Measuring live bullets (replay)
 
-Change a bullets prompt or filter, then replay saved calls to see whether the bullets got better or worse (#66). Dev only: `app/src/main/ole/replay.ts` and `app/scripts/ole-replay.mjs` are never imported by the app (a test pins that).
+Change a bullets prompt or filter, then replay saved calls to see whether the bullets got better or worse (#66). Dev only: `app/src/main/ole/core/replay.ts` and `app/scripts/ole-replay.mjs` are never imported by the app (a test pins that).
 
 ```bash
 cd app
@@ -101,17 +101,55 @@ Each result reaches the model as if it had made the call: one assistant message 
 
 Match signal: a result that is a non-empty JSON object with `matchedBy` set (not null, false or empty) means the server already found the meeting's record. Then the request gains the line "The server already matched this meeting (see the first tool result); do not reply that you couldn't match it." and the #62 search-first nudge is skipped, since the search was done server-side. Any other result keeps the nudge. Prepare is not part of replay, so Export for replay is unchanged.
 
+## Layout and porting (#97)
+
+Ole is a host-agnostic core behind a host interface, so it can move to another host app (one that runs on Windows, say) by writing a new adapter instead of rewriting Ole.
+
+- **`app/src/main/ole/core/`**: everything that is Ole. The MCP client and tools (`mcp.ts`, `tools.ts`, `serverTest.ts`), Prepare (`prepare.ts`), live bullets (`bullets.ts`, `bulletStream.ts`), Ask (`ask.ts`), call memory and summary (`callSummary.ts`), mid-call enrichment (`enrich.ts`), feedback, calendar matching, replay and its export format (`replay*.ts`, `turnRecorder.ts`), the prompts (in those modules), provider, server and key settings logic (`providers.ts`, `servers.ts`, `secrets.ts`, `settingsHandlers.ts`), the OpenAI chat, test and model-list clients (`openai.ts`, `openaiTest.ts`), Prepare on the host's own model (`localChat.ts`), PCM conversion for streaming (`pcm.ts`), and the orchestrator `createOleSession(host)` (`session.ts`). Plain TypeScript: it imports only other core files, Node built-ins (`node:*`) and the app's npm dependencies, and uses only standard runtime globals (`fetch`, `URL`, `console`, timers).
+- **`core/host.ts`**: `OleHost`, everything the core needs from the app.
+- **`app/src/main/ole/yogurt/`**: the Yogurt adapter, the only Ole code that imports `electron` or Yogurt modules. `session.ts` (`hookOle`, called by `index.ts`) builds the `OleHost` and maps the session's handlers to `ole:*` IPC; `providers.ts`, `servers.ts`, `secrets.ts` map the Settings handlers to IPC and seal keys with `safeStorage`; `settingsFile.ts` is the settings and key store over Yogurt's `settings.json`; `openaiModel.ts` makes OpenAI Yogurt's notes model; `openaiTranscribe.ts` and `openaiStream.ts` are OpenAI transcription behind Yogurt's `Transcribe` seam (they need its chunker, tracks and lines); `capture.ts` keeps Yogurt's windows out of screen sharing. The per-meeting files, the notes, the calendar and the save panel are passed in by `index.ts`.
+- **`app/src/renderer/src/ole/`**: the UI is host UI. It talks to the core only through IPC (`window.yogurt.ole`); a new host reimplements it against the same handler contract (below), or reuses it if it is React too.
+
+### The host interface (`OleHost`)
+
+- `settings.get()` / `settings.patch(p)`: Ole's fields in the host's settings (`OleSettings`), read fresh on each call; patch returns the settings after it.
+- `secrets.read(name)` / `secrets.write(name, value)` / `secrets.remove(name)`: API keys (`openai`, `custom`, `mcp:<id>`) in plain text to the core, sealed at rest by the host; write `''` removes, write throws when the host can't seal.
+- `send(state)`: the live state (`OleLiveState`) out to the host's UI, on every change.
+- `notify(title, body)` (optional): a system notification (a server stopped working, a briefing is ready).
+- `notes.read(meetingId)` / `notes.append(meetingId, md)` (optional): the meeting's own notes, read at each bullets turn and Ask, appended to when the call ends.
+- `calendar.upcoming(fromMs, toMs)` (optional): calendar events (`{ id, title, start, end }`); without it Ole never reads the calendar.
+- `files.save*/load*` (each optional): per-meeting files kept on this computer: bullets, briefing, answers, call memory, recorded turns.
+- `meetingForExport(meetingId)` / `saveExport(name, content)` (optional): a saved meeting's title, start, attendees and transcript, and a save panel, for Export for replay.
+- `genericTitle(title)`: whether a title says nothing ("Zoom call", "Meeting") in the host's interface language (`core/titles.ts` has the English one).
+- `clock.now()` / `clock.after(ms, fn)` / `clock.every(ms, fn)`: the clock and the session's background timers (server checks, auto-prepare); timers must not keep the process alive.
+- `log.warn(message, error)`: where the session's warnings go.
+
+The host also hands over its own model with `session.setLocal(run)` once it has one (Prepare on this computer: `LocalRun`, a job given a `LocalLlm` with `contextSize` and a text-in, text-out `chat`).
+
+### What a new host provides
+
+1. An `OleHost` (above) and a call to `createOleSession(host)`.
+2. Meeting events into the session: `meetingStarted({ id, title })`, `meetingRenamed`, `segment({ meetingId, track, speaker, text, startMs })` per transcript line, `meetingStopped(id)`; `checkServers()` on wake.
+3. Its UI's requests mapped to the handlers: `session.handlers` (`state`, `briefing`, `retryServers`, `bullets`, `pin`, `rate`, `ask`, `call`, `answers`, `exportReplay`, `prepare`) and the Settings handlers in `core/settingsHandlers.ts` (`providerHandlers`, `serverHandlers`, `secretHandlers`, with `testServer` from `core/serverTest.ts`). Each handler takes the UI's input unchecked and validates it itself, so the host passes it straight through.
+4. Transcription, if it wants OpenAI's: its own wiring of `/audio/transcriptions` or the Realtime stream to its audio pipeline (Yogurt's is in `yogurt/openaiTranscribe.ts` and `openaiStream.ts`; `core/pcm.ts` converts the audio).
+
+For scale: the Yogurt adapter is about 340 lines (`yogurt/` without the two transcription files) plus about 90 in `index.ts` (the per-meeting files, notes, calendar, save panel, the OpenAI notes model and the local model handover).
+
+### The isolation test
+
+`app/test/ole/coreIsolation.test.ts` reads every file under `core/` and fails on an import of `electron`, a relative import that leaves `core/`, or anything that is not a Node built-in or a dependency in `app/package.json` (static, type-only, re-exports, `import()` and `require()`). `app/test/ole/coreSession.test.ts` runs a call on an in-memory host with no Electron. A change that needs the host goes through `OleHost`, never an import.
+
 ## Seams (Yogurt files Ole edits)
 
 - `app/electron-builder.yml`: app id, names, usage strings, publish to `coryjett/ole`
 - `app/package.json`: productName, version
 - `app/src/shared/i18n.ts`: `t()` brands the message
 - `app/src/main/paths.ts`: data folder `Ole`
-- `app/src/main/index.ts`: app name and id; Ole keys, providers and session hooks; OpenAI notes model wrapper; transcription options
+- `app/src/main/index.ts`: app name and id; Ole keys, providers and session hooks (from `ole/yogurt/`); OpenAI notes model wrapper; transcription options
 - `app/src/main/asr/index.ts`: OpenAI transcriber branch in `open()`, model gate in `recorded()`; the live recording's audio also goes to the OpenAI stream (`stream.push` before the pipeline's, `flush`/`close` in `finishSession`)
 - `app/src/main/settings.ts`: Ole settings fields
 - `app/src/main/trayMenu.ts`: tooltip name
-- `app/src/preload/index.ts`, `app/src/shared/types.ts`: `window.yogurt.ole`
+- `app/src/preload/index.ts`, `app/src/shared/types.ts`: `window.yogurt.ole` (`OleLiveState` and `OleExportResult` are aliases of `ole/core/types.ts`)
 - `app/src/renderer/src/screens/Settings.tsx`, `Home.tsx`, `Note.tsx`, `windows/Widget.tsx`: Ole settings, panel and bullets
 - `app/src/shared/exportNotes.ts`, `app/resources/about/Credits.html`: credit Yogurt
 - `app/native/*/Info.plist`, `app/native/yogurt-mcp/main.swift`: helper ids and paths

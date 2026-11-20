@@ -50,9 +50,9 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   summaryLanguage?: string
   /** new versions download by themselves; on unless turned off */
   autoUpdate?: boolean
-  /** Ole: keys sealed with safeStorage (ole/secrets.ts); never plain */
+  /** Ole: keys sealed with safeStorage (ole/yogurt/secrets.ts); never plain */
   oleSecrets?: Partial<Record<import('./ole/core/types').SecretName, string>>
-  /** Ole: providers for transcription and the notes model (ole/providers.ts) */
+  /** Ole: providers for transcription and the notes model (ole/core/providers.ts) */
   oleTranscription?: 'local' | 'openai'
   oleAssistant?: 'local' | 'openai' | 'custom'
   oleTranscribeModel?: string
@@ -68,9 +68,9 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   oleAssistantChosen?: boolean
   /** Ole: providers the OpenAI key switched to OpenAI, so Undo and removing the key put back only those */
   oleAutoSwitched?: Array<'transcription' | 'assistant'>
-  /** Ole: the person's own instructions for the pre-call warm-up (ole/providers.ts); at most 8000 characters */
+  /** Ole: the person's own instructions for the pre-call warm-up (ole/core/providers.ts); at most 8000 characters */
   oleWarmupInstructions?: string
-  /** Ole: the MCP servers the person added (ole/servers.ts); each key is the secret `mcp:<id>` */
+  /** Ole: the MCP servers the person added (ole/core/servers.ts); each key is the secret `mcp:<id>` */
   oleMcpServers?: import('./ole/core/types').McpServerConfig[]
   /** Ole: windows hidden from capture during calls (#51, #61); unset is off */
   oleHideWhileSharing?: boolean
