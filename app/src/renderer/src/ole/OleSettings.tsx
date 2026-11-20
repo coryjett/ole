@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react'
 import type { McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/types'
 
 export type SecretStatus = Partial<Record<SecretName, { set: boolean; masked: string }>>
-export type ServerTestResult = { ok: boolean; tools: number; error?: string }
+export type ServerTestResult = { ok: boolean; tools: number; error?: string; toolList?: Array<{ name: string; description: string }> }
 export type OleSettingsApi = {
   getProviders(): Promise<OleProviders>
   setProviders(p: Partial<OleProviders>): Promise<OleProviders>
@@ -14,6 +14,8 @@ export type OleSettingsApi = {
   getServers(): Promise<McpServerConfig[]>
   setServers(list: Array<Partial<McpServerConfig> & { name: string; url: string }>): Promise<McpServerConfig[]>
   testServer(id: string): Promise<ServerTestResult>
+  /** the saved OpenAI key against OpenAI's model list (#2) */
+  testOpenAI(): Promise<import('../../../main/ole/openaiTest').OpenAITestResult>
 }
 
 const CHOICES: Array<[ProviderChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI']]
@@ -41,6 +43,40 @@ function KeyFields({ name, label, status, save }: { name: SecretName; label: str
 
 const keyStatusText = (status?: { set: boolean; masked: string }) => status?.set ? `Saved: ${status.masked}` : 'Not set'
 
+/** the green or red result line under a Test button */
+function TestBadge({ ok, text, testId }: { ok: boolean; text: string; testId: string }) {
+  return <p data-testid={testId} role={ok ? 'status' : 'alert'} className="settings-description"
+    style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 999, fontWeight: 600, color: '#fff', background: ok ? '#2e8b57' : '#c0392b' }}>
+    {ok ? `✓ ${text}` : `✕ ${text}`}</p>
+}
+
+type OpenAITest = Awaited<ReturnType<OleSettingsApi['testOpenAI']>>
+const modelLine = (m?: { name: string; found: boolean }) => !m ? '' : m.found ? `${m.name} available` : `${m.name} not on this account`
+
+export function OpenAIKeyRow({ status, save, test }: { status?: { set: boolean; masked: string }; save: (name: SecretName, value: string) => Promise<boolean>; test: () => Promise<OpenAITest> }) {
+  const [result, setResult] = useState<OpenAITest | null>(null)
+  const [testing, setTesting] = useState(false)
+  const run = async () => {
+    setTesting(true); setResult(null)
+    try { setResult(await test()) } catch { setResult({ ok: false, error: 'Test failed' }) } finally { setTesting(false) }
+  }
+  const missing = result?.ok && [result.chatModel, result.transcribeModel].some(m => m && !m.found)
+  return (
+    <div className="settings-row">
+      <div className="settings-row-copy">
+        <label htmlFor="ole-key-openai" className="settings-label">OpenAI key</label>
+        <p data-testid="ole-key-openai-status" className="settings-description">{keyStatusText(status)}</p>
+        {result && <TestBadge testId="ole-openai-result" ok={!!result.ok && !missing}
+          text={result.ok ? ['Key works', modelLine(result.chatModel), modelLine(result.transcribeModel)].filter(Boolean).join(' · ') : (result.error || 'Test failed')} />}
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <KeyFields name="openai" label="OpenAI key" status={status} save={save} />
+        <button data-testid="ole-openai-test" className="workspace-button" disabled={testing} onClick={() => void run()}>{testing ? 'Testing…' : 'Test'}</button>
+      </div>
+    </div>
+  )
+}
+
 function KeyRow({ name, label, status, save }: { name: SecretName; label: string; status?: { set: boolean; masked: string }; save: (name: SecretName, value: string) => Promise<boolean> }) {
   return (
     <div className="settings-row">
@@ -60,6 +96,7 @@ function ServerRow({ server, status, saveKey, onToggle, onRemove, test }: {
 }) {
   const [result, setResult] = useState<ServerTestResult | null>(null)
   const [testing, setTesting] = useState(false)
+  const [showTools, setShowTools] = useState(false)
   const name: SecretName = `mcp:${server.id}`
   const id = `ole-server-${server.id}`
   const runTest = async () => {
@@ -80,6 +117,13 @@ function ServerRow({ server, status, saveKey, onToggle, onRemove, test }: {
             {result.ok ? `✓ Connected: ${result.tools} read-only ${result.tools === 1 ? 'tool' : 'tools'}` : `✕ ${result.error || 'Test failed'}`}
           </p>
         )}
+        {result?.ok && !!result.toolList?.length && <>
+          <button data-testid={`${id}-show-tools`} className="text-action block text-[13px]" style={{ marginTop: 4 }} onClick={() => setShowTools(v => !v)}>
+            {showTools ? 'Hide tools' : 'Show tools'}</button>
+          {showTools && <ul data-testid={`${id}-tools`} className="settings-description" style={{ marginTop: 4, maxHeight: 260, overflowY: 'auto' }}>
+            {result.toolList.map(t => <li key={t.name} style={{ marginBottom: 4 }}><code>{t.name}</code>{t.description ? ` · ${t.description.length > 140 ? `${t.description.slice(0, 140)}…` : t.description}` : ''}</li>)}
+          </ul>}
+        </>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2">
         <KeyFields name={name} label={`${server.name} key`} status={status} save={saveKey} />
@@ -219,7 +263,7 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
           onSave={(v) => patch({ openaiTranscribeModel: v })} />
         <ModelRow id="ole-chat-model" label="OpenAI chat model" value={providers?.openaiChatModel ?? ''} disabled={off}
           onSave={(v) => patch({ openaiChatModel: v })} />
-        <KeyRow name="openai" label="OpenAI key" status={status?.openai} save={saveKey} />
+        <OpenAIKeyRow status={status?.openai} save={saveKey} test={() => api.testOpenAI()} />
       </div>
       <h3 className="settings-section-heading">MCP servers</h3>
       <div data-testid="ole-servers" className="settings-group">
