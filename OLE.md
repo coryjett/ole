@@ -89,6 +89,10 @@ Anonymising is a best effort from the names Ole has: read the file before you sh
 
 Exported files hold real call content: keep them out of the repo. `ole-replay-*.json` is in `.gitignore`; never add one under `test/ole/fixtures/`.
 
+## Names looked up mid-call (#86)
+
+A name the other side says that the briefing doesn't cover (capitalised words not at a sentence start, never CamelCase, ALLCAPS or anything with a digit) is looked up in the background by `enrich.ts`: once per name, at most 6 a call, one at a time, at least 30 s apart, never started while a bullets turn or a briefing is running, at most 3 lookups and 3 model calls each, with the lookup-style tools minus anything named or described like a docs search. Facts are kept only with a real source and a quote found in the results; they join the briefing as `## Mentioned during the call: <name>`, which the bullets, Ask, the panel and the saved briefing all read. Each lookup logs one line with the name's length only: `ole enrich: name of N chars, L lookups, F facts added` (or `nothing found`, or `failed: <kind>`). These lookups are not bullets turns, so they are not kept for Export for replay; an exported briefing already holds the sections, so a replay sees them from the start of the call.
+
 ## Seams (Yogurt files Ole edits)
 
 - `app/electron-builder.yml`: app id, names, usage strings, publish to `coryjett/ole`

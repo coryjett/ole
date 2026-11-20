@@ -18,6 +18,8 @@ export type BulletsEngine = {
   update(id: string, patch: { pinned?: boolean; rating?: 'up' | 'down' | null }): OleBullet | null
   /** the last part of the call, for Ask (#53) */
   recent(): TranscriptLine[]
+  /** a bullets turn is running now (#86: background lookups wait for it) */
+  busy(): boolean
 }
 /** what the person rated on earlier calls (#55) */
 export type BulletFeedback = { useful: string[]; notUseful: string[] }
@@ -60,13 +62,28 @@ export const BULLETS_SYSTEM = [
 /** what a briefing says when nothing in the tools matches the call (#57, #71); prepare.ts writes these lines (older wording kept) */
 const NO_RECORD_LINES = [/^no (?:matching record|customer account) for this call\b/i, /^couldn['’]t match this call to a meeting or (?:record|account)\b/i]
 
-/** the call matched a record: a briefing exists and did not say it found none (#57) */
+/** the heading of a section added to the briefing during the call (#86) */
+export const MENTIONED_HEADING = '## Mentioned during the call:'
+
+/** the briefing as Prepare wrote it, without the sections added during the call (#86) */
+export function preparedPart(text: string): string {
+  const at = text.indexOf(MENTIONED_HEADING)
+  return at === -1 ? text : text.slice(0, at)
+}
+
+/** the call matched a record: a briefing exists and did not say it found none (#57); sections added mid-call don't count (#86) */
 export function hasMatchedRecord(context: PreparedContext | null): boolean {
-  const first = context?.text?.trim().split('\n')[0]?.trim() ?? ''
+  const first = preparedPart(context?.text ?? '').trim().split('\n')[0]?.trim() ?? ''
   return !!first && !NO_RECORD_LINES.some(r => r.test(first))
 }
 
 export const NO_RECORD_RULE = 'Nothing in the tools matches this call. Give general facts only: documentation, known issues, how something works, and patterns seen across many records, generalised and anonymised (for example "a common pattern among fintech startups"). Never details from one organisation\'s or person\'s records.'
+/** on such a call, the sections looked up for names the other side said (#86) may still be used */
+export const MENTIONED_RULE = 'Exception: a briefing section headed "Mentioned during the call" was looked up for a name said on this call; its facts may be used, with their sources.'
+/** the rule for a call with no matching record, with the exception when the briefing has a section added mid-call */
+export function noRecordRule(context: PreparedContext | null): string {
+  return context?.text?.includes(MENTIONED_HEADING) ? `${NO_RECORD_RULE}\n${MENTIONED_RULE}` : NO_RECORD_RULE
+}
 
 /** tools that fetch one organisation's or person's records (CRM-style names): left out of a call with no matching record (#57) */
 const SINGLE_RECORD = /account|opportunit|deal|contact|action_item|interaction|customer|pipeline|poc|tracker|call_brief|transcript|note/i
@@ -98,7 +115,7 @@ export function buildBulletsPrompt(args: { context: PreparedContext | null; line
     const about = [context.meetingTitle ? `meeting: ${context.meetingTitle}` : null, context.focus ? `focus: ${context.focus}` : null].filter(Boolean).join(', ')
     parts.push(`Prepared context${about ? ` (${about})` : ''}:\n${context.text}`)
   } else parts.push(`No context prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.focus ? ` Focus: ${context.focus}` : ''}`)
-  if (!hasMatchedRecord(context)) parts.push(NO_RECORD_RULE)
+  if (!hasMatchedRecord(context)) parts.push(noRecordRule(context))
   // the person's thumbs from earlier calls tune what is worth surfacing (#55)
   if (feedback?.useful.length) parts.push(`Bullets the user found useful on earlier calls:\n${feedback.useful.map(t => `- ${t}`).join('\n')}`)
   if (feedback?.notUseful.length) parts.push(`Bullets the user found not useful on earlier calls (give none like these):\n${feedback.notUseful.map(t => `- ${t}`).join('\n')}`)
@@ -301,6 +318,33 @@ export function candidateTerms(text: string): string[] {
     const capitalised = !startsSentence && /^[A-Z][a-z]{2,}$/.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
     if (code || caps || camel || capitalised) out.push(tok)
   })
+  return out
+}
+
+/** a capitalised word that can be part of a name: Acme, O'Neil, Smith-Jones; not CamelCase, ALLCAPS or digits */
+const NAME_WORD = /^[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)*$/
+/** words in a name looked up during the call (#86) */
+const NAME_WORDS_MAX = 4
+
+/**
+ * Names in a line (#86): a capitalised word that doesn't start a sentence, with the capitalised words straight after
+ * it ("Northwind Traders", "Dana Whitfield"), as #79's trigger finds them. Product and version tokens (CamelCase,
+ * ALLCAPS, anything with a digit) are never names. Punctuation after a word ends the name. In the order they appear.
+ */
+export function nameTerms(text: string): string[] {
+  const out: string[] = []
+  let run: string[] = []
+  const flush = () => { if (run.length) out.push(run.join(' ')); run = [] }
+  const tokens = text.split(/\s+/)
+  tokens.forEach((raw, i) => {
+    const tok = raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9+#]+$/g, '').replace(/[’']s$/, '')
+    const startsSentence = i === 0 || /[.!?:]["')\]]*$/.test(tokens[i - 1])
+    const name = tok.length >= 3 && NAME_WORD.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
+    if (name && (run.length || !startsSentence) && run.length < NAME_WORDS_MAX) run.push(tok)
+    else { flush(); if (name && !startsSentence) run.push(tok) }
+    if (/[^A-Za-z0-9'’]$/.test(raw)) flush()
+  })
+  flush()
   return out
 }
 
@@ -541,5 +585,6 @@ export function createBulletsEngine(opts: {
       return next
     },
     recent: () => recentWindow(lines, windowMs),
+    busy: () => running,
   }
 }

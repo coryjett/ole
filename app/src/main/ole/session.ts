@@ -15,6 +15,7 @@ import { genericTitle } from '../titles'
 import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, type BulletsEngine, type ChatFn } from './bullets'
 import { answerQuestion } from './ask'
+import { createEnricher, type Enricher } from './enrich'
 import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
 import { feedbackOf, recordRating } from './feedback'
 import { createTurnRecorder, type RecordedCall } from './turnRecorder'
@@ -85,6 +86,11 @@ export function hookOle(d: Deps): {
   let meetingId: string | null = null
   let engine: BulletsEngine | null = null
   let summarizer: ReturnType<typeof createCallSummarizer> | null = null
+  /** names said during the call, looked up in the background (#86), and the sections they added to the briefing */
+  let enricher: Enricher | null = null
+  let sections: string[] = []
+  /** a briefing with this call's sections after it: a briefing prepared again mid-call keeps them (#86) */
+  const withSections = (text: string) => sections.length ? [text.trim(), ...sections].filter(Boolean).join('\n\n') : text
   /** the user's notes, empty on any failure: a notes read never breaks a turn (#77) */
   const notesNow = (id: string) => { try { return d.notes?.(id) ?? '' } catch { return '' } }
   let bullets: OleBullet[] = []
@@ -184,6 +190,7 @@ export function hookOle(d: Deps): {
       if (o.forMeeting !== undefined && o.forMeeting !== meetingId) { preparing = false; send(); return state() }
       // the saved briefing records which servers it lacks
       prepared = unavailable.length ? { ...result, text: `${result.text}\n\n_Not included: ${unavailable.map(u => `${u.name} (${u.reason})`).join(', ')}._` } : result
+      if (meetingId) prepared = { ...prepared, text: withSections(prepared.text) }
     } catch (e) {
       if (seq !== prepareSeq) return state()
       error = e instanceof Error ? e.message : String(e)
@@ -370,6 +377,24 @@ export function hookOle(d: Deps): {
       // the running summary updates in the background from the live model (#75)
       // open questions and commitments show in the panel as they change (#82)
       summarizer = engine ? createCallSummarizer({ chat, everyMs: d.summaryEveryMs, onChange: () => { if (meetingId === m.id) send() } }) : null
+      // a name the other side says that the briefing doesn't cover is looked up in the background (#86); its section
+      // joins the briefing, so the bullets, Ask, the panel and the saved briefing all have it. Not through the turn
+      // recorder: these are not bullets turns. All lookup-style tools, even on a call with no matching record (#57),
+      // since finding who they are is the point; never a docs search (enrich.ts leaves those out)
+      sections = []
+      enricher = engine ? createEnricher({
+        chat,
+        tools: () => tools.filter(isLiveTool),
+        callTool: (name, argsJson) => call(name, argsJson),
+        context: () => prepared,
+        busy: () => preparing || !!engine?.busy(),
+        onSection: md => {
+          if (meetingId !== m.id) return
+          sections.push(md)
+          prepared = prepared ? { ...prepared, text: `${prepared.text.trimEnd()}\n\n${md}` } : { meetingTitle: genericTitle(m.title) ? null : m.title, focus: null, text: md, preparedAt: Date.now() }
+          send()
+        },
+      }) : null
       send()
     },
     meetingRenamed(m) {
@@ -382,11 +407,14 @@ export function hookOle(d: Deps): {
       const line = { speaker: seg.speaker || (seg.track === 'me' ? 'Me' : 'Them'), text: seg.text, startMs: seg.startMs }
       engine.push(line)
       summarizer?.push(line)
+      enricher?.push(line, seg.track === 'me')
     },
     meetingStopped(id) {
       if (id !== meetingId) return
       engine?.stop()
       summarizer?.stop()
+      enricher?.stop()
+      enricher = null
       const memory = summarizer?.memory() ?? EMPTY_MEMORY
       summarizer = null
       // the call's open questions and commitments stay with the meeting (#82)
@@ -409,6 +437,7 @@ export function hookOle(d: Deps): {
       engine = null
       meetingId = null
       prepared = null
+      sections = []
       // the call's bullets now live with the meeting (its note page); Home starts clean for the next call
       bullets = []
       send()

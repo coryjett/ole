@@ -36,7 +36,7 @@ Ole brings the right context to a call, from whatever systems know your world. Y
 
 - **Ready before the call.** Ole asks your MCP servers about the meeting, its people and its topic, and writes a short, sourced briefing: the 3 things that matter most, then a few short sections. Add an optional **Focus** (a name or topic) to steer it.
 - **Prepared before you remember to.** Ole writes the briefing 5 to 15 minutes before each calendar meeting and tells you when it's ready. A call with a default title ("Meeting") is matched to the calendar event happening now, never a later one.
-- **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. A question from the other side, or a product or name the briefing doesn't mention, gets context within about 10 seconds. When the briefing doesn't cover something, Ole looks it up with the same tools, several lookups at once, a few times a minute at most. A bullet that only rephrases one already shown is dropped. Each bullet appears as soon as the model has written it, not when the whole answer is back.
+- **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. A question from the other side, or a product or name the briefing doesn't mention, gets context within about 10 seconds. When the briefing doesn't cover something, Ole looks it up with the same tools, several lookups at once, a few times a minute at most. A bullet that only rephrases one already shown is dropped. Each bullet appears as soon as the model has written it, not when the whole answer is back. When the other side names an organisation, person or project the briefing doesn't cover, Ole looks it up in the background (once per name, up to 6 a call) and adds a short sourced section to the briefing for the rest of the call.
 - **Remembers the whole call.** A running summary of what's been discussed, the notes you type, earlier questions you asked and everything Ole already looked up stay in context for every bullet and answer, not just the last few minutes. The summary updates in the background, so bullets never wait on it.
 - **Open questions and commitments.** Questions still unanswered and who said they'd do what show under the bullets as the call goes (an answered question drops off), and stay with the meeting.
 - **Pin, rate and ask.** Pin a bullet and it lands in your notes and the summary. Thumbs up or down tunes what Ole surfaces on later calls. Type a question mid-call and Ole answers from the briefing, the call and your servers.
@@ -92,7 +92,7 @@ Keys are encrypted with the macOS Keychain and only ever shown masked.
 
 - Meetings, transcripts, notes and bullets live on your Mac in `~/Library/Application Support/Ole`.
 - With **OpenAI** picked, call audio and transcript text go to OpenAI on your key. With **Local**, they never leave your Mac.
-- Your MCP servers get the tool calls the model makes: the meeting title, your focus, and short search phrases from the conversation. Ole only calls tools that read.
+- Your MCP servers get the tool calls the model makes: the meeting title, your focus, and short search phrases from the conversation, including names the other side says (never sent to a documentation search). Ole only calls tools that read.
 - Nobody on the call is told you are recording. Tell them.
 
 <details><summary>FAQ</summary>

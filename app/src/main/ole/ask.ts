@@ -3,7 +3,7 @@
 import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
-import { callKey, hasMatchedRecord, latestNotes, NO_RECORD_RULE, readableSource } from './bullets'
+import { callKey, hasMatchedRecord, latestNotes, noRecordRule, readableSource } from './bullets'
 
 /** lookup rounds before the model must answer */
 const TOOL_ROUNDS = 2
@@ -33,7 +33,7 @@ export async function answerQuestion(o: {
 }): Promise<{ text: string; source?: string; url?: string }> {
   // what doesn't change during the call first, so prompt caching covers it (#77)
   const parts = [o.context?.text ? `Briefing:\n${o.context.text}` : 'No briefing.']
-  if (!hasMatchedRecord(o.context)) parts.push(NO_RECORD_RULE)
+  if (!hasMatchedRecord(o.context)) parts.push(noRecordRule(o.context))
   if (o.summary?.trim()) parts.push(`The call so far (summary):\n${o.summary.trim()}`)
   if (o.notes?.trim()) parts.push(`The user's notes so far:\n${latestNotes(o.notes)}`)
   parts.push(o.lines.length ? `Recent lines (latest):\n${o.lines.slice(-RECENT_LINES).map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}` : 'Nothing said yet.')
