@@ -10,6 +10,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
   ipcMain: { handle: (name: string, fn: (...a: unknown[]) => unknown) => handlers.set(name, fn) },
   Notification: { isSupported: () => false },
+  powerMonitor: { on: () => {} },
 }))
 const updater = Object.assign(new EventEmitter(), { autoDownload: false, autoInstallOnAppQuit: false, logger: undefined, checkForUpdates: vi.fn(async () => {}) })
 vi.mock('electron-updater', () => ({ default: { autoUpdater: updater } }))

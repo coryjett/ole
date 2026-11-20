@@ -37,7 +37,9 @@ export function UpdateReady({ recording }: { recording: boolean }) {
   if (status?.state !== 'ready' || status.dismissed) return null
   return <DirectionProvider direction={dirOf(language())}><span className="notes-download-status update-ready-status">
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger data-testid="update-ready" className="bar-btn notes-download-trigger no-drag" title={t('Update ready')}>
+      {/* Ole: a filled accent pill with a dot, so a waiting update is seen without searching for it (#101) */}
+      <Popover.Trigger data-testid="update-ready" className="bar-btn notes-download-trigger update-ready-trigger no-drag" title={t('Update ready')}>
+        <span className="update-ready-dot" aria-hidden="true" />
         <span className="truncate">{t('Update ready')}</span>
       </Popover.Trigger>
       <Popover.Portal>

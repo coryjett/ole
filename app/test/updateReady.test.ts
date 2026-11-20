@@ -49,6 +49,13 @@ it('shows only ready, uses the downloaded version, and never lets the initial re
   expect(control('update-ready')).toBeDefined(); expect(off).toHaveBeenCalledOnce()
 })
 
+it('the ready pill stands out: accent class and a dot (#101)', async () => {
+  mount()
+  notify(ready); await Promise.resolve(); render()
+  expect(content()).toContain('update-ready-trigger')
+  expect(content()).toContain('update-ready-dot')
+})
+
 it('ignores a pending status read after unmount', async () => {
   const cleanup = mount(); cleanup?.(); initial(ready); await Promise.resolve()
   expect(render()).toBeNull(); expect(off).toHaveBeenCalledOnce()

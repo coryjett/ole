@@ -10,6 +10,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [{ isDestroyed: () => false, webContents: { send } }] },
   ipcMain: { handle: (name: string, fn: (...args: unknown[]) => any) => handlers.set(name, fn) },
   Notification: { isSupported: () => false },
+  powerMonitor: { on: () => {} },
 }))
 it('publishes ready immediately, protects recordings, and restarts only on request', async () => {
   const { hookUpdates } = await import('../src/main/updates')
