@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { OleOpenAIStep } from '../ole/OleOpenAIStep'
 import { LoaderCircle } from 'lucide-react'
 import type { OnboardingPlan, OnboardingStep, PermissionKind, SetupState } from '../../../shared/types'
 import { screensOf, viaSystemSettings, type OnboardingScreen } from '../../../shared/onboarding'
@@ -18,21 +19,28 @@ import { t } from '../../../shared/i18n'
  */
 export function Onboarding({ state, plan, onDone }: { state: SetupState; plan: OnboardingPlan; onDone(): void }) {
   const screens = useMemo(() => screensOf(plan.steps), [plan])
-  const [stage, setStage] = useState<'intro' | 'steps' | 'progress'>(plan.intro ? 'intro' : screens.length ? 'steps' : 'progress')
+  const [stage, setStage] = useState<'intro' | 'openai' | 'steps' | 'progress'>(plan.intro ? 'intro' : screens.length ? 'steps' : 'progress')
+  // Ole: the OpenAI screen follows the welcome when no key is saved yet
+  const [needsOpenAI, setNeedsOpenAI] = useState(false)
+  useEffect(() => { void window.yogurt.ole?.secretStatus?.(['openai']).then(s => setNeedsOpenAI(!s.openai?.set), () => {}) }, [])
   const [i, setI] = useState(0)
   const finish = () => { setStage('progress'); void window.yogurt.onboarding.done().finally(onDone) }
+  const afterOpenAI = () => { if (screens.length) setStage('steps'); else finish() }
   const introDone = () => {
     void window.yogurt.onboarding.introSeen()
-    if (screens.length) setStage('steps'); else finish()
+    if (needsOpenAI) setStage('openai'); else afterOpenAI()
   }
   const next = () => { if (i + 1 < screens.length) setI(i + 1); else finish() }
   const screen = screens[i]
   // the welcome counts as the first step, so the bar shows how much is left from the start
-  const first = plan.intro ? 1 : 0
-  const progress = { n: stage === 'intro' ? 0 : first + i, total: first + screens.length }
+  const ole = needsOpenAI ? 1 : 0
+  const first = (plan.intro ? 1 : 0) + ole
+  const progress = { n: stage === 'intro' ? 0 : stage === 'openai' ? first - 1 : first + i, total: first + screens.length }
   return (
     <div data-testid="onboarding" data-phase={state.phase} data-stage={stage} className="setup-screen">
       {stage === 'intro' ? <Welcome state={state} progress={progress} onDone={introDone} />
+        : stage === 'openai' ? <OleOpenAIStep api={window.yogurt.ole} art={<WelcomeArt />} onNext={afterOpenAI}
+          Layout={(p) => <Layout {...p} progress={progress} state={state} />} />
         : stage === 'steps' && screen ? (screen.id === 'calendar' && window.yogurt.capabilities.calendarLink
           ? <CalendarLinkScreen key={screen.id} state={state} progress={progress} onNext={next} />
           : <PermissionScreen key={screen.id} screen={screen} state={state} progress={progress} onNext={next} />)

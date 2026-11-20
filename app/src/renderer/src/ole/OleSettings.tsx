@@ -46,7 +46,8 @@ const keyStatusText = (status?: { set: boolean; masked: string }) => status?.set
 /** the green or red result line under a Test button */
 function TestBadge({ ok, text, testId }: { ok: boolean; text: string; testId: string }) {
   return <p data-testid={testId} role={ok ? 'status' : 'alert'} className="settings-description"
-    style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 999, fontWeight: 600, color: '#fff', background: ok ? '#2e8b57' : '#c0392b' }}>
+    style={{ display: 'inline-block', marginTop: 6, padding: '1px 8px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+      color: ok ? '#3fb950' : '#ff6b6b', background: ok ? 'rgba(63, 185, 80, 0.12)' : 'rgba(255, 107, 107, 0.12)' }}>
     {ok ? `✓ ${text}` : `✕ ${text}`}</p>
 }
 
@@ -111,14 +112,11 @@ function ServerRow({ server, status, saveKey, onToggle, onRemove, test }: {
         <p data-testid={`${id}-url`} className="settings-description">{server.url}</p>
         <p data-testid={`ole-key-${slug(name)}-status`} className="settings-description">Key: {keyStatusText(status)}</p>
         {result && (
-          <p data-testid={`${id}-result`} role={result.ok ? 'status' : 'alert'} className="settings-description"
-            style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 999, fontWeight: 600,
-              color: result.ok ? '#fff' : '#fff', background: result.ok ? '#2e8b57' : '#c0392b' }}>
-            {result.ok ? `✓ Connected: ${result.tools} read-only ${result.tools === 1 ? 'tool' : 'tools'}` : `✕ ${result.error || 'Test failed'}`}
-          </p>
+          <TestBadge testId={`${id}-result`} ok={result.ok}
+            text={result.ok ? `Connected: ${result.tools} read-only ${result.tools === 1 ? 'tool' : 'tools'}` : (result.error || 'Test failed')} />
         )}
         {result?.ok && !!result.toolList?.length && <>
-          <button data-testid={`${id}-show-tools`} className="text-action block text-[13px]" style={{ marginTop: 4 }} onClick={() => setShowTools(v => !v)}>
+          <button data-testid={`${id}-show-tools`} className="text-action text-[12px]" style={{ display: 'block', marginTop: 4 }} onClick={() => setShowTools(v => !v)}>
             {showTools ? 'Hide tools' : 'Show tools'}</button>
           {showTools && <ul data-testid={`${id}-tools`} className="settings-description" style={{ marginTop: 4, maxHeight: 260, overflowY: 'auto' }}>
             {result.toolList.map(t => <li key={t.name} style={{ marginBottom: 4 }}><code>{t.name}</code>{t.description ? ` · ${t.description.length > 140 ? `${t.description.slice(0, 140)}…` : t.description}` : ''}</li>)}
