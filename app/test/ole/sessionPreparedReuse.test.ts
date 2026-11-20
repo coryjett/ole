@@ -165,7 +165,9 @@ describe('a prepared briefing belongs to its meeting (#128)', () => {
     callTool.mockClear()
     s.meetingStarted({ id: ID, title: 'Initech sync' })
     await vi.waitFor(() => expect(s.handlers.state().prepared?.meetingTitle).toBe('Initech sync'), { timeout: 3000 })
-    expect(callTool.mock.calls.some(c => 'starts_at' in (c[1] as object))).toBe(false)
+    // the call's own start goes out (#137), never the dropped event's (#135)
+    const sent = callTool.mock.calls.map(c => (c[1] as Record<string, unknown>).starts_at).filter(Boolean)
+    expect(sent.some(x => Date.parse(String(x)) === list[0].start)).toBe(false)
     expect((s.handlers.state().prepared as { note?: string }).note).toBeUndefined()
     s.meetingStopped(ID)
   })
@@ -178,6 +180,19 @@ describe('a prepared briefing belongs to its meeting (#128)', () => {
     list = [{ id: 'e10', title: 'Team retro', start: now() - 60_000, end: now() + 30 * 60_000 }]
     s.meetingStarted({ id: ID, title: 'Meeting' })
     await vi.waitFor(() => expect(s.handlers.state().prepared?.meetingTitle).toBe('Team retro'), { timeout: 3000 })
+    s.meetingStopped(ID)
+  })
+
+  it('a live call with no calendar event sends its own start time, so a meeting an hour away cannot match it (#137)', async () => {
+    let list: Upcoming[] = []
+    const { s, now } = await session(() => list)
+    list = [{ id: 'e11', title: 'Next-hour customer demo', start: now() + 58 * 60_000, end: now() + 118 * 60_000 }]
+    callTool.mockClear()
+    const startedAt = now()
+    s.meetingStarted({ id: ID, title: 'Meeting' })
+    await vi.waitFor(() => expect(callTool.mock.calls.some(c => c[0] === 'get_meeting_context')).toBe(true), { timeout: 3000 })
+    const args = callTool.mock.calls.find(c => c[0] === 'get_meeting_context')![1] as Record<string, unknown>
+    expect(Date.parse(String(args.starts_at))).toBe(startedAt)
     s.meetingStopped(ID)
   })
 
