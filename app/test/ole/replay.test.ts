@@ -6,13 +6,15 @@ import type { ChatFn } from '../../src/main/ole/bullets'
 
 const dir = join(__dirname, 'fixtures', 'replay')
 const fixture = (name: string): ReplayFixture => JSON.parse(readFileSync(join(dir, `${name}.json`), 'utf8'))
+/** the fixture on the usual 45 s rhythm only, fast turns (#79) off: the replies were recorded that way */
+const rhythm = (name: string): ReplayFixture => { const f = fixture(name); return { ...f, settings: { ...f.settings, fastMinMs: 0 } } }
 
 describe('replaying saved calls (#66)', () => {
   it('a steady call: drops, repeats, unverified excerpts, an invented link and a wordy headline are all counted', async () => {
-    const r = await replayCall(fixture('steady-call'))
+    const r = await replayCall(rhythm('steady-call'))
     expect(summarise(r)).toBe([
       'steady-call: 6:05 call, 25 lines',
-      '  turns 9 (0 failed, 0 unrecorded); lookups 0 asked, 0 made, 0 refused',
+      '  turns 9 (0 failed, 0 unrecorded, 0 fast); lookups 0 asked, 0 made, 0 refused',
       '  bullets 6 back, 4 shown, 1 without a source, 1 repeated',
       '  excerpts: heard 2/3 verified, quote 2/3 verified, links 1/2 kept',
       '  headlines: 6 to 13 words (median 7), longest 89 chars, 1 over ten words, 1 cut',
@@ -30,10 +32,10 @@ describe('replaying saved calls (#66)', () => {
   })
 
   it('a call with lookups: latency, a failed turn, a refused repeat lookup and a tool name as source', async () => {
-    const r = await replayCall(fixture('lookup-call'))
+    const r = await replayCall(rhythm('lookup-call'))
     expect(summarise(r)).toBe([
       'lookup-call: 5:05 call, 16 lines',
-      '  turns 7 (1 failed, 0 unrecorded); lookups 3 asked, 2 made, 1 refused',
+      '  turns 7 (1 failed, 0 unrecorded, 0 fast); lookups 3 asked, 2 made, 1 refused',
       '  bullets 3 back, 2 shown, 1 without a source, 0 repeated',
       '  excerpts: heard 2/2 verified, quote 2/2 verified, links 1/1 kept',
       '  headlines: 8 to 9 words (median 8.5), longest 63 chars, 0 over ten words, 0 cut',
@@ -46,15 +48,45 @@ describe('replaying saved calls (#66)', () => {
   })
 
   it('a quiet call with no account: more turns than recorded answer empty and the long silence shows', async () => {
-    const r = await replayCall(fixture('quiet-call'))
+    const r = await replayCall(rhythm('quiet-call'))
     expect(summarise(r)).toBe([
       'quiet-call: 10:05 call, 21 lines',
-      '  turns 14 (0 failed, 10 unrecorded); lookups 0 asked, 0 made, 0 refused',
+      '  turns 14 (0 failed, 10 unrecorded, 0 fast); lookups 0 asked, 0 made, 0 refused',
       '  bullets 1 back, 1 shown, 0 without a source, 0 repeated',
       '  excerpts: heard 1/1 verified, quote 1/1 verified, links 0/0 kept',
       '  headlines: 7 to 7 words (median 7), longest 46 chars, 0 over ten words, 0 cut',
       '  quiet: longest 8:35 with nothing new (1:30 to 10:05); first bullet at 1:30',
     ].join('\n'))
+  })
+
+  it('fast turns (#79): a question from the other side brings its turn forward, the rhythm otherwise unchanged', async () => {
+    const r = await replayCall(fixture('lookup-call'))
+    // "How often does Beacon rotate...?" at 0:40 runs at once (10 s since the last turn) instead of at 0:45
+    expect(r.timeline.map(t => [t.atMs, !!t.fast])).toEqual([
+      [0, false], [40_000, true], [85_000, false], [130_000, false], [175_000, false], [220_000, false], [230_000, true], [260_000, true], [305_000, false],
+    ])
+    // its answer lands 5 s sooner than on the 45 s rhythm
+    expect(r.shown[0]).toMatchObject({ atMs: 48_000, text: 'Beacon rotates mTLS certs every 24h by default' })
+    expect((await replayCall(rhythm('lookup-call'))).shown[0].atMs).toBe(53_000)
+    // never two turns closer than 10 s
+    const gaps = r.timeline.slice(1).map((t, i) => t.atMs - r.timeline[i].atMs)
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(10_000)
+    expect(r.turns.fast).toBe(3)
+    expect(summarise(r)).toContain('unrecorded, 3 fast)')
+    // the user's own question ("Is that during the morning dispatch burst?") never brings a turn forward
+    const steady = await replayCall(fixture('steady-call'))
+    expect(steady.timeline.filter(t => t.fast).map(t => t.atMs)).toEqual([325_000])
+  })
+
+  it('a fixture can set fastMinMs, clamped; 0 turns fast turns off', () => {
+    expect(replaySettings({ fastMinMs: 5_000 })).toEqual({ fastMinMs: 5_000 })
+    expect(replaySettings({ fastMinMs: -1 })).toEqual({ fastMinMs: 0 })
+    expect(replaySettings({ fastMinMs: 10_000_000 })).toEqual({ fastMinMs: 600_000 })
+  })
+
+  it('parses the per-turn log with and without the fast mark', () => {
+    expect(parseTurnLog('ole bullets: 2 back, 1 shown, 0 without a source, 1 repeated, 3 lookups')).toEqual({ back: 2, shown: 1, withoutSource: 0, repeated: 1, lookups: 3 })
+    expect(parseTurnLog('ole bullets: 2 back, 1 shown, 0 without a source, 1 repeated, 3 lookups, fast')).toEqual({ back: 2, shown: 1, withoutSource: 0, repeated: 1, lookups: 3, fast: true })
   })
 
   it('a replay is deterministic', async () => {

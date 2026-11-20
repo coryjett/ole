@@ -8,13 +8,16 @@ import { classifyFailure, type FailureKind, type ReplayFixture } from './replayF
 // the fixture format lives in replayFormat.ts, so the app's export (#70) can build fixtures without importing the harness
 export { classifyFailure, type FailureKind, type ReplayFixture, type ReplayReply, type ReplayToolCall, type ReplayTurn } from './replayFormat'
 
-export type TurnReport = { atMs: number; back: number; shown: number; withoutSource: number; repeated: number; lookups: number; failed?: FailureKind }
+export type TurnReport = { atMs: number; back: number; shown: number; withoutSource: number; repeated: number; lookups: number; failed?: FailureKind
+  /** brought forward by a question or a new term from the other side (#79) */
+  fast?: boolean }
 export type ShownBullet = { atMs: number; text: string; source: string; words: number; heard: boolean; quote: boolean; url: boolean }
 export type ReplayReport = {
   call: string
   durationMs: number
   lines: number
-  turns: { total: number; failed: number; unrecorded: number }
+  /** fast: turns a question or a new term brought forward (#79) */
+  turns: { total: number; failed: number; unrecorded: number; fast: number }
   bullets: { back: number; shown: number; withoutSource: number; repeated: number }
   /** of the bullets shown: excerpts the model gave and how many of them Ole could verify */
   excerpts: { heard: { given: number; verified: number }; quote: { given: number; verified: number }; url: { given: number; kept: number } }
@@ -29,10 +32,10 @@ export type ReplayReport = {
 
 /** the engine's per-turn log line (#59), parsed; null for anything else */
 export function parseTurnLog(line: string): Omit<TurnReport, 'atMs'> | null {
-  const ok = line.match(/^ole bullets: (\d+) back, (\d+) shown, (\d+) without a source, (\d+) repeated, (\d+) lookups$/)
+  const ok = line.match(/^ole bullets: (\d+) back, (\d+) shown, (\d+) without a source, (\d+) repeated, (\d+) lookups(, fast)?$/)
   if (ok) {
-    const [back, shown, withoutSource, repeated, lookups] = ok.slice(1).map(Number)
-    return { back, shown, withoutSource, repeated, lookups }
+    const [back, shown, withoutSource, repeated, lookups] = ok.slice(1, 6).map(Number)
+    return { back, shown, withoutSource, repeated, lookups, ...(ok[6] ? { fast: true } : {}) }
   }
   const failed = line.match(/^ole bullets: turn failed: (.*)$/)
   return failed ? { back: 0, shown: 0, withoutSource: 0, repeated: 0, lookups: 0, failed: classifyFailure(failed[1]) } : null
@@ -58,10 +61,10 @@ export function liveToolsFor(tools: OleTool[], context: PreparedContext | null):
 }
 
 /** engine settings a fixture may set, clamped to sane ranges; anything else in the fixture is ignored */
-export function replaySettings(s: unknown): { minIntervalMs?: number; windowMs?: number; maxLookupsPerMinute?: number } {
+export function replaySettings(s: unknown): { minIntervalMs?: number; fastMinMs?: number; windowMs?: number; maxLookupsPerMinute?: number } {
   const o = s && typeof s === 'object' && !Array.isArray(s) ? s as Record<string, unknown> : {}
   const pick = (k: string, min: number, max: number) => typeof o[k] === 'number' && Number.isFinite(o[k]) ? { [k]: Math.min(max, Math.max(min, o[k] as number)) } : {}
-  return { ...pick('minIntervalMs', 1_000, 600_000), ...pick('windowMs', 10_000, 1_800_000), ...pick('maxLookupsPerMinute', 0, 20) }
+  return { ...pick('minIntervalMs', 1_000, 600_000), ...pick('fastMinMs', 0, 600_000), ...pick('windowMs', 10_000, 1_800_000), ...pick('maxLookupsPerMinute', 0, 20) }
 }
 
 /** a clock and timers that only move when the replay moves them */
@@ -235,7 +238,7 @@ export async function replayCall(fixture: ReplayFixture, opts: { chat?: ChatFn }
     call: fixture.name,
     durationMs: endMs,
     lines: lines.filter(l => l.startMs <= endMs).length,
-    turns: { total: timeline.length, failed: timeline.filter(t => t.failed !== undefined).length, unrecorded: unrecordedTurns },
+    turns: { total: timeline.length, failed: timeline.filter(t => t.failed !== undefined).length, unrecorded: unrecordedTurns, fast: timeline.filter(t => t.fast).length },
     bullets: { back: sum('back'), shown: sum('shown'), withoutSource: sum('withoutSource'), repeated: sum('repeated') },
     excerpts,
     headlines: {
@@ -263,7 +266,7 @@ export function summarise(r: ReplayReport): string {
   const h = r.headlines, e = r.excerpts
   return [
     `${r.call}: ${mmss(r.durationMs)} call, ${r.lines} lines`,
-    `  turns ${r.turns.total} (${r.turns.failed} failed, ${r.turns.unrecorded} unrecorded); lookups ${r.lookups.asked} asked, ${r.lookups.made} made, ${r.lookups.refused} refused`,
+    `  turns ${r.turns.total} (${r.turns.failed} failed, ${r.turns.unrecorded} unrecorded, ${r.turns.fast} fast); lookups ${r.lookups.asked} asked, ${r.lookups.made} made, ${r.lookups.refused} refused`,
     `  bullets ${r.bullets.back} back, ${r.bullets.shown} shown, ${r.bullets.withoutSource} without a source, ${r.bullets.repeated} repeated`,
     `  excerpts: heard ${e.heard.verified}/${e.heard.given} verified, quote ${e.quote.verified}/${e.quote.given} verified, links ${e.url.kept}/${e.url.given} kept`,
     r.shown.length

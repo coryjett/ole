@@ -36,7 +36,7 @@ Ole brings the right context to a call, from whatever systems know your world. Y
 
 - **Ready before the call.** Ole asks your MCP servers about the meeting, its people and its topic, and writes a short, sourced briefing: the 3 things that matter most, then a few short sections. Add an optional **Focus** (a name or topic) to steer it.
 - **Prepared before you remember to.** Ole writes the briefing 5 to 15 minutes before each calendar meeting and tells you when it's ready. A call with a default title ("Meeting") is matched to the calendar event happening now, never a later one.
-- **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. When the briefing doesn't cover something, Ole looks it up with the same tools, several lookups at once, a few times a minute at most. A bullet that only rephrases one already shown is dropped.
+- **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. A question from the other side, or a product or name the briefing doesn't mention, gets context within about 10 seconds. When the briefing doesn't cover something, Ole looks it up with the same tools, several lookups at once, a few times a minute at most. A bullet that only rephrases one already shown is dropped.
 - **Remembers the whole call.** A running summary of what's been discussed, the notes you type, earlier questions you asked and everything Ole already looked up stay in context for every bullet and answer, not just the last few minutes. The summary updates in the background, so bullets never wait on it.
 - **Pin, rate and ask.** Pin a bullet and it lands in your notes and the summary. Thumbs up or down tunes what Ole surfaces on later calls. Type a question mid-call and Ole answers from the briefing, the call and your servers.
 - **Docs during the call.** Add a documentation MCP server (for example Context7 at `https://mcp.context7.com/mcp`, no key) and Ole looks up open-source docs in Prepare, live bullets and Ask.
@@ -59,7 +59,7 @@ Ole brings the right context to a call, from whatever systems know your world. Y
 
 1. **Prepare.** Before the call, Ole lists your MCP servers' read-only tools, reads each server's `prepare_for_meeting` prompt if it has one, adds your instructions, and lets the model gather a sourced briefing (up to 10 tool calls).
 2. **Listen.** Your microphone and the call audio are recorded as two tracks and transcribed live.
-3. **Surface.** About every 45 seconds of new conversation, the transcript is checked against the briefing. The tools are only called again when something isn't there.
+3. **Surface.** About every 45 seconds of new conversation, the transcript is checked against the briefing; within about 10 seconds when the other side asks a question or names something the briefing and the bullets don't mention. The tools are only called again when something isn't there.
 4. **Wrap up.** Recording stops, the summary is written, and the meeting lands in your library with its transcript, bullets and notes.
 
 ## Install

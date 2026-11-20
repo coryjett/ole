@@ -243,6 +243,66 @@ export function callKey(name: string, args: unknown): string {
   return `${name} ${JSON.stringify(canonical(args))}`
 }
 
+/** the shortest gap between turns when the other side asks something or names something new (#79) */
+export const FAST_MIN_MS = 10_000
+
+/** a line that opens like a question: an interrogative first word, after an optional filler ("so", "and", "okay") */
+const INTERROGATIVE = /^(?:(?:so|and|but|ok|okay|um|uh|well|right|also)[,\s]+)?(?:what|how|why|when|where|who|which|can|could|does|do|is|are|will|would|should)\b/i
+/** a capitalised word that names nothing: pronoun contractions, greetings, fillers, days and months */
+const PLAIN_CAPITALISED = new Set(('i i\'m i\'ll i\'ve i\'d ok okay yeah yes no hello hi hey thanks thank sorry please sure right well so '
+  + 'monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december '
+  + 'english mr mrs ms dr god').split(' '))
+/** a number that is not a term: 3rd, 10am, 30s, 5k, 20% */
+const PLAIN_NUMBER = /^\d+(?:st|nd|rd|th|s|am|pm|k|m|x|%)?$/i
+
+/** the words of a text as the trigger compares them: lower case, punctuation at the ends dropped */
+export function knownWords(text: string): Set<string> {
+  return new Set(text.toLowerCase().match(/[a-z0-9][a-z0-9.+#_/-]*[a-z0-9+#]|[a-z0-9]/g) ?? [])
+}
+
+/** a line that asks something: ends with a question mark or opens with an interrogative (#79) */
+export function isQuestion(text: string): boolean {
+  const t = text.trim()
+  return t.endsWith('?') || INTERROGATIVE.test(t)
+}
+
+/**
+ * Terms in a line that look like a product, feature, version, person or organisation (#79): CamelCase (OpenShift,
+ * eBPF), letters with digits or a version (S3, K8s, 2.3), ALLCAPS of 2+ letters (SSO, APIs), or a capitalised word
+ * that doesn't start a sentence. In the order they appear.
+ */
+export function candidateTerms(text: string): string[] {
+  const out: string[] = []
+  const tokens = text.split(/\s+/)
+  tokens.forEach((raw, i) => {
+    const tok = raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9+#]+$/g, '').replace(/[’']s$/, '')
+    if (!tok) return
+    const startsSentence = i === 0 || /[.!?:]["')\]]*$/.test(tokens[i - 1])
+    const code = /\d/.test(tok) && !PLAIN_NUMBER.test(tok) && (/\d\.\d/.test(tok) || /[a-z]/i.test(tok))
+    const caps = /^[A-Z]{2,}\d*s?$/.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
+    const camel = /^[A-Za-z]*[a-z][A-Z][A-Za-z0-9]*$/.test(tok)
+    const capitalised = !startsSentence && /^[A-Z][a-z]{2,}$/.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
+    if (code || caps || camel || capitalised) out.push(tok)
+  })
+  return out
+}
+
+/**
+ * Whether a line from the other side should bring the next bullets turn forward (#79): a question, or a term the
+ * briefing and the bullets so far never mention and that hasn't already done so. Pure string work, no model call.
+ */
+export function fastTrigger(text: string, known: Set<string>, already: Set<string> = new Set()): { kind: 'question' } | { kind: 'term'; term: string } | null {
+  if (isQuestion(text)) return { kind: 'question' }
+  for (const term of candidateTerms(text)) {
+    const key = term.toLowerCase()
+    if (!known.has(key) && !already.has(key)) return { kind: 'term', term: key }
+  }
+  return null
+}
+
+/** the user's own track: only the other side's lines bring a turn forward (#79) */
+const isOwnLine = (speaker: string) => speaker.trim().toLowerCase() === 'me'
+
 /** the pinned bullets as a notes section, so the summary and the notes keep them (#54); '' when none */
 export function pinnedNotes(bullets: OleBullet[]): string {
   const pinned = bullets.filter(b => b.pinned).sort((a, b) => a.at - b.at)
@@ -267,6 +327,8 @@ export function createBulletsEngine(opts: {
   /** the timer the throttle waits on; the replay harness (#66) passes a virtual one so a call replays at its own pace */
   timers?: { set: (fn: () => void, ms: number) => unknown; clear: (handle: unknown) => void }
   minIntervalMs?: number
+  /** the shorter gap after a question or a new term from the other side (#79); 0 turns fast turns off */
+  fastMinMs?: number
   maxLookupsPerMinute?: number
   windowMs?: number
 }): BulletsEngine {
@@ -284,10 +346,22 @@ export function createBulletsEngine(opts: {
   let lookups: number[] = []
   let stopped = false, running = false, dirty = false, lastRun = -Infinity, seq = 0
   let timer: unknown = null
+  // a question or a new term from the other side brings the next turn forward to fastMinMs (#79), never slower
+  const fastMinMs = Math.min(Math.max(0, opts.fastMinMs ?? FAST_MIN_MS), minIntervalMs)
+  let urgent = false
+  /** terms that already brought a turn forward: each does so once per call */
+  const triggered = new Set<string>()
+  let knownFor: { text: string; list: OleBullet[]; words: Set<string> } | null = null
+  /** the briefing's and the bullets' words, worked out again only when either changes */
+  const known = () => {
+    const text = opts.context()?.text ?? ''
+    if (!knownFor || knownFor.text !== text || knownFor.list !== list) knownFor = { text, list, words: knownWords(`${text}\n${list.map(b => b.text).join('\n')}`) }
+    return knownFor.words
+  }
 
   const schedule = () => {
     if (stopped || running || !dirty || timer !== null) return
-    const wait = lastRun + minIntervalMs - now()
+    const wait = lastRun + (urgent && fastMinMs > 0 ? fastMinMs : minIntervalMs) - now()
     if (wait <= 0) { void run(); return }
     timer = timers.set(() => { timer = null; schedule() }, wait)
   }
@@ -326,7 +400,9 @@ export function createBulletsEngine(opts: {
   }
 
   const run = async () => {
-    running = true; dirty = false; lastRun = now()
+    // fast: brought forward by a trigger, earlier than the usual rhythm would have run it (#79)
+    const fast = urgent && now() - lastRun < minIntervalMs
+    running = true; dirty = false; urgent = false; lastRun = now()
     try {
       const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.() })
       const offered = opts.tools()
@@ -370,7 +446,7 @@ export function createBulletsEngine(opts: {
       }
       // never silent (#48, #59): every turn says what happened to its bullets
       const lookupsMade = messages.filter(m => m.role === 'tool').length
-      log(`ole bullets: ${back.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups`)
+      log(`ole bullets: ${back.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups${fast ? ', fast' : ''}`)
       if (fresh.length) { list = [...fresh, ...list]; opts.onBullets([...list]) }
     } catch (e) {
       // the panel stays quiet and the next interval tries again; the log says why (#59)
@@ -389,6 +465,15 @@ export function createBulletsEngine(opts: {
       if (lines.length > 1 && lines[lines.length - 2].startMs > line.startMs) lines.sort((a, b) => a.startMs - b.startMs)
       if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES)
       dirty = true
+      if (fastMinMs > 0 && !urgent && !isOwnLine(line.speaker)) {
+        const hit = fastTrigger(line.text, known(), triggered)
+        if (hit) {
+          urgent = true
+          if (hit.kind === 'term') triggered.add(hit.term)
+          // a turn already waiting for the usual rhythm is brought forward
+          if (timer !== null) { timers.clear(timer); timer = null }
+        }
+      }
       schedule()
     },
     stop() {
