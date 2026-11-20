@@ -69,7 +69,14 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   /** Ole: the person's own instructions for the pre-call warm-up (ole/providers.ts); at most 8000 characters */
   oleWarmupInstructions?: string
   /** Ole: the MCP servers the person added (ole/servers.ts); each key is the secret `mcp:<id>` */
-  oleMcpServers?: import('./ole/types').McpServerConfig[] }
+  oleMcpServers?: import('./ole/types').McpServerConfig[]
+  /** Ole: windows hidden from screen sharing (#51); unset is on */
+  oleHideWhileSharing?: boolean
+  /** Ole: prepare before calendar meetings (#52); unset is on, and the lead time in minutes */
+  oleAutoPrepare?: boolean
+  oleAutoPrepareLead?: number
+  /** Ole: bullets the person rated, newest first, kept to tune later calls (#55) */
+  oleFeedback?: { useful: string[]; notUseful: string[] } }
 
 /** "English only" unless Multi-language was picked */
 export const spokenSetting = (s: Settings): Spoken => spokenOf(s.spoken)

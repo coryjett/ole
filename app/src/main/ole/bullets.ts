@@ -7,7 +7,15 @@ export type ToolCall = { id: string; type: 'function'; function: { name: string;
 export type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string }
 export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
 export type CallToolFn = (name: string, argsJson: string) => Promise<string>
-export type BulletsEngine = { push(line: TranscriptLine): void; stop(): void; bullets(): OleBullet[] }
+export type BulletsEngine = {
+  push(line: TranscriptLine): void; stop(): void; bullets(): OleBullet[]
+  /** pin (#54) or rate (#55) a bullet in place; null rating or false pin clears it. null: no such bullet */
+  update(id: string, patch: { pinned?: boolean; rating?: 'up' | 'down' | null }): OleBullet | null
+  /** the last part of the call, for Ask (#53) */
+  recent(): TranscriptLine[]
+}
+/** what the person rated on earlier calls (#55) */
+export type BulletFeedback = { useful: string[]; notUseful: string[] }
 
 const WINDOW_MS = 180_000
 const TOOL_ROUNDS = 2
@@ -40,16 +48,38 @@ export const BULLETS_SYSTEM = [
   'When nothing useful applies, reply {"bullets":[]}.',
 ].join('\n')
 
+/** what a briefing says when the call has no customer account (#57); prepare.ts writes these lines */
+const NO_ACCOUNT_LINES = [/^no customer account for this call\b/i, /^couldn['’]t match this call to a meeting or account\b/i]
+
+/** the call has a customer account: a briefing exists and did not say it found none (#57) */
+export function hasCustomerAccount(context: PreparedContext | null): boolean {
+  const first = context?.text?.trim().split('\n')[0]?.trim() ?? ''
+  return !!first && !NO_ACCOUNT_LINES.some(r => r.test(first))
+}
+
+export const NO_ACCOUNT_RULE = 'This call has no customer account. Give general facts only: product docs, known issues, how a feature works, and patterns seen across customers, generalised and anonymised (for example "a common pattern among fintech startups"). Never one customer\'s account, deal, opportunity, contact or action-item details.'
+
+/** tools that fetch a customer's records: left out of a call with no customer account (#57) */
+const CUSTOMER_RECORD = /account|opportunit|deal|contact|action_item|interaction|customer|pipeline|poc|tracker|call_brief|transcript|note/i
+export function generalTools(tools: OleTool[]): OleTool[] {
+  return tools.filter(t => !CUSTOMER_RECORD.test(t.tool))
+}
+
 /** The system and user messages for one bullets turn. */
-export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[] }): ChatMessage[] {
-  const { context, lines, previous } = args
+export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[]; feedback?: BulletFeedback }): ChatMessage[] {
+  const { context, lines, previous, feedback } = args
   const parts: string[] = []
   if (context?.text) {
     const about = [context.meetingTitle ? `meeting: ${context.meetingTitle}` : null, context.focus ? `focus: ${context.focus}` : null].filter(Boolean).join(', ')
     parts.push(`Prepared context${about ? ` (${about})` : ''}:\n${context.text}`)
   } else parts.push(`No context prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.focus ? ` Focus: ${context.focus}` : ''}`)
+  if (!hasCustomerAccount(context)) parts.push(NO_ACCOUNT_RULE)
   const earlier = previous.slice(0, PREVIOUS_IN_PROMPT)
-  parts.push(earlier.length ? `Earlier bullets (do not repeat):\n${earlier.map(b => `- ${b.text}`).join('\n')}` : 'Earlier bullets: none')
+  const mark = (b: OleBullet) => b.rating === 'down' ? ' (the user marked this not useful)' : b.rating === 'up' ? ' (the user marked this useful)' : ''
+  parts.push(earlier.length ? `Earlier bullets (do not repeat):\n${earlier.map(b => `- ${b.text}${mark(b)}`).join('\n')}` : 'Earlier bullets: none')
+  // the person's thumbs from earlier calls tune what is worth surfacing (#55)
+  if (feedback?.useful.length) parts.push(`Bullets the user found useful on earlier calls:\n${feedback.useful.map(t => `- ${t}`).join('\n')}`)
+  if (feedback?.notUseful.length) parts.push(`Bullets the user found not useful on earlier calls (give none like these):\n${feedback.notUseful.map(t => `- ${t}`).join('\n')}`)
   parts.push(`Transcript (last few minutes):\n${lines.map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}`)
   return [{ role: 'system', content: BULLETS_SYSTEM }, { role: 'user', content: parts.join('\n\n') }]
 }
@@ -140,12 +170,21 @@ export function callKey(name: string, args: unknown): string {
   return `${name} ${JSON.stringify(canonical(args))}`
 }
 
+/** the pinned bullets as a notes section, so the summary and the notes keep them (#54); '' when none */
+export function pinnedNotes(bullets: OleBullet[]): string {
+  const pinned = bullets.filter(b => b.pinned).sort((a, b) => a.at - b.at)
+  if (!pinned.length) return ''
+  const src = (b: OleBullet) => b.url ? `[${b.source}](${b.url})` : b.source
+  return `## Pinned from the call\n${pinned.map(b => `- ${b.text} (${src(b)})`).join('\n')}`
+}
+
 export function createBulletsEngine(opts: {
   chat: ChatFn
   tools: () => OleTool[]
   callTool: CallToolFn
   context: () => PreparedContext | null
   onBullets: (all: OleBullet[]) => void
+  feedback?: () => BulletFeedback
   now?: () => number
   minIntervalMs?: number
   maxLookupsPerMinute?: number
@@ -190,7 +229,7 @@ export function createBulletsEngine(opts: {
   const run = async () => {
     running = true; dirty = false; lastRun = now()
     try {
-      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list })
+      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.() })
       const offered = opts.tools()
       const allowed = new Set(offered.map(t => t.name))
       const tools = offered.length ? { tools: toOpenAiTools(offered) } : {}
@@ -250,5 +289,16 @@ export function createBulletsEngine(opts: {
       timer = null
     },
     bullets: () => [...list],
+    update(id, patch) {
+      const at = list.findIndex(b => b.id === id)
+      if (at === -1) return null
+      const next: OleBullet = { ...list[at] }
+      if ('pinned' in patch) { if (patch.pinned) next.pinned = true; else delete next.pinned }
+      if ('rating' in patch) { if (patch.rating === 'up' || patch.rating === 'down') next.rating = patch.rating; else delete next.rating }
+      list = list.map((b, i) => i === at ? next : b)
+      opts.onBullets([...list])
+      return next
+    },
+    recent: () => recentWindow(lines, windowMs),
   }
 }

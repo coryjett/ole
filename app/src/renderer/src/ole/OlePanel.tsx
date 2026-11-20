@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { OleLiveState } from '../../../shared/types'
 import { OleBullets } from './OleBullets'
 import { BeforeYouJoinStrip, OleBriefing } from './OleBriefing'
+import { OleAsk } from './OleAsk'
 
 /** The live state from the main process, kept current. */
 export function useOleState(): OleLiveState | null {
@@ -74,7 +75,10 @@ export function LiveView({ state, wideOverride }: { state: OleLiveState; wideOve
   const wide = wideOverride ?? detected
   const [tab, setTab] = useState<'live' | 'briefing'>('live')
   const text = state.prepared?.text ?? ''
-  const bullets = <>{text && <BeforeYouJoinStrip text={text} />}<OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight={260} /></>
+  const bullets = <>{text && <BeforeYouJoinStrip text={text} />}
+    <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight={260}
+      onPin={(id, on) => void window.yogurt.ole.pinBullet(id, on)} onRate={(id, r) => void window.yogurt.ole.rateBullet(id, r)} />
+    <OleAsk answers={state.answers ?? []} disabled={!!state.blocked} /></>
   if (!text) return <div className="mt-2">{bullets}</div>
   if (wide) return <div data-testid="ole-live-split" className="mt-2 flex gap-4">
     <div style={{ flex: '3 1 0', minWidth: 0 }}>{bullets}</div>
