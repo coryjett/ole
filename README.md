@@ -76,7 +76,7 @@ Ole brings the right context to a call, from whatever systems know your world. Y
 3. The alpha is not notarized by Apple, so the first open is blocked: open **System Settings > Privacy & Security** and click **Open Anyway** next to Ole.
 4. Allow the microphone, call audio and Accessibility when asked. Accessibility is how Ole reads speaker names from Zoom and Teams.
 
-Ole updates itself: new versions download in the background, macOS tells you when one is ready, and **Settings > Updates** restarts into it. Never while you are recording.
+Ole updates itself: new versions download in the background (alpha builds check every 15 minutes and when the Mac wakes), and a purple **Update ready** pill appears. Click it to restart into the new version, or use **Settings > Updates**. Never while you are recording: during a call the pill offers **After the call** and stays put.
 
 ## Set up
 
