@@ -185,12 +185,15 @@ export function createBulletsEngine(opts: {
   context: () => PreparedContext | null
   onBullets: (all: OleBullet[]) => void
   feedback?: () => BulletFeedback
+  /** one line per turn, counts only, never transcript or bullet text (#59) */
+  log?: (line: string) => void
   now?: () => number
   minIntervalMs?: number
   maxLookupsPerMinute?: number
   windowMs?: number
 }): BulletsEngine {
   const now = opts.now ?? Date.now
+  const log = opts.log ?? ((line: string) => console.info(line))
   // about every 45 s of new conversation: enough to keep up, few enough to read (#38)
   const minIntervalMs = opts.minIntervalMs ?? 45_000
   const maxLookups = opts.maxLookupsPerMinute ?? 3
@@ -246,12 +249,13 @@ export function createBulletsEngine(opts: {
       const seen = new Set(list.map(b => normalise(b.text)))
       const fresh: OleBullet[] = []
       const headings = briefingHeadings(opts.context()?.text ?? '')
-      let dropped = 0
-      for (const b of parseBullets(reply.content)) {
+      let dropped = 0, repeated = 0
+      const back = parseBullets(reply.content)
+      for (const b of back) {
         // a briefing heading isn't a source you can check (#37)
         if (onlyHeadings(b.source, headings)) { dropped++; continue }
         const key = normalise(b.text)
-        if (seen.has(key)) continue
+        if (seen.has(key)) { repeated++; continue }
         seen.add(key)
         // the excerpts are checked against what Ole actually has; one that doesn't match is left out, never shown (#39)
         const sources = `${opts.context()?.text ?? ''}\n${messages.filter(m => m.role === 'tool').map(m => m.content ?? '').join('\n')}`
@@ -262,11 +266,13 @@ export function createBulletsEngine(opts: {
         const url = b.url && sources.includes(b.url) ? b.url : undefined
         fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
       }
-      // never silent again (#48): a turn whose bullets were all dropped says so in the log
-      if (dropped) console.warn(`ole bullets: dropped ${dropped} without a real source`)
+      // never silent (#48, #59): every turn says what happened to its bullets
+      const lookupsMade = messages.filter(m => m.role === 'tool').length
+      log(`ole bullets: ${back.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups`)
       if (fresh.length) { list = [...fresh, ...list]; opts.onBullets([...list]) }
-    } catch {
-      // Swallowed: the panel stays quiet and the next interval tries again.
+    } catch (e) {
+      // the panel stays quiet and the next interval tries again; the log says why (#59)
+      log(`ole bullets: turn failed: ${e instanceof Error ? e.message.slice(0, 200) : 'unknown error'}`)
       dirty = true
     } finally {
       running = false
