@@ -156,6 +156,31 @@ describe('a prepared briefing belongs to its meeting (#128)', () => {
     s.meetingStopped(ID)
   })
 
+  it("a named call never takes the start time or note of the event that made Ole drop the hand-made briefing (#135)", async () => {
+    let list: Upcoming[] = []
+    const { s, now, advance } = await session(() => list)
+    await s.handlers.prepare({ focus: 'Globex' })
+    advance(5 * 60_000)
+    list = [{ id: 'e9', title: 'Team retro', start: now() - 60_000, end: now() + 30 * 60_000, note: 'Retro agenda' } as Upcoming]
+    callTool.mockClear()
+    s.meetingStarted({ id: ID, title: 'Initech sync' })
+    await vi.waitFor(() => expect(s.handlers.state().prepared?.meetingTitle).toBe('Initech sync'), { timeout: 3000 })
+    expect(callTool.mock.calls.some(c => 'starts_at' in (c[1] as object))).toBe(false)
+    expect((s.handlers.state().prepared as { note?: string }).note).toBeUndefined()
+    s.meetingStopped(ID)
+  })
+
+  it('a hand-made briefing without a focus is checked by its meeting title (#135)', async () => {
+    let list: Upcoming[] = []
+    const { s, now, advance } = await session(() => list)
+    await s.handlers.prepare({ meetingTitle: 'Globex QBR' })
+    advance(5 * 60_000)
+    list = [{ id: 'e10', title: 'Team retro', start: now() - 60_000, end: now() + 30 * 60_000 }]
+    s.meetingStarted({ id: ID, title: 'Meeting' })
+    await vi.waitFor(() => expect(s.handlers.state().prepared?.meetingTitle).toBe('Team retro'), { timeout: 3000 })
+    s.meetingStopped(ID)
+  })
+
   it('one prepared by hand is kept when the event on now names its focus (any case, legal suffix aside)', async () => {
     let list: Upcoming[] = []
     const { s, now, advance } = await session(() => list)

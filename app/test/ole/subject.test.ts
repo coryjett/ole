@@ -65,6 +65,8 @@ describe('lookups for a heard name (#126, #91)', () => {
   })
   it('a result counts only with a structured record named like the heard name', () => {
     expect(resultNames('[{"name":"Globex Inc."}]', 'Globex')).toBe(true)
+    // a match flag with the name only in free text is an echo, not a record (#135)
+    expect(resultNames('{"matchedBy":"name","message":"Globex was not in the CRM"}', 'Globex')).toBe(false)
     expect(resultNames('{"results":[{"id":"1","account_name":"Globex"}]}', 'Globex')).toBe(true)
     expect(resultNames('{"matchedBy":"name","account":{"name":"Globex"}}', 'Globex')).toBe(true)
     expect(resultNames('[{"name":"Initech"}]', 'Globex')).toBe(false)
