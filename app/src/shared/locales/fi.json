@@ -700,6 +700,7 @@
   "Installs when you restart Yogurt": "Asennetaan, kun käynnistät Yogurtin uudelleen",
   "You can restart after recording": "Voit käynnistää uudelleen tallennuksen jälkeen",
   "Later": "Myöhemmin",
+  "After the call": "Puhelun jälkeen",
   "Restart": "Käynnistä uudelleen",
   "Yogurt couldn't restart. Try again.": "Yogurt ei voinut käynnistyä uudelleen. Yritä uudelleen.",
   "Yogurt {version}": "Yogurt {version}",

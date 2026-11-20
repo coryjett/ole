@@ -652,6 +652,7 @@
   "Installs when you restart Yogurt": "ติดตั้งเมื่อเริ่ม Yogurt ใหม่",
   "You can restart after recording": "คุณเริ่มใหม่ได้หลังบันทึกเสร็จ",
   "Later": "ภายหลัง",
+  "After the call": "หลังจบการโทร",
   "Restart": "เริ่มใหม่",
   "Yogurt couldn't restart. Try again.": "เริ่ม Yogurt ใหม่ไม่ได้ ลองอีกครั้ง",
   "Yogurt {version}": "Yogurt {version}",

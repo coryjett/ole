@@ -710,6 +710,7 @@
   "Installs when you restart Yogurt": "S’installe au redémarrage de Yogurt",
   "You can restart after recording": "Vous pourrez redémarrer après l’enregistrement",
   "Later": "Plus tard",
+  "After the call": "Après l'appel",
   "Restart": "Redémarrer",
   "Yogurt couldn't restart. Try again.": "Yogurt n’a pas pu redémarrer. Réessayez.",
   "Yogurt {version}": "Yogurt {version}",

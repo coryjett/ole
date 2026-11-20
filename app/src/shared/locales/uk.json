@@ -722,6 +722,7 @@
   "Installs when you restart Yogurt": "Встановиться після перезапуску Yogurt",
   "You can restart after recording": "Можна перезапустити після запису",
   "Later": "Пізніше",
+  "After the call": "Після дзвінка",
   "Restart": "Перезапустити",
   "Yogurt couldn't restart. Try again.": "Не вдалося перезапустити Yogurt. Спробуйте ще раз.",
   "Yogurt {version}": "Yogurt {version}",

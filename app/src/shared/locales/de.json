@@ -694,6 +694,7 @@
   "Installs when you restart Yogurt": "Wird beim Neustart von Yogurt installiert",
   "You can restart after recording": "Neustart ist nach der Aufnahme möglich",
   "Later": "Später",
+  "After the call": "Nach dem Anruf",
   "Restart": "Neu starten",
   "Yogurt couldn't restart. Try again.": "Yogurt konnte nicht neu starten. Versuche es erneut.",
   "Yogurt {version}": "Yogurt {version}",

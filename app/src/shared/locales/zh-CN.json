@@ -652,6 +652,7 @@
   "Installs when you restart Yogurt": "重启 Yogurt 时安装",
   "You can restart after recording": "录音结束后即可重启",
   "Later": "稍后",
+  "After the call": "通话结束后",
   "Restart": "重启",
   "Yogurt couldn't restart. Try again.": "无法重启 Yogurt。请重试。",
   "Yogurt {version}": "Yogurt {version}",

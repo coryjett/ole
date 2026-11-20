@@ -682,6 +682,7 @@
   "Installs when you restart Yogurt": "Yogurt yeniden başlatıldığında yüklenir",
   "You can restart after recording": "Kayıttan sonra yeniden başlatabilirsiniz",
   "Later": "Daha sonra",
+  "After the call": "Görüşmeden sonra",
   "Restart": "Yeniden başlat",
   "Yogurt couldn't restart. Try again.": "Yogurt yeniden başlatılamadı. Tekrar deneyin.",
   "Yogurt {version}": "Yogurt {version}",

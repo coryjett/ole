@@ -69,6 +69,17 @@ it('closing the popover keeps the pill and does not restart', async () => {
   expect(restart).not.toHaveBeenCalled()
 })
 
+it('during a call the second button is "After the call": it only closes the popover and the pill stays (#105)', async () => {
+  mount(); notify(ready); render(true)
+  root().onOpenChange(true); render(true)
+  expect(content()).toContain('After the call')
+  expect(content()).not.toContain('>Later<')
+  await control('update-later').onClick(); render(true)
+  expect(later).not.toHaveBeenCalled()
+  expect(root().open).toBe(false)
+  expect(control('update-ready')).toBeDefined()
+})
+
 it('disables Restart while recording and enables it afterward without restarting', () => {
   mount(); notify(ready); render(true)
   expect(control('update-restart').disabled).toBe(true)
