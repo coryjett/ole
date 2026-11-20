@@ -13,6 +13,7 @@ import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, strip
 import { answerQuestion, askErrorKind } from './ask'
 import { createEnricher, mayGetNames, type Enricher } from './enrich'
 import { nextMeeting as pickNextMeeting, pickAutoPrepare, sameEvent } from './calendarMatch'
+import { nextStatus } from './nextStatus'
 import { createMeetingSource, failureKind, type Meeting, type SourceCall } from './meetingSource'
 import { accountSearchTools, autoPickDue, createSubjectResolver, resultNames, searchArgs, SUBJECT_AUTO_PICK_MS, SUBJECT_NAME_MAX, SUBJECT_RETRY_MS, type SubjectResolution, type SubjectResolver } from './subject'
 import { matchedRecordName, mentions } from './anonymize'
@@ -103,6 +104,12 @@ export type OleHandlers = {
   chooseSubject(name: unknown): Promise<OleLiveState>
   /** ole:prepared:clear (#128): before a call, discard the prepared briefing so no call picks it up */
   clearPrepared(): OleLiveState
+  /**
+   * ole:prepare:next (#142): Prepare now on Home's next meeting, exactly as auto-prepare would (its title, start and
+   * note, prepared for that calendar event so the call reuses it); auto-prepare won't repeat it. Refused during a call
+   * or while a Prepare runs.
+   */
+  prepareNext(): Promise<OleLiveState>
 }
 
 export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleSession {
@@ -189,12 +196,19 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     nextMeeting: nextState(),
     }
   }
-  /** the next meeting's briefing for Home: ready (matched, for this meeting), preparing, or none yet (#126) */
+  /**
+   * the next meeting's briefing for Home (#126, #142), from Ole's own Prepare only: when auto-prepare will run, preparing,
+   * or prepared for it with or without a matched record (nextStatus.ts)
+   */
   function nextState(): OleLiveState['nextMeeting'] {
     if (meetingId || !next) return null
     const forIt = preparedBy?.kind === 'auto' ? sameEvent(preparedBy.event, next) : prepared?.meetingTitle === next.title
-    const briefing = preparing ? 'preparing' : prepared && forIt && hasMatchedRecord(prepared) ? 'ready' : 'none'
-    return { title: next.title, start: next.start, briefing }
+    const p = providersOf(host.settings.get())
+    // auto-prepare picks it: on, Ole can prepare, a real title, not prepared automatically yet
+    const willAuto = p.autoPrepare && !blocked() && serversOf(host.settings.get()).some(s => s.enabled) && !host.genericTitle(next.title) && !autoDone.has(next.id)
+    const s = nextStatus({ autoPrepare: willAuto, leadMs: p.autoPrepareLead * 60_000, now: host.clock.now(), start: next.start,
+      prepared: prepared && forIt ? { matched: hasMatchedRecord(prepared) } : null, preparing })
+    return { title: next.title, start: next.start, ...s }
   }
   const send = () => host.send(state())
 
@@ -312,6 +326,15 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     autoDone.add(next.id)
     await prepare({ meetingTitle: next.title, startsAt: next.start, note: next.note, noteSource: next.source, auto: next })
     if (prepared?.meetingTitle === next.title && !error) host.notify?.('Your briefing is ready', next.title)
+  }
+
+  /** Prepare now on Home's next meeting (#142): as auto-prepare does it, marked done so auto-prepare doesn't repeat it */
+  async function prepareNext(): Promise<OleLiveState> {
+    const it = next
+    if (meetingId || preparing || !it) return state()
+    // a Prepare that can't run (blocked, no server) leaves the meeting to auto-prepare once it can
+    if (!blocked() && serversOf(host.settings.get()).some(s => s.enabled)) autoDone.add(it.id)
+    return prepare({ meetingTitle: it.title, startsAt: it.start, note: it.note, noteSource: it.source, auto: it })
   }
 
   /** the next meeting for Home (#126), from the meeting source's list (cached there for a few minutes) */
@@ -539,6 +562,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       send()
       return state()
     },
+    prepareNext,
   }
 
   return {

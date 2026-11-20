@@ -476,6 +476,8 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   chooseSubject(name: string): Promise<OleLiveState>
   /** before a call: discard the prepared briefing (#128) */
   clearPrepared(): Promise<OleLiveState>
+  /** before a call: Prepare now on Home's next meeting, the way auto-prepare does (#142) */
+  prepareNext(): Promise<OleLiveState>
   /** try the MCP servers again (#33) */
   retryServers(): Promise<OleLiveState>
   /** a meeting's context bullets from the call, newest first; [] when there were none */

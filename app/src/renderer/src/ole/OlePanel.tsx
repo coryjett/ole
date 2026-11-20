@@ -6,6 +6,7 @@ import { OleBullets } from './OleBullets'
 import { BeforeYouJoinStrip, OleBriefing } from './OleBriefing'
 import { OleAskPanel } from './OleAsk'
 import { OleCallLists } from './OleCallLists'
+import { nextStatusLabel } from '../../../main/ole/core/nextStatus'
 
 /** The live state from the main process, kept current. */
 export function useOleState(): OleLiveState | null {
@@ -104,7 +105,6 @@ export function OleSubject({ state }: { state: OleLiveState }) {
 /** clearing the "Prepare for…" input clears the briefing too when it was prepared with that name (#128) */
 export const clearsBriefing = (was: string, prepared: OleLiveState['prepared']) => !!was.trim() && prepared?.focus === was.trim()
 
-const STATE_LABEL = { ready: 'Briefing ready', preparing: 'Preparing…', none: 'No match yet' } as const
 const timeOf = (ms: number) => { try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) } catch { return '' } }
 
 /**
@@ -116,9 +116,15 @@ export function OleNextCall({ state }: { state: OleLiveState }) {
   const next = state.nextMeeting ?? null
   const clear = () => void window.yogurt.ole.clearPrepared()
   const prepareFor = (focus: string) => void window.yogurt.ole.prepare({ focus: focus || null, meetingTitle: next?.title ?? state.prepared?.meetingTitle ?? null })
+  // the state from Ole's own Prepare only (#142): when auto-prepare will run, Preparing…, Briefing ready or No match
+  const label = next ? nextStatusLabel(state.preparing ? { status: 'preparing', preparesAt: null } : next) : null
+  const prepared = next?.status === 'ready' || next?.status === 'no-match'
   return <>
-    {next && <p data-testid="ole-next" className="settings-description mt-2">Next: {next.title}{timeOf(next.start) ? ` · ${timeOf(next.start)}` : ''}{' '}
-      <span data-testid="ole-next-state" className="font-semibold">{state.preparing ? STATE_LABEL.preparing : STATE_LABEL[next.briefing]}</span></p>}
+    {next && <p data-testid="ole-next" className="settings-description mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span>Next: {next.title}{timeOf(next.start) ? ` · ${timeOf(next.start)}` : ''}</span>
+      {label && <span data-testid="ole-next-state" className="font-semibold">{label}</span>}
+      <button data-testid="ole-prepare-next" className="workspace-button" disabled={state.preparing || !!state.blocked}
+        onClick={() => void window.yogurt.ole.prepareNext()}>{prepared ? 'Prepare again' : 'Prepare now'}</button></p>}
     {!next && state.preparing && <p data-testid="ole-next-state" className="settings-description mt-2">Preparing…</p>}
     {state.prepared && <p data-testid="ole-prepared" className="settings-description mt-2 flex flex-wrap items-center gap-2">
       <span>Prepared for: {[state.prepared.meetingTitle, state.prepared.focus].filter(Boolean).join(' · ') || 'the next call'}</span>

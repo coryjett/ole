@@ -255,6 +255,7 @@ const api: YogurtApi = {
     prepare: (o) => ipcRenderer.invoke('ole:prepare', o ?? {}),
     chooseSubject: (name) => ipcRenderer.invoke('ole:subject:choose', name),
     clearPrepared: () => ipcRenderer.invoke('ole:prepared:clear'),
+    prepareNext: () => ipcRenderer.invoke('ole:prepare:next'),
     retryServers: () => ipcRenderer.invoke('ole:retry-servers'),
     pinBullet: (id, on) => ipcRenderer.invoke('ole:bullet:pin', id, on),
     rateBullet: (id, rating) => ipcRenderer.invoke('ole:bullet:rate', id, rating),
