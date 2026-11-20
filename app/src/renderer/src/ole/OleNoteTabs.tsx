@@ -84,7 +84,7 @@ export function OleLiveTab({ state }: { state: OleLiveState }) {
   return <div data-testid="ole-live-tab" className="flex flex-col gap-2">
     <OlePanelHeader state={state} />
     {text && <BeforeYouJoinStrip text={text} />}
-    <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight="none"
+    <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight="none" header={false}
       onPin={(id, on) => void window.yogurt.ole.pinBullet(id, on)} onRate={(id, r) => void window.yogurt.ole.rateBullet(id, r)} />
     <OleCallLists openQuestions={state.openQuestions} commitments={state.commitments} />
     <OleAnswers answers={state.answers ?? []} />
