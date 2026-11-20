@@ -56,6 +56,8 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   oleTranscription?: 'local' | 'openai'
   oleAssistant?: 'local' | 'openai' | 'custom'
   oleTranscribeModel?: string
+  /** Ole: stream live calls to OpenAI (#85); unset means on */
+  oleTranscribeStreaming?: boolean
   oleChatModel?: string
   olePrepareModel?: string
   oleCustomBaseUrl?: string

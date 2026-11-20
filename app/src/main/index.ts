@@ -638,7 +638,7 @@ app.whenReady().then(() => {
   onWhisperGpuOff(() => speedStore(speedFile()).forget())
   hookTranscription({ store, modelPath: () => setup.installed()?.asr,
     useOpenAI: () => oleProviders().transcription === 'openai',
-    openai: { key: () => readSecret(settingsFile, 'openai'), model: () => oleProviders().openaiTranscribeModel },
+    openai: { key: () => readSecret(settingsFile, 'openai'), model: () => oleProviders().openaiTranscribeModel, streaming: () => oleProviders().openaiStreaming },
     send: (seg) => {
     ole.segment(seg)
     const order = seg.track === 'them' && seg.speaker ? store.speakerOrder(seg.meetingId, seg.speaker) : []

@@ -83,6 +83,7 @@ In **Settings > Ole**:
 | **MCP servers** | Add each server's name, URL (https, usually ending in `/mcp`) and key, then **Test** to see how many read-only tools Ole can use. |
 | **Warm-up instructions** | Optional. How you want Ole to prepare, e.g. "Look up the customer's open tickets and last incident; lead with anything overdue." or "Pull the candidate's profile and interview feedback; list what's still unknown." |
 | **Transcription** | *Local* (whisper.cpp on your Mac) or *OpenAI*. |
+| **Live streaming** | With OpenAI transcription, live calls stream to `gpt-live-transcribe` so text shows within a second or two; if streaming isn't available, Ole falls back to sending the audio in chunks. On by default. |
 | **Assistant** | *Local* (a model on your Mac, summaries only), *OpenAI*, or *Custom server*: any OpenAI-compatible server you run (address ending at `/v1`, optional key, model). Prepare and live context need OpenAI or a Custom server. |
 
 Keys are encrypted with the macOS Keychain and only ever shown masked.
