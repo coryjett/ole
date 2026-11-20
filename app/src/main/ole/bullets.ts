@@ -241,24 +241,37 @@ export function createBulletsEngine(opts: {
     timer = timers.set(() => { timer = null; schedule() }, wait)
   }
 
-  const lookup = async (call: ToolCall, allowed: Set<string>): Promise<string> => {
+  // Lookups asked in the same round, still waiting for the server: an identical one shares the request (#80).
+  const inflight = new Map<string, Promise<string>>()
+  /**
+   * Everything up to the server request runs synchronously, so a round's lookups started together (#80) still take
+   * the per-minute slots in order and an identical call in the same round never reaches the server twice.
+   */
+  const lookup = (call: ToolCall, allowed: Set<string>): Promise<string> => {
     const name = call.function.name
-    if (!allowed.has(name)) return 'not allowed: unknown tool'
+    if (!allowed.has(name)) return Promise.resolve('not allowed: unknown tool')
     let args: unknown
-    try { args = call.function.arguments?.trim() ? JSON.parse(call.function.arguments) : {} } catch { return 'not allowed: invalid arguments' }
-    if (!args || typeof args !== 'object' || Array.isArray(args)) return 'not allowed: invalid arguments'
+    try { args = call.function.arguments?.trim() ? JSON.parse(call.function.arguments) : {} } catch { return Promise.resolve('not allowed: invalid arguments') }
+    if (!args || typeof args !== 'object' || Array.isArray(args)) return Promise.resolve('not allowed: invalid arguments')
     const key = callKey(name, args)
     const kept = results.get(key)
-    if (kept !== undefined) return `${EARLIER_LOOKUP}\n${kept}`
+    if (kept !== undefined) return Promise.resolve(`${EARLIER_LOOKUP}\n${kept}`)
+    const pending = inflight.get(key)
+    if (pending) return pending.then(r => `${EARLIER_LOOKUP}\n${r}`)
     const at = now()
     lookups = lookups.filter(t => at - t < 60_000)
-    if (lookups.length >= maxLookups) return 'not allowed: lookup limit reached, answer from what you have'
+    if (lookups.length >= maxLookups) return Promise.resolve('not allowed: lookup limit reached, answer from what you have')
     lookups.push(at)
-    let result: string
-    try { result = await opts.callTool(name, JSON.stringify(args)) } catch { result = 'lookup failed' }
-    if (results.size >= MAX_KEPT_RESULTS) results.delete(results.keys().next().value!)
-    results.set(key, result)
-    return result
+    let request: Promise<string>
+    try { request = Promise.resolve(opts.callTool(name, JSON.stringify(args))) } catch (e) { request = Promise.reject(e) }
+    const done = request.catch(() => 'lookup failed').then(result => {
+      inflight.delete(key)
+      if (results.size >= MAX_KEPT_RESULTS) results.delete(results.keys().next().value!)
+      results.set(key, result)
+      return result
+    })
+    inflight.set(key, done)
+    return done
   }
 
   const run = async () => {
@@ -272,7 +285,10 @@ export function createBulletsEngine(opts: {
       for (let round = 1; reply.tool_calls?.length; round++) {
         if (stopped) return
         messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
-        for (const call of reply.tool_calls) messages.push({ role: 'tool', tool_call_id: call.id, content: await lookup(call, allowed) })
+        // a round's lookups are independent: they run together, answered in the order they were asked (#80)
+        const calls = reply.tool_calls
+        const answered = await Promise.all(calls.map(call => lookup(call, allowed)))
+        calls.forEach((call, i) => messages.push({ role: 'tool', tool_call_id: call.id, content: answered[i] }))
         // The last round offers no tools, so the model has to answer.
         reply = await opts.chat({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
         if (round >= TOOL_ROUNDS) break
