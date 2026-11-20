@@ -10,7 +10,7 @@ import { collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, type 
 import { prepareContext } from './prepare'
 import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from './bullets'
-import { answerQuestion } from './ask'
+import { answerQuestion, askErrorKind } from './ask'
 import { createEnricher, type Enricher } from './enrich'
 import { pickAutoPrepare } from './calendarMatch'
 import { createMeetingSource, type Meeting, type SourceCall } from './meetingSource'
@@ -71,8 +71,14 @@ export type OleHandlers = {
   pin(id: unknown, on: unknown): OleLiveState
   /** ole:bullet:rate (#55) */
   rate(id: unknown, rating: unknown): OleLiveState
-  /** ole:ask: a question during the call (#53) */
-  ask(question: unknown): Promise<OleLiveState>
+  /**
+   * ole:ask: a question during the call (#53). requestId (optional, from the UI): the handle ole:ask:cancel stops it
+   * by (#122)
+   */
+  /** a question for the live call; forMeeting, when given, must be the live meeting (#125) */
+  ask(question: unknown, requestId?: unknown, forMeeting?: unknown): Promise<OleLiveState>
+  /** ole:ask:cancel: Stop on the Ask panel (#122); the pending answer is dropped, never saved */
+  cancelAsk(requestId: unknown): OleLiveState
   /** ole:call: a saved meeting's summary, open questions and commitments (#82); null when Ole kept none */
   call(id: unknown): OleCallMemory | null
   /** ole:answers */
@@ -270,6 +276,50 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   const autoEvery = o.autoEveryMs ?? 2 * 60_000
   if (autoEvery > 0) host.clock.every(autoEvery, () => void autoPrepare().catch(e => host.log.warn('auto-prepare failed', e)))
 
+  /** questions being answered, by the UI's request id, so Stop can cancel one (#122) */
+  const asking = new Map<string, AbortController>()
+  const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/
+
+  /**
+   * A question about the call on now (#53): a pending answer at once, then the call Ask. A failure is an answer saying
+   * so, logged by its kind only, never its message (#122). Stopped (signal aborted): the pending answer is taken out
+   * again and nothing is saved. The call ended while answering: the answer belongs to it, not to the next call.
+   */
+  async function askCall(question: string, forMeeting: string, signal?: AbortSignal): Promise<void> {
+    const id = `a${++answerSeq}`
+    answers = [{ id, question, text: '', at: host.clock.now(), pending: true }, ...answers]
+    send()
+    let got: Omit<OleAnswer, 'id' | 'question' | 'at'> | null
+    try {
+      // the call's memory: running summary (#75), the user's notes (#77), earlier questions oldest first (#76)
+      const earlier = answers.filter(a => !a.pending && a.id !== id).slice(0, 3).reverse().map(a => ({ question: a.question, text: a.text }))
+      const answering = answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(),
+        call: (n, a, opts) => call(n, a, opts), summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier, mentioned: sections.length > 0,
+        ...(signal ? { signal } : {}) })
+      // Stop answers at once, even when a request ignores the signal; its late result is dropped
+      answering.catch(() => {})
+      const stopped = signal && new Promise<never>((_, reject) => {
+        if (signal.aborted) reject(signal.reason)
+        else signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+      if (stopped) stopped.catch(() => {})
+      got = await (stopped ? Promise.race([answering, stopped]) : answering)
+    } catch (e) {
+      if (signal?.aborted) got = null
+      else {
+        const kind = askErrorKind(e)
+        host.log.warn(`the call Ask failed (${kind})`)
+        got = { text: `Couldn't answer (${kind}). Try again.`, ok: false }
+      }
+    }
+    const at = (forMeeting === meetingId ? answers : finishedAnswers.get(forMeeting) ?? []).find(a => a.id === id)?.at ?? host.clock.now()
+    const answer: OleAnswer | null = got && { id, question, at, ...got }
+    const settle = (list: OleAnswer[]) => answer ? list.map(a => a.id === id ? answer : a) : list.filter(a => a.id !== id)
+    if (forMeeting === meetingId) answers = settle(answers)
+    else { const kept = settle(finishedAnswers.get(forMeeting) ?? []); finishedAnswers.set(forMeeting, kept); try { host.files.saveAnswers?.(forMeeting, kept) } catch { /* kept in memory */ } }
+    send()
+  }
+
   const handlers: OleHandlers = {
     state: () => state(),
     briefing: (id: unknown) => {
@@ -299,25 +349,19 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       return state()
     },
     // a question during the call (#53)
-    ask: async (q: unknown) => {
+    ask: async (q: unknown, requestId?: unknown, forMeeting?: unknown) => {
       const question = typeof q === 'string' ? q.trim().slice(0, QUESTION_MAX) : ''
-      const forMeeting = meetingId
-      if (!question || !forMeeting || liveBlocked()) return state()
-      const id = `a${++answerSeq}`
-      answers = [{ id, question, text: '', at: host.clock.now(), pending: true }, ...answers]
-      send()
-      let got: Omit<OleAnswer, 'id' | 'question' | 'at'>
-      try {
-        // the call's memory: running summary (#75), the user's notes (#77), earlier questions oldest first (#76)
-        const earlier = answers.filter(a => !a.pending && a.id !== id).slice(0, 3).reverse().map(a => ({ question: a.question, text: a.text }))
-        got = await answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(), call: (n, a) => call(n, a),
-          summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier, mentioned: sections.length > 0 })
-      } catch (e) { got = { text: `Couldn't answer: ${e instanceof Error ? e.message : String(e)}`, ok: false } }
-      // the call ended while answering: the answer belongs to it, not to the next call
-      const done = (a: OleAnswer): OleAnswer => a.id === id ? { id, question, at: a.at, ...got } : a
-      if (forMeeting === meetingId) answers = answers.map(done)
-      else { const kept = (finishedAnswers.get(forMeeting) ?? []).map(done); finishedAnswers.set(forMeeting, kept); try { host.files.saveAnswers?.(forMeeting, kept) } catch { /* kept in memory */ } }
-      send()
+      if (!question || !meetingId || liveBlocked()) return state()
+      // a question from another meeting's note never reaches this call (#125)
+      if (forMeeting !== undefined && forMeeting !== meetingId) return state()
+      const rid = typeof requestId === 'string' && REQUEST_ID.test(requestId) && !asking.has(requestId) ? requestId : null
+      const ac = rid ? new AbortController() : null
+      if (rid && ac) asking.set(rid, ac)
+      try { await askCall(question, meetingId, ac?.signal) } finally { if (rid) asking.delete(rid) }
+      return state()
+    },
+    cancelAsk: (requestId: unknown) => {
+      if (typeof requestId === 'string') asking.get(requestId)?.abort()
       return state()
     },
     // a saved meeting's summary, open questions and commitments (#82); null when Ole kept none

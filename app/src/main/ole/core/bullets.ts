@@ -13,8 +13,9 @@ export type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; cont
  * onDelta (#84): stream the answer, each content piece as it arrives. A ChatFn may ignore it and answer whole; the
  * reply it resolves with is the whole message either way.
  */
-export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; onDelta?: (text: string) => void }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
-export type CallToolFn = (name: string, argsJson: string) => Promise<string>
+export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; onDelta?: (text: string) => void; signal?: AbortSignal }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
+/** opts.signal: the caller stopped waiting (#122, Ask's Stop) */
+export type CallToolFn = (name: string, argsJson: string, opts?: { signal?: AbortSignal }) => Promise<string>
 export type BulletsEngine = {
   push(line: TranscriptLine): void; stop(): void; bullets(): OleBullet[]
   /** pin (#54) or rate (#55) a bullet in place; null rating or false pin clears it. null: no such bullet */
@@ -184,7 +185,9 @@ export function onlyHeadings(source: string, headings: Set<string>): boolean {
   const vague = (p: string) => {
     const rest = p.replace(/^prepared context\s*(?:[-—:–]\s*)?/, '').trim()
     // a bare tool name says nothing; "get_account_details: Acme" names a record, so it's a real source (#48)
+    // "About extProc", "Re: SSO", "Topic: pricing" name a subject, not a record anyone can look up (#119)
     return !rest || headings.has(rest) || /^transcript\b/.test(rest) || /^(get|list|search|find|lookup|read|query|fetch|describe)_[a-z0-9_]+\s*:?\s*$/.test(rest)
+      || /^(?:about|re|regarding|topic|subject)\b\s*:?\s*\S/.test(rest)
   }
   return !parts.length || parts.every(vague)
 }

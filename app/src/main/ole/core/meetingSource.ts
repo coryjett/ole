@@ -75,7 +75,7 @@ export function cleanNote(raw: string): string {
 }
 const DEFAULT_LENGTH_MS = 30 * 60_000
 
-export type SourceCall = (name: string, argsJson: string, opts?: { timeoutMs?: number }) => Promise<string>
+export type SourceCall = (name: string, argsJson: string, opts?: { timeoutMs?: number; signal?: AbortSignal }) => Promise<string>
 
 export function createMeetingSource(o: {
   /** the enabled servers' read-only tools, in Settings order; [] when the servers may not be used */
