@@ -74,8 +74,10 @@ function ServerRow({ server, status, saveKey, onToggle, onRemove, test }: {
         <p data-testid={`${id}-url`} className="settings-description">{server.url}</p>
         <p data-testid={`ole-key-${slug(name)}-status`} className="settings-description">Key: {keyStatusText(status)}</p>
         {result && (
-          <p data-testid={`${id}-result`} role={result.ok ? undefined : 'alert'} className="settings-description">
-            {result.ok ? `${result.tools} ${result.tools === 1 ? 'tool' : 'tools'}` : (result.error || 'Test failed')}
+          <p data-testid={`${id}-result`} role={result.ok ? 'status' : 'alert'} className="settings-description"
+            style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 999, fontWeight: 600,
+              color: result.ok ? '#fff' : '#fff', background: result.ok ? '#2e8b57' : '#c0392b' }}>
+            {result.ok ? `✓ Connected: ${result.tools} read-only ${result.tools === 1 ? 'tool' : 'tools'}` : `✕ ${result.error || 'Test failed'}`}
           </p>
         )}
       </div>

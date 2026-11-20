@@ -8,8 +8,8 @@ import { readSecret } from './secrets'
 import { providersOf } from './providers'
 import { serversOf } from './servers'
 import { openaiChat } from './openaiModel'
-import { createMcpClient } from './mcp'
-import { collectTools, collectWarmupPrompts, createToolRunner } from './tools'
+import { createMcpClient, McpError } from './mcp'
+import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isReadOnly } from './tools'
 import { prepareContext } from './prepare'
 import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
 
@@ -120,16 +120,18 @@ export function hookOle(d: Deps): {
   }
 }
 
+/** Settings' Test button waits at most this long: a server behind a VPN that is off never answers */
+export const TEST_TIMEOUT_MS = 10_000
+
 /** Settings' Test button: how many read-only tools the server offers Ole, or why it can't be reached. */
-export async function testServer(server: McpServerConfig, key: string | null): Promise<{ ok: boolean; tools: number; error?: string }> {
+export async function testServer(server: McpServerConfig, key: string | null, o: { fetch?: typeof fetch; timeoutMs?: number } = {}): Promise<{ ok: boolean; tools: number; error?: string }> {
   try {
-    const found = await collectTools([{ config: { ...server, enabled: true }, client: createMcpClient({ key: key ?? undefined, url: server.url }) }])
-    if (!found.length) {
-      // collectTools skips a failing server: ask it directly so the error shows
-      await createMcpClient({ key: key ?? undefined, url: server.url }).listTools()
-    }
-    return { ok: true, tools: found.length }
+    const listed = await createMcpClient({ key: key ?? undefined, url: server.url, ...(o.fetch ? { fetch: o.fetch } : {}) }).listTools({ timeoutMs: o.timeoutMs ?? TEST_TIMEOUT_MS })
+    return { ok: true, tools: listed.filter(t => isReadOnly(t) && boundedSchema(t.inputSchema)).length }
   } catch (e) {
+    const kind = e instanceof McpError ? e.kind : null
+    if (kind === 'auth') return { ok: false, tools: 0, error: key ? 'The server rejected the key' : 'The server needs a key: paste it and Save, then Test' }
+    if (kind === 'timeout' || kind === 'unreachable') return { ok: false, tools: 0, error: `Couldn't reach the server in ${TEST_TIMEOUT_MS / 1000} s. VPN on?` }
     return { ok: false, tools: 0, error: e instanceof Error ? e.message : String(e) }
   }
 }
