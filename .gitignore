@@ -50,3 +50,6 @@ site/.vercel/
 # written by next dev
 site/AGENTS.md
 site/CLAUDE.md
+
+# Ole: exported calls for the replay tool (#70) hold real call content
+ole-replay-*.json

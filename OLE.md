@@ -63,6 +63,28 @@ A fixture holds the transcript lines (`speaker`, `text`, `startMs`), the briefin
 
 The report counts turns (failed, and unrecorded ones that answered empty), bullets back, shown, without a source and repeated, excerpts given against verified (heard, quote) and links kept, headline word and length stats, the longest stretch with nothing new shown, and lookups asked, made and refused, plus a per-turn timeline and every bullet shown. Recorded replies are matched to turns by order, so a change to the throttle shifts them: compare such a change with `--live`. Fixtures are synthetic: no real call content, no real company names, `example.com` links only.
 
+### Replaying a real call
+
+During a call Ole keeps each bullets turn with the meeting, on this Mac only: `meetings/<id>/ole-turns.json` beside the bullets and the briefing (the model's replies, the lookups it asked for and their results, how long each reply took; at most 300 turns, results cut like a live lookup). It is never logged and never sent anywhere (#70).
+
+To replay one: open the saved meeting, and in its Ole section click **Export for replay**. Ole writes a fixture in the format above (transcript, briefing, tools offered, recorded turns) to a file you pick, `ole-replay-<date>.json` by default. Then:
+
+```bash
+cd app
+node scripts/ole-replay.mjs ~/Documents/ole-replay-2026-11-20.json
+```
+
+**Anonymise** (on by default) makes the file safe to share:
+
+- Speakers and calendar attendees become `Speaker 1`, `Speaker 2`… in order of first appearance. Their full names are replaced anywhere in the file (any case), and each part of a name of 3+ letters too (with its capital, as a whole word), so "Thanks, Sam" loses the first name. `Me` and `Them` stay.
+- The meeting title, and the account in it (the part before `:`, `|`, `<>`, ` - `, ` x ` or `//`, as in "Acme: security review"), become `Account`. A default title ("Meeting", "Zoom call") is left alone. An account named only in the briefing, never in the title, is not found.
+- Every link becomes `https://example.com/link-N` (the same link, the same N) and every email address `[email]`.
+- The same replacements run over the transcript, the briefing, the model's replies and the lookups' arguments and results, so the replay still verifies the same excerpts and links.
+
+Anonymising is a best effort from the names Ole has: read the file before you share it. A call recorded before turns were kept exports the transcript and briefing with no turns (and the tools the servers offer now), so replay it with `--live`. The transcript is the saved one, which can differ from what the engine heard live if the call was transcribed again.
+
+Exported files hold real call content: keep them out of the repo. `ole-replay-*.json` is in `.gitignore`; never add one under `test/ole/fixtures/`.
+
 ## Seams (Yogurt files Ole edits)
 
 - `app/electron-builder.yml`: app id, names, usage strings, publish to `coryjett/ole`

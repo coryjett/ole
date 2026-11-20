@@ -17,6 +17,9 @@ import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, type 
 import { answerQuestion } from './ask'
 import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
 import { feedbackOf, recordRating } from './feedback'
+import { createTurnRecorder, type RecordedCall } from './turnRecorder'
+import { buildReplayFixture, exportFileName, type ExportSegment } from './replayExport'
+import type { OleExportResult } from '../../shared/types'
 
 /** a prepared briefing older than this is gathered again when a meeting starts */
 const STALE_MS = 2 * 60 * 60_000
@@ -41,6 +44,13 @@ type Deps = {
   upcoming?: (fromMs: number, toMs: number) => Promise<Upcoming[]>
   /** how often auto-prepare looks at the calendar; 0 turns the timer off (tests) */
   autoEveryMs?: number
+  /** the call's bullets turns (#70), saved with it on this Mac and read back for Export for replay */
+  saveTurns?: (meetingId: string, call: RecordedCall) => void
+  loadTurns?: (meetingId: string) => RecordedCall | null
+  /** a saved meeting's title, start, attendees and transcript, for Export for replay (#70); null when it is gone */
+  meetingForExport?: (meetingId: string) => { title: string; startedAt: number; attendees: Array<{ name: string; email?: string | null }>; segments: ExportSegment[] } | null
+  /** shows the save panel with this file name and writes the content where the person picks */
+  saveExport?: (defaultName: string, content: string) => Promise<'saved' | 'cancelled' | 'failed'>
 }
 
 /** a question is cut to this */
@@ -85,6 +95,9 @@ export function hookOle(d: Deps): {
   const finishedAnswers = new Map<string, OleAnswer[]>()
   const finished = new Map<string, OleBullet[]>()
   const finishedBriefings = new Map<string, string>()
+  /** the call's bullets turns as they happen (#70); kept in memory, saved with the meeting when it stops */
+  let recorder: ReturnType<typeof createTurnRecorder> | null = null
+  const finishedTurns = new Map<string, RecordedCall>()
 
   /** the Mac's own model for Prepare (#5), handed over once Yogurt's notes queue exists */
   let local: LocalRun | null = null
@@ -257,6 +270,32 @@ export function hookOle(d: Deps): {
     if (found) return found
     try { return d.loadAnswers?.(id) ?? [] } catch { return [] }
   })
+  // a saved call as a replay fixture (#70), written where the person picks; anonymised unless asked otherwise
+  ipcMain.handle('ole:export-replay', async (_e, id: unknown, o: unknown): Promise<OleExportResult> => {
+    const failed = (error: string): OleExportResult => ({ status: 'failed', error })
+    if (typeof id !== 'string' || !ID.test(id) || !d.meetingForExport || !d.saveExport) return failed("Couldn't export this meeting.")
+    if (id === meetingId) return failed('The call is still recording. Export it once it ends.')
+    const anonymise = !(o && typeof o === 'object' && (o as Record<string, unknown>).anonymise === false)
+    let m: ReturnType<NonNullable<Deps['meetingForExport']>> = null
+    try { m = d.meetingForExport(id) } catch (e) { console.warn('reading the meeting for export failed', e) }
+    if (!m) return failed("Couldn't find this meeting.")
+    if (!m.segments.some(s => s.text.trim())) return failed('This meeting has no transcript to export.')
+    let kept = finishedTurns.get(id) ?? null
+    if (!kept) try { kept = d.loadTurns?.(id) ?? null } catch { kept = null }
+    let briefing = finishedBriefings.get(id)
+    if (briefing === undefined) try { briefing = d.loadBriefing?.(id) ?? '' } catch { briefing = '' }
+    const name = exportFileName(m.startedAt)
+    const fixture = buildReplayFixture({
+      name: name.replace(/\.json$/, ''), meetingTitle: m.title, attendees: m.attendees, segments: m.segments, anonymise,
+      briefing: { text: briefing, meetingTitle: kept?.briefing ? kept.briefing.meetingTitle : m.title, focus: kept?.briefing?.focus ?? null },
+      // a call from before turns were kept: the tools the servers offer now, as the app would offer them live
+      tools: kept ? kept.tools : tools.filter(isLiveTool).map(t => t.name),
+      turns: kept?.turns,
+    })
+    let status: OleExportResult['status']
+    try { status = await d.saveExport(name, `${JSON.stringify(fixture, null, 2)}\n`) } catch (e) { console.warn('writing the replay file failed', e); status = 'failed' }
+    return status === 'failed' ? failed("Couldn't write the file.") : { status, turns: fixture.turns.length }
+  })
   ipcMain.handle('ole:prepare', (_e, o: unknown) => {
     const input = (o && typeof o === 'object' ? o : {}) as Record<string, unknown>
     return prepare({ focus: text(input.focus, 200), meetingTitle: text(input.meetingTitle, 300) })
@@ -285,13 +324,15 @@ export function hookOle(d: Deps): {
         preparedFromDefault = false
         void loadTools().then(send, e => console.warn('loading the MCP tools failed', e))
       }
+      // each bullets turn is kept with the call, on this Mac, for Export for replay (#70)
+      recorder = !liveBlocked() ? createTurnRecorder({ chat, callTool: (name, argsJson) => call(name, argsJson) }) : null
       // bullets need the OpenAI key; without it the meeting records as Yogurt does
-      engine = !liveBlocked() ? createBulletsEngine({
-        chat,
+      engine = recorder ? createBulletsEngine({
+        chat: recorder.chat,
         // live bullets get the lookup-style tools only (#15)
         // a call with no matching record never looks up single records (#57)
         tools: () => liveTools(),
-        callTool: (name, argsJson) => call(name, argsJson),
+        callTool: recorder.callTool,
         context: () => prepared,
         onBullets: all => { bullets = all; send() },
         feedback: () => { try { return feedbackOf(d.file) } catch { return { useful: [], notUseful: [] } } },
@@ -317,6 +358,12 @@ export function hookOle(d: Deps): {
       if (pinned) try { d.appendNotes?.(id, pinned) } catch (e) { console.warn('adding the pinned bullets to the notes failed', e) }
       if (answers.length) { finishedAnswers.set(id, answers); try { d.saveAnswers?.(id, answers) } catch (e) { console.warn('saving the answers failed', e) } }
       answers = []
+      if (recorder) {
+        const turns: RecordedCall = { version: 1, ...(prepared ? { briefing: { meetingTitle: prepared.meetingTitle, focus: prepared.focus } } : {}), ...recorder.recorded() }
+        finishedTurns.set(id, turns)
+        try { d.saveTurns?.(id, turns) } catch (e) { console.warn('saving the bullets turns failed', e) }
+        recorder = null
+      }
       if (prepared?.text) { finishedBriefings.set(id, prepared.text); try { d.saveBriefing?.(id, prepared.text) } catch (e) { console.warn('saving the briefing failed', e) } }
       engine = null
       meetingId = null
