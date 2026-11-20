@@ -45,6 +45,7 @@ export const BULLETS_SYSTEM = [
   'Never repeat or rephrase an earlier bullet.',
   'Anonymise other customers by industry and size, for example "a large financial services customer". Never name another customer; only the current account may be named.',
   'Answer from the prepared context first. You may call the provided tools for facts the prepared context lacks, such as another customer\'s experience or a competitor with no notes. Lookups are limited, so call a tool only for a real gap.',
+  "Never put a customer's or person's name in a search of public documentation.",
   'When nothing useful applies, reply {"bullets":[]}.',
 ].join('\n')
 

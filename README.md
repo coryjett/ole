@@ -28,6 +28,7 @@
 - **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. When the briefing doesn't cover something, Ole looks it up with the same tools, a few times a minute at most. Other customers' names are kept anonymous.
 - **Prepared before you remember to.** Ole writes the briefing 5 to 15 minutes before each calendar meeting and tells you when it's ready. A call with a default title ("Meeting") is matched to the calendar event happening now, never a later one.
 - **Pin, rate and ask.** Pin a bullet and it lands in your notes and the summary. Thumbs up or down tunes what Ole surfaces on later calls. Type a question mid-call and Ole answers from the briefing, the call and your servers.
+- **Docs during the call.** Add a documentation MCP server (for example Context7 at `https://mcp.context7.com/mcp`, no key) and Ole looks up open-source docs for technical questions in Prepare, live bullets and Ask. It sends that server short technical phrases, never customer names.
 - **Calls without a customer.** When a call has no customer account, bullets stay general: docs, known issues and anonymised patterns across customers, never one customer's records.
 - **Hidden while you share, if you like.** Turn it on and, while a call records, Ole's windows stay out of screen sharing (and screenshots; macOS can't tell them apart). A few apps may still show them.
 - **Any MCP server, several at once.** CRM, support, docs, internal tools: add each one in Settings. Ole only uses tools that read.
