@@ -71,7 +71,7 @@ export function hookOle(d: Deps): Omit<OleSession, 'handlers'> {
       after: (ms, fn) => { setTimeout(fn, ms).unref?.() },
       every: (ms, fn) => { setInterval(fn, ms).unref?.() },
     },
-    log: { warn: (message, error) => console.warn(message, error) },
+    log: { warn: (message, error) => { if (error === undefined) console.warn(message); else console.warn(message, error) } },
   }
   const { handlers: h, ...session } = createOleSession(host, { checkEveryMs: d.checkEveryMs, summaryEveryMs: d.summaryEveryMs, autoEveryMs: d.autoEveryMs })
 
@@ -81,7 +81,8 @@ export function hookOle(d: Deps): Omit<OleSession, 'handlers'> {
   ipcMain.handle('ole:bullets', (_e, id: unknown) => h.bullets(id))
   ipcMain.handle('ole:bullet:pin', (_e, id: unknown, on: unknown) => h.pin(id, on))
   ipcMain.handle('ole:bullet:rate', (_e, id: unknown, rating: unknown) => h.rate(id, rating))
-  ipcMain.handle('ole:ask', (_e, q: unknown) => h.ask(q))
+  ipcMain.handle('ole:ask', (_e, q: unknown, requestId: unknown) => h.ask(q, requestId))
+  ipcMain.handle('ole:ask:cancel', (_e, requestId: unknown) => h.cancelAsk(requestId))
   ipcMain.handle('ole:call', (_e, id: unknown) => h.call(id))
   ipcMain.handle('ole:answers', (_e, id: unknown) => h.answers(id))
   ipcMain.handle('ole:export-replay', (_e, id: unknown, o: unknown) => h.exportReplay(id, o))

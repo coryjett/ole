@@ -1,6 +1,6 @@
 // Ole on the note page as tabs beside Transcript and My notes (#108). During a call: Live (the "Before you join"
 // strip, bullets with pin and rate, open questions and commitments, the call's answers) and Briefing. Questions go
-// to the bottom-bar Ask, which answers from the call during one (#118). On a saved meeting: Context
+// to Ole's Ask panel docked at the bottom of the note (#122, OleAsk.tsx). On a saved meeting: Context
 // (what Ole kept) and Briefing, each only when Ole has something. Plus the quick-note bar shown during a call.
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, MessageSquareText, Radio } from 'lucide-react'
@@ -78,7 +78,7 @@ export function OleTabLabel({ tab, unseen = 0 }: { tab: OleTab; unseen?: number 
   </>
 }
 
-/** Live: Prepare and its warnings, the strip, the bullets, the call's lists, the answers from Ask (#118); the page scrolls, nothing is capped */
+/** Live: Prepare and its warnings, the strip, the bullets, the call's lists, every answer from Ask (#122); the page scrolls, nothing is capped */
 export function OleLiveTab({ state }: { state: OleLiveState }) {
   const [focus, setFocus] = useState('')
   const text = state.prepared?.text ?? ''

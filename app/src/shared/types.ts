@@ -449,11 +449,7 @@ export type LibrarySource = {
 /** One question across meetings and its answer as it is written; sources: what [1], [2]… in the answer point to */
 /** what an answer is doing before its first words: the model loading, searching meetings, or reading what it found */
 export type AskStep = { kind: 'loading' | 'searching' | 'reading'; title?: string; meetings?: number }
-export type ConversationTurn = {
-  id: number; question: string; answer: string; scope?: ContextTarget[]; status: ChatTurn['status']; sources: LibrarySource[]; step?: AskStep
-  /** Ole: the answer came from the call (#118); where it came from, its link already checked by Ole */
-  oleSource?: { source: string; url?: string }
-}
+export type ConversationTurn = { id: number; question: string; answer: string; scope?: ContextTarget[]; status: ChatTurn['status']; sources: LibrarySource[]; step?: AskStep }
 export type ConversationView = {
   id: string; title: string; chips: ContextTarget[]; draft: string; draftChips: ContextTarget[]; firstChips: ContextTarget[] | null; turns: ConversationTurn[]
   /** a Mac with little memory is recording: answers wait for the meeting to end */
@@ -486,8 +482,10 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   pinBullet(id: string, on: boolean): Promise<OleLiveState>
   /** thumbs up or down on a bullet; null takes it back (#55) */
   rateBullet(id: string, rating: 'up' | 'down' | null): Promise<OleLiveState>
-  /** ask a question during the call (#53) */
-  ask(question: string): Promise<OleLiveState>
+  /** ask a question during the call (#53); requestId lets cancelAsk stop it (#122) */
+  ask(question: string, requestId?: string): Promise<OleLiveState>
+  /** Stop on the Ask panel (#122): the pending answer is dropped */
+  cancelAsk(requestId: string): Promise<OleLiveState>
   /** a meeting's summary, open questions and commitments from the call (#82); null when Ole kept none */
   call(meetingId: string): Promise<import('../main/ole/core/types').OleCallMemory | null>
   /** a meeting's questions and answers; [] when none */

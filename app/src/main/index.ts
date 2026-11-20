@@ -842,8 +842,6 @@ app.whenReady().then(() => {
     waitsForMeeting: () => smallMac && !!activeMeeting(), waitsForModel: () => !setup.notesPath(),
     // a meeting read in ahead during a recording only where reading ahead is allowed (32 GB and up; the fake Mac is big)
     warmAllowed: () => !activeMeeting() || (isFake() ? !smallMac : readAheadAllowed(os.totalmem())),
-    // Ole: one Ask (#118): a question about the meeting on a call is answered from the call first
-    answerFirst: (id, q) => ole.askFromChat(id, q),
   })
   const validChips = (value: unknown): value is ContextChip[] => Array.isArray(value) && value.length <= 40 && value.every(c =>
     c && (c.kind === 'meeting' || c.kind === 'folder') && isId(c.id)) && new Set(value.map(c => `${c.kind}:${c.id}`)).size === value.length

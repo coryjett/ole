@@ -10,8 +10,7 @@ import { collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, type 
 import { prepareContext } from './prepare'
 import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from './bullets'
-import { answerQuestion } from './ask'
-import { CALL_CONTEXT_MISSING, routeAsk, type OneAskResult } from './oneAsk'
+import { answerQuestion, askErrorKind } from './ask'
 import { createEnricher, type Enricher } from './enrich'
 import { pickAutoPrepare } from './calendarMatch'
 import { createMeetingSource, type Meeting, type SourceCall } from './meetingSource'
@@ -55,12 +54,6 @@ export type OleSession = {
   checkServers(): Promise<void>
   /** prepare for a calendar meeting about to start, once per event (#52) */
   autoPrepare(): Promise<void>
-  /**
-   * One Ask (#118): a question from the host's own Ask about a meeting. About the call on now (and live context can
-   * run): answered by the call Ask, listed in the live answers and saved with them like a question typed to Ole.
-   * Otherwise, or when the call Ask fails, `library`: the host answers it, with a note when the call was meant.
-   */
-  askFromChat(meetingId: string, question: string): Promise<OneAskResult>
   /** the UI's requests, one per IPC channel in Yogurt; each takes the UI's input unchecked and validates it */
   handlers: OleHandlers
 }
@@ -78,8 +71,13 @@ export type OleHandlers = {
   pin(id: unknown, on: unknown): OleLiveState
   /** ole:bullet:rate (#55) */
   rate(id: unknown, rating: unknown): OleLiveState
-  /** ole:ask: a question during the call (#53) */
-  ask(question: unknown): Promise<OleLiveState>
+  /**
+   * ole:ask: a question during the call (#53). requestId (optional, from the UI): the handle ole:ask:cancel stops it
+   * by (#122)
+   */
+  ask(question: unknown, requestId?: unknown): Promise<OleLiveState>
+  /** ole:ask:cancel: Stop on the Ask panel (#122); the pending answer is dropped, never saved */
+  cancelAsk(requestId: unknown): OleLiveState
   /** ole:call: a saved meeting's summary, open questions and commitments (#82); null when Ole kept none */
   call(id: unknown): OleCallMemory | null
   /** ole:answers */
@@ -277,12 +275,16 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   const autoEvery = o.autoEveryMs ?? 2 * 60_000
   if (autoEvery > 0) host.clock.every(autoEvery, () => void autoPrepare().catch(e => host.log.warn('auto-prepare failed', e)))
 
+  /** questions being answered, by the UI's request id, so Stop can cancel one (#122) */
+  const asking = new Map<string, AbortController>()
+  const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/
+
   /**
-   * A question about the call on now (#53), from Ole's own box or the host's Ask (#118): a pending answer at once, then
-   * the call Ask. A failure is an answer saying so, or, with dropOnError (the host's Ask answers it instead), taken out
-   * of the list again. The call ended while answering: the answer belongs to it, not to the next call.
+   * A question about the call on now (#53): a pending answer at once, then the call Ask. A failure is an answer saying
+   * so, logged by its kind only, never its message (#122). Stopped (signal aborted): the pending answer is taken out
+   * again and nothing is saved. The call ended while answering: the answer belongs to it, not to the next call.
    */
-  async function askCall(question: string, forMeeting: string, dropOnError: boolean): Promise<OleAnswer | null> {
+  async function askCall(question: string, forMeeting: string, signal?: AbortSignal): Promise<void> {
     const id = `a${++answerSeq}`
     answers = [{ id, question, text: '', at: host.clock.now(), pending: true }, ...answers]
     send()
@@ -290,11 +292,24 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     try {
       // the call's memory: running summary (#75), the user's notes (#77), earlier questions oldest first (#76)
       const earlier = answers.filter(a => !a.pending && a.id !== id).slice(0, 3).reverse().map(a => ({ question: a.question, text: a.text }))
-      got = await answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(), call: (n, a) => call(n, a),
-        summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier, mentioned: sections.length > 0 })
+      const answering = answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(),
+        call: (n, a, opts) => call(n, a, opts), summary: summarizer?.summary(), notes: notesNow(forMeeting), earlier, mentioned: sections.length > 0,
+        ...(signal ? { signal } : {}) })
+      // Stop answers at once, even when a request ignores the signal; its late result is dropped
+      answering.catch(() => {})
+      const stopped = signal && new Promise<never>((_, reject) => {
+        if (signal.aborted) reject(signal.reason)
+        else signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+      if (stopped) stopped.catch(() => {})
+      got = await (stopped ? Promise.race([answering, stopped]) : answering)
     } catch (e) {
-      if (dropOnError) host.log.warn('the call Ask failed; the host Ask answers instead', e)
-      got = dropOnError ? null : { text: `Couldn't answer: ${e instanceof Error ? e.message : String(e)}`, ok: false }
+      if (signal?.aborted) got = null
+      else {
+        const kind = askErrorKind(e)
+        host.log.warn(`the call Ask failed (${kind})`)
+        got = { text: `Couldn't answer (${kind}). Try again.`, ok: false }
+      }
     }
     const at = (forMeeting === meetingId ? answers : finishedAnswers.get(forMeeting) ?? []).find(a => a.id === id)?.at ?? host.clock.now()
     const answer: OleAnswer | null = got && { id, question, at, ...got }
@@ -302,17 +317,6 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     if (forMeeting === meetingId) answers = settle(answers)
     else { const kept = settle(finishedAnswers.get(forMeeting) ?? []); finishedAnswers.set(forMeeting, kept); try { host.files.saveAnswers?.(forMeeting, kept) } catch { /* kept in memory */ } }
     send()
-    return answer
-  }
-
-  /** One Ask (#118): the host's Ask asks Ole first; see OleSession.askFromChat */
-  async function askFromChat(forMeeting: string, q: string): Promise<OneAskResult> {
-    const question = typeof q === 'string' ? q.trim().slice(0, QUESTION_MAX) : ''
-    const route = routeAsk({ liveMeetingId: meetingId, blocked: liveBlocked(), meetingId: question ? forMeeting : undefined })
-    if (route.route === 'library') return route
-    const answer = await askCall(question, forMeeting, true)
-    if (!answer) return { route: 'library', note: CALL_CONTEXT_MISSING }
-    return { route: 'call', text: answer.text, ...(answer.source ? { source: answer.source } : {}), ...(answer.url ? { url: answer.url } : {}) }
   }
 
   const handlers: OleHandlers = {
@@ -344,10 +348,17 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       return state()
     },
     // a question during the call (#53)
-    ask: async (q: unknown) => {
+    ask: async (q: unknown, requestId?: unknown) => {
       const question = typeof q === 'string' ? q.trim().slice(0, QUESTION_MAX) : ''
       if (!question || !meetingId || liveBlocked()) return state()
-      await askCall(question, meetingId, false)
+      const rid = typeof requestId === 'string' && REQUEST_ID.test(requestId) && !asking.has(requestId) ? requestId : null
+      const ac = rid ? new AbortController() : null
+      if (rid && ac) asking.set(rid, ac)
+      try { await askCall(question, meetingId, ac?.signal) } finally { if (rid) asking.delete(rid) }
+      return state()
+    },
+    cancelAsk: (requestId: unknown) => {
+      if (typeof requestId === 'string') asking.get(requestId)?.abort()
       return state()
     },
     // a saved meeting's summary, open questions and commitments (#82); null when Ole kept none
@@ -509,7 +520,6 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     setLocal(run) { local = run; send() },
     checkServers,
     autoPrepare,
-    askFromChat,
     bulletsOf: (id) => finished.get(id) ?? (id === meetingId ? bullets : []),
     handlers,
   }

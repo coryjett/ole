@@ -89,7 +89,7 @@ describe('a failed answer is marked as not real (security)', () => {
     try {
       ole.meetingStarted({ id: ID, title: 'Acme renewal' })
       await handlers.get('ole:ask')!({}, 'when is the renewal?')
-      expect(state().answers[0]).toMatchObject({ text: "Couldn't answer: down", ok: false })
+      expect(state().answers[0]).toMatchObject({ text: "Couldn't answer (error). Try again.", ok: false })
       ole.meetingStopped(ID)
       expect(appendNotes).not.toHaveBeenCalled()
     } finally { openaiChat.mockImplementation(real) }

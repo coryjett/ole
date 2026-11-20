@@ -27,6 +27,21 @@ export const ASK_SYSTEM = [
   SOURCE_ANONYMITY,
 ].join('\n')
 
+/**
+ * What kind of failure an Ask was, for the log and the answer (#122): `timeout`, `network`, `http <status>` or
+ * `error`. Never the message, which can carry a server's reply or the question.
+ */
+export function askErrorKind(e: unknown): string {
+  // duck-typed, so a test that mocks the clients still gets a kind: OpenAIError carries `status`, McpError `kind`
+  const f = (e ?? {}) as { name?: unknown; status?: unknown; kind?: unknown; message?: unknown }
+  if (typeof f.status === 'number' && f.status > 0) return `http ${f.status}`
+  if (f.name === 'McpError') return f.kind === 'timeout' ? 'timeout' : f.kind === 'unreachable' ? 'network' : f.kind === 'http' ? 'http' : 'error'
+  if (f.name === 'TimeoutError') return 'timeout'
+  // fetch rejects with a TypeError when the server can't be reached
+  if (e instanceof TypeError && /fetch|network/i.test(String(f.message))) return 'network'
+  return 'error'
+}
+
 const clock = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 
 export async function answerQuestion(o: {
@@ -35,6 +50,8 @@ export async function answerQuestion(o: {
   summary?: string; notes?: string; earlier?: Array<{ question: string; text: string }>
   /** the enricher added sections to the briefing this call (#86), from the session's state */
   mentioned?: boolean
+  /** the user pressed Stop (#122): every chat and lookup is cancelled, and answerQuestion rejects with the abort */
+  signal?: AbortSignal
 }): Promise<{ text: string; source?: string; url?: string; ok: boolean }> {
   // what doesn't change during the call first, so prompt caching covers it (#77)
   const parts = [o.context?.text ? `Briefing:\n${o.context.text}` : 'No briefing.']
@@ -48,7 +65,9 @@ export async function answerQuestion(o: {
   const messages: ChatMessage[] = [{ role: 'system', content: ASK_SYSTEM }, { role: 'user', content: parts.join('\n\n') }]
   const allowed = new Set(o.tools.map(t => t.name))
   const tools = o.tools.length ? { tools: toOpenAiTools(o.tools) } : {}
-  let reply = await o.chat({ messages, ...tools, response_format: { type: 'json_object' } })
+  const signal = o.signal ? { signal: o.signal } : {}
+  o.signal?.throwIfAborted()
+  let reply = await o.chat({ messages, ...tools, response_format: { type: 'json_object' }, ...signal })
   for (let round = 1; reply.tool_calls?.length; round++) {
     messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
     // a round's lookups run together (#80); the same call twice in one round reaches the server once
@@ -61,16 +80,19 @@ export async function answerQuestion(o: {
       const running = same.get(key)
       if (running) return running
       let p: Promise<string>
-      try { p = Promise.resolve(o.call(c.function.name, args)) } catch (e) { p = Promise.reject(e) }
+      try { p = Promise.resolve(o.signal ? o.call(c.function.name, args, signal) : o.call(c.function.name, args)) } catch (e) { p = Promise.reject(e) }
       const result = p.catch(() => 'lookup failed')
       same.set(key, result)
       return result
     }))
+    // a stopped question never turns failed lookups into an answer
+    o.signal?.throwIfAborted()
     reply.tool_calls.forEach((c, i) => messages.push({ role: 'tool', tool_call_id: c.id, content: results[i] }))
     // the last round offers no tools, so the model has to answer
-    reply = await o.chat({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
+    reply = await o.chat({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' }, ...signal })
     if (round >= TOOL_ROUNDS) break
   }
+  o.signal?.throwIfAborted()
   let parsed: { answer?: unknown; source?: unknown; url?: unknown } = {}
   try { parsed = JSON.parse((reply.content ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) } catch { /* plain text or nothing: no answer */ }
   const text = typeof parsed.answer === 'string' && parsed.answer.trim() ? parsed.answer.trim().slice(0, ANSWER_MAX) : ''
