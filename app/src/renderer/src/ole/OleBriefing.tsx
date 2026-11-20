@@ -26,7 +26,7 @@ export function BriefingText({ text }: { text: string }) {
 }
 
 /** collapsible; open by default when there is nothing else to read yet */
-export function OleBriefing({ text, defaultOpen, maxHeight = 360 }: { text: string; defaultOpen: boolean; maxHeight?: number }) {
+export function OleBriefing({ text, defaultOpen, maxHeight = 360 }: { text: string; defaultOpen: boolean; /** 'none': no cap, the page around it scrolls (the note's Briefing tab, #108) */ maxHeight?: number | 'none' }) {
   const [open, setOpen] = useState(defaultOpen)
   const [copied, setCopied] = useState(false)
   if (!text.trim()) return null

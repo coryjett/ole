@@ -23,8 +23,22 @@ export function OlePanel({ compact = false }: { compact?: boolean }) {
   const state = useOleState()
   const [focus, setFocus] = useState('')
   if (!state) return null
-  const prepare = () => void window.yogurt.ole.prepare({ focus: focus.trim() || null, meetingTitle: state.prepared?.meetingTitle ?? null })
   return <section data-testid="ole-panel" className="settings-group" style={{ padding: 12, margin: compact ? '8px 0' : '0 0 16px' }} aria-label="Ole">
+    <OlePanelHeader state={state} focus={focus} setFocus={setFocus} />
+    {/* bullets belong to a call: shown while one records; a finished call keeps them on its note page */}
+    {state.meetingId
+      ? <LiveView state={state} />
+      : <>
+        {state.prepared && <p data-testid="ole-prepared" className="settings-description mt-2">Prepared for: {[state.prepared.meetingTitle, state.prepared.focus].filter(Boolean).join(' · ') || 'the next call'}</p>}
+        {state.prepared?.text && <OleBriefing key={state.prepared.preparedAt} text={state.prepared.text} defaultOpen />}
+      </>}
+  </section>
+}
+
+/** Prepare with an optional focus, and what kept a server or the assistant out; on Home and on the note's Live tab (#108) */
+export function OlePanelHeader({ state, focus, setFocus }: { state: OleLiveState; focus: string; setFocus: (v: string) => void }) {
+  const prepare = () => void window.yogurt.ole.prepare({ focus: focus.trim() || null, meetingTitle: state.prepared?.meetingTitle ?? null })
+  return <>
     <div className="flex flex-wrap items-center gap-2">
       <strong className="text-[13px]">Ole</strong>
       <div className="flex min-w-48 flex-1 items-center gap-1">
@@ -43,14 +57,7 @@ export function OlePanel({ compact = false }: { compact?: boolean }) {
       <button data-testid="ole-retry-servers" className="text-action" onClick={() => void window.yogurt.ole.retryServers()}>Retry</button></p>}
     {state.blocked && <p data-testid="ole-blocked" role="status" className="settings-description">{state.blocked}</p>}
     {state.error && <p data-testid="ole-error" role="status" className="settings-description" style={{ color: 'var(--color-danger, #d33)' }}>{state.error}</p>}
-    {/* bullets belong to a call: shown while one records; a finished call keeps them on its note page */}
-    {state.meetingId
-      ? <LiveView state={state} />
-      : <>
-        {state.prepared && <p data-testid="ole-prepared" className="settings-description mt-2">Prepared for: {[state.prepared.meetingTitle, state.prepared.focus].filter(Boolean).join(' · ') || 'the next call'}</p>}
-        {state.prepared?.text && <OleBriefing key={state.prepared.preparedAt} text={state.prepared.text} defaultOpen />}
-      </>}
-  </section>
+  </>
 }
 
 /** wide enough for bullets and briefing side by side */

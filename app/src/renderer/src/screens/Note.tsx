@@ -1,6 +1,6 @@
 import { TranscriptionControl, TranscriptionNotice } from '../components/Transcription'
-import { OlePanel } from '../ole/OlePanel'
-import { OleSavedBullets } from '../ole/OleSavedBullets'
+import { OleQuickNote, OleTabLabel, OleTabPanels, useOleNote } from '../ole/OleNoteTabs'
+import { appendQuickNote, callElapsedMs, fitTab, isOleTab, type NoteTab, type OleTab } from '../ole/oleTabs'
 import { transcriptionBusy } from '../../../shared/transcription'
 import { citationTargetIndex } from '../../../shared/citations'
 import { NoteReadingPane } from '../components/NoteReadingPane'
@@ -55,7 +55,9 @@ function useAutosave(id: string, side: NoteSide, text: string, saved?: NoteSaveR
   return { change: (md: string) => saver.change(md), flush: () => saver.flush(), status: saver.status, reason: saver.reason }
 }
 
-const readingViews = new Map<string, { primary: 'transcript' | 'notes'; view: 'mine' | 'enhanced' }>()
+const readingViews = new Map<string, { primary: NoteTab; view: 'mine' | 'enhanced' }>()
+/** meetings whose call has already opened on Ole's Live tab (#108), so a revisit keeps the tab picked since */
+const liveOpened = new Set<string>()
 
 /** A meeting keeps its reading tab when revisited; an explicit source or recording action can still switch it. */
 export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResumeRequested }: {
@@ -121,10 +123,19 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   /** the person picked a side themselves: it is never switched for them after that */
   const picked = useRef(readingViews.has(id))
   const typing = useRef(false)
-  const [primaryState, setPrimary] = useState<'transcript' | 'notes'>(() => readingViews.get(id)?.primary ?? 'notes')
-  const primary = instantSummary ? 'notes' : primaryState
+  const [primaryState, setPrimary] = useState<NoteTab>(() => readingViews.get(id)?.primary ?? 'notes')
+  const recordingHere = m?.id === id && m.state === 'recording'
+  const ole = useOleNote(id, recordingHere, primaryState === 'live')
+  const primary = instantSummary ? 'notes' : fitTab(primaryState, ole.tabs)
   const readingScroll = useScrollMemory<HTMLElement>(`note/${id}/${view}`, !!m && !!notes && primary === 'notes')
-  useEffect(() => { if (m && notes) readingViews.set(id, { primary, view }) }, [id, m, notes, primary, view])
+  // kept as chosen, so a Context tab that loads a moment later is still the one shown (#108)
+  useEffect(() => { if (m && notes) readingViews.set(id, { primary: instantSummary ? 'notes' : primaryState, view }) }, [id, m, notes, primaryState, instantSummary, view])
+  // a call opens on Ole's Live tab (#108)
+  useEffect(() => {
+    if (m?.id !== id) return
+    if (m.state !== 'recording') { liveOpened.delete(id); return }
+    if (!liveOpened.has(id)) { liveOpened.add(id); setPrimary('live') }
+  }, [id, m?.id, m?.state])
   const [transcriptVisited, setTranscriptVisited] = useState(primary === 'transcript')
   useEffect(() => { if (primary === 'transcript') setTranscriptVisited(true) }, [primary])
   const [tabPointer, setTabPointer] = useState(false)
@@ -136,6 +147,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   const transcriptButton = useRef<HTMLButtonElement>(null)
   const notesButton = useRef<HTMLButtonElement>(null)
   const summaryButton = useRef<HTMLButtonElement>(null)
+  const oleButtons = useRef<Partial<Record<OleTab, HTMLButtonElement | null>>>({})
   const [rewriteOpen, setRewriteOpen] = useState(false)
   const [editedHere, setEditedHere] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -227,7 +239,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
     const tabs = primaryTabs.current
     if (!tabs) return
     const position = () => {
-      const active = (primary === 'transcript' ? transcriptButton : view === 'enhanced' && summaryButton.current ? summaryButton : notesButton).current
+      const active = isOleTab(primary) ? oleButtons.current[primary] : (primary === 'transcript' ? transcriptButton : view === 'enhanced' && summaryButton.current ? summaryButton : notesButton).current
       if (!active) return
       const tab = active.getBoundingClientRect(), row = tabs.getBoundingClientRect()
       const x = getComputedStyle(tabs).direction === 'rtl' ? tab.right - row.right : tab.left - row.left
@@ -237,9 +249,9 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
     position()
     const resize = new ResizeObserver(position)
     resize.observe(tabs)
-    for (const button of [transcriptButton.current, notesButton.current, summaryButton.current]) if (button) resize.observe(button)
+    for (const button of [...ole.tabs.map(tab => oleButtons.current[tab]), transcriptButton.current, notesButton.current, summaryButton.current]) if (button) resize.observe(button)
     return () => resize.disconnect()
-  }, [primary, view, m?.state, notes?.status])
+  }, [primary, view, m?.state, notes?.status, ole.tabs.join()])
 
   const summarizing = finishing || notes?.status === 'waiting' || notes?.status === 'writing'
   const resumeHandled = useRef(false)
@@ -263,14 +275,14 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   const shown = hasEnhanced ? view : 'mine'
 
   const pick = (v: 'mine' | 'enhanced') => { picked.current = true; setView(v); mineSave.flush(); enhancedSave.flush() }
-  const pickPrimary = (next: 'transcript' | 'notes', pointer = false) => {
+  const pickPrimary = (next: NoteTab, pointer = false) => {
     setTabPointer(pointer)
     if (next === primaryState) return
     setPrimary(next)
     if (next === 'transcript') setRewriteOpen(false)
     void mineSave.flush(); void enhancedSave.flush()
   }
-  const pickTab = (next: 'transcript' | 'notes', side?: 'mine' | 'enhanced', pointer = false) => {
+  const pickTab = (next: NoteTab, side?: 'mine' | 'enhanced', pointer = false) => {
     requestFinish(false)
     const request = ++tabRequest.current
     panelTransition.current?.skipTransition()
@@ -291,7 +303,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   const primaryKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
     e.preventDefault()
-    const buttons = [transcriptButton.current, notesButton.current, ...(hasEnhanced ? [summaryButton.current] : [])]
+    const buttons = [...ole.tabs.map(tab => oleButtons.current[tab]), transcriptButton.current, notesButton.current, ...(hasEnhanced ? [summaryButton.current] : [])]
     const direction = getComputedStyle(e.currentTarget).direction === 'rtl' ? -1 : 1
     const step = e.key === 'ArrowRight' ? direction : -direction
     const index = buttons.indexOf(e.currentTarget)
@@ -300,6 +312,14 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
     buttons[next]?.focus({ preventScroll: true })
   }
   const saveAll = async () => (await Promise.all([mineSave.flush(), enhancedSave.flush()])).every(Boolean)
+  /** Ole's quick note (#108): a line at the end of My notes, through the same save path as typing there */
+  const addQuickNote = (text: string) => {
+    const base = current.current
+    const md = base ? appendQuickNote(base.mine, text, callElapsedMs(recorder, Date.now())) : null
+    if (!base || md === null) return false
+    const next = { ...base, mine: md }; current.current = next; setNotes(next); mineSave.change(md); void mineSave.flush()
+    return true
+  }
   const startPrepared = async () => {
     if (starting) return
     setStarting(true); setStartFailed(false)
@@ -307,7 +327,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
       if (!await saveAll()) return
       const result = await window.yogurt.meetings.startPrepared(id)
       setStartFailed('error' in result)
-      if (!('error' in result)) { setPrimary('notes'); setView('mine') }
+      if (!('error' in result)) { setPrimary('live'); setView('mine') }
     } catch { setStartFailed(true) }
     finally { setStarting(false) }
   }
@@ -319,7 +339,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
       if (!await saveAll()) return
       const result = await window.yogurt.meetings.resume(id)
       if ('error' in result) setResumeFailed(true)
-      else { picked.current = false; requestFinish(false); setPrimary('notes'); setView('mine'); setEditedHere(false) }
+      else { picked.current = false; requestFinish(false); setPrimary('live'); setView('mine'); setEditedHere(false) }
     } catch { setResumeFailed(true) }
     finally { setStarting(false) }
   }
@@ -405,6 +425,10 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
 
           <div ref={primaryTabs} className="note-primary-tabs" data-summary-arriving={finishRequested && hasEnhanced && !reducedMotion}>
             <div role="tablist" aria-label={t('Meeting view')} className="contents">
+            {ole.tabs.map(tab => <button key={tab} ref={el => { oleButtons.current[tab] = el }} id={`note-ole-${tab}-tab`} data-testid={`note-ole-${tab}-tab`} role="tab" aria-selected={primary === tab} aria-controls="note-ole-panel"
+              tabIndex={primary === tab ? 0 : -1} onKeyDown={primaryKey} onClick={(e) => pickTab(tab, undefined, e.detail > 0)}>
+              <OleTabLabel tab={tab} unseen={tab === 'live' ? ole.unseen : 0} />
+            </button>)}
             <button ref={transcriptButton} id="note-transcript-tab" data-testid="note-transcript-toggle" role="tab" aria-selected={primary === 'transcript'} aria-controls="note-transcript-panel"
               tabIndex={primary === 'transcript' ? 0 : -1} onKeyDown={primaryKey} onClick={(e) => pickTab('transcript', undefined, e.detail > 0)}>
               <AudioLines size={14} strokeWidth={1.75} aria-hidden="true" />{t('Transcript')}
@@ -424,10 +448,6 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             <span data-testid="note-tab-indicator" className="note-tab-indicator" aria-hidden="true" />
           </div>
         </header>
-        {/* Ole takes at most a third of the window and scrolls inside, so the note and transcript stay usable (#47) */}
-        <div data-testid="ole-note-region" style={{ flex: 'none', maxHeight: '34vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
-          {recording ? <OlePanel compact /> : <OleSavedBullets key={id} meetingId={id} />}
-        </div>
         <div ref={setChatAnchor} className="note-reading-area">
           <div ref={panels} className="note-panels">
           <NoteReadingPane active={primary === 'notes'} summary={shown === 'enhanced'} generating={shown === 'enhanced' && ['waiting', 'rewriting', 'handoff', 'reset', 'streaming'].includes(summaryState)} resetting={shown === 'enhanced' && summaryState === 'reset'} writing={shown === 'enhanced' && summaryState === 'streaming'} scroll={readingScroll}>
@@ -441,9 +461,11 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             <Transcript notice={<>{(hasAudio&&(m.transcriptionPending||!hasTranscript)||m.transcriptionState==='waiting-model'||m.transcriptionState==='waiting-recording')&&<TranscriptionNotice state={m.transcriptionState} hasLines={hasTranscript} onContinue={()=>void runTranscript()} disabled={recording||!!m.stopSavePending}/>}
             {!hasAudio&&m.transcriptionState==='error'&&<InlineError testId="upload-preparation-failed"><span>{t("Yogurt couldn't read this audio file.")}</span><button className="text-action" onClick={()=>void openAudioUpload()}>{t('Upload a file')}</button></InlineError>}</>} id={id} processing={transcribing} replacing={!!m.transcriptionAgain} recording={recording} active={primary === 'transcript'} inline toolbar={transcriptToolbar} focus={at?.ms != null ? { ...at, ms: at.ms } : undefined} />
           </section>}
+          {ole.tabs.length > 0 && <OleTabPanels tab={isOleTab(primary) ? primary : null} meetingId={id} recording={recording} ole={ole} />}
           </div>
         </div>
         <footer ref={setFooter} className="note-footer">
+          {recording && primary !== 'notes' && <OleQuickNote onAdd={addQuickNote} />}
             {m.stopSavePending && (
               <div data-testid="note-stop-unsaved" role="alert" className="mt-5 flex flex-wrap items-start gap-3 rounded-xl border border-line bg-card px-4 py-3 text-[13px] leading-relaxed">
                 <TriangleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-danger" />
