@@ -25,7 +25,7 @@ A running ledger of every change Ole makes to Yogurt-owned files: anything outsi
 | Ole's IPC, settings fields and live-state types | many (#33, #52, #89, #101, #118/#122, #126, #128, …) | `preload/index.ts`, `shared/types.ts`, `main/settings.ts` |
 | Wiring Ole into the app: session, providers, servers, keys, per-meeting files, notes, calendar, capture protection | many | `main/index.ts` |
 | OpenAI transcription (chunked and streaming) behind the Transcribe seam | #85, #89 | `main/asr/index.ts` |
-| Ole tabs, quick-note bar and docked Ask on the note page | #108, #122 | `renderer/src/screens/Note.tsx` |
+| Ole tabs, quick-note bar and docked Ask on the note page; the Ask column beside the tab panels on a wide note, and the width measurement it needs | #108, #122, #148 | `renderer/src/screens/Note.tsx` |
 | Ask button hands over to Ole's docked Ask during a call (one line) | #122 | `renderer/src/components/Chat.tsx` |
 | Ole panel on Home | #35 | `renderer/src/screens/Home.tsx` |
 | Ole settings section | #10 and later | `renderer/src/screens/Settings.tsx` |
