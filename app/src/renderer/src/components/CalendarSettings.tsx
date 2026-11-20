@@ -4,6 +4,7 @@ import { Loading } from './Loading'
 import { LoadingContent } from './LoadingContent'
 import { CalendarLinkForm } from './CalendarLinkForm'
 import { t } from '../../../shared/i18n'
+import { OleCalendarNote } from '../ole/OleCalendarNote'
 
 let expanded = false
 
@@ -67,6 +68,7 @@ export function CalendarSettings() {
         </span>
         <ChevronDown size={16} aria-hidden="true" />
       </button>
+      <OleCalendarNote server={view?.server} />
       <div id="settings-calendar-list" className="accordion" data-open={open} inert={!open || undefined}><div className="settings-calendar-list">
         <LoadingContent pending={!view} skeleton={<Loading layout="calendars" />}>{view && <>{!link && sys !== 'granted' && <div className="settings-row">
             <p className="settings-description settings-row-copy">{sys === 'error' ? t("Yogurt couldn't read your calendars.") : t('Allow calendar access to choose your calendars.')}</p>

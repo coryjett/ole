@@ -14,7 +14,7 @@ import { answerQuestion, askErrorKind } from './ask'
 import { createEnricher, mayGetNames, type Enricher } from './enrich'
 import { nextMeeting as pickNextMeeting, NOW_WINDOW_MS, pickAutoPrepare, sameEvent } from './calendarMatch'
 import { nextStatus } from './nextStatus'
-import { createMeetingSource, failureKind, type Meeting, type SourceCall } from './meetingSource'
+import { createMeetingSource, failureKind, type Meeting, type ServerMeetings, type SourceCall } from './meetingSource'
 import { accountSearchTools, autoPickDue, createSubjectResolver, resultNames, searchArgs, SUBJECT_AUTO_PICK_MS, SUBJECT_NAME_MAX, SUBJECT_RETRY_MS, type SubjectResolution, type SubjectResolver } from './subject'
 import { matchedRecordName, mentions } from './anonymize'
 import { MEETING_CONTEXT_TOOL } from './tools'
@@ -64,6 +64,12 @@ export type OleSession = {
   autoPrepare(): Promise<void>
   /** read the next meeting for Home (#126); the session's own timer does this, a host may also call it */
   refreshNext(): Promise<void>
+  /**
+   * the meetings server's list for [fromMs, toMs] and its name (#149), cached like the rest of the meeting source;
+   * null when no server offers one, all failed, or the servers may not be used. Never reads the host calendar, so the
+   * host can fall back to it from its own calendar reads without a loop.
+   */
+  serverMeetings(fromMs: number, toMs: number): Promise<ServerMeetings | null>
   /** the UI's requests, one per IPC channel in Yogurt; each takes the UI's input unchecked and validates it */
   handlers: OleHandlers
 }
@@ -744,6 +750,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     checkServers,
     autoPrepare,
     refreshNext,
+    serverMeetings: (fromMs, toMs) => meetings.serverMeetings(fromMs, toMs),
     bulletsOf: (id) => finished.get(id) ?? (id === meetingId ? bullets : []),
     handlers,
   }

@@ -42,6 +42,8 @@ import { hookOleSecrets, readSecret } from './ole/yogurt/secrets'
 import { hookOleProviders, providersOf } from './ole/yogurt/providers'
 import { createOpenAIModel } from './ole/yogurt/openaiModel'
 import { hookOle, testServer } from './ole/yogurt/session'
+import { createServerCalendar, type CalendarRead } from './ole/yogurt/serverCalendar'
+import type { OleSession } from './ole/core/session'
 import { parseRecordedCall } from './ole/core/turnRecorder'
 import { savedCallMemory } from './ole/core/callSummary'
 import type { OleAnswer } from './ole/core/types'
@@ -270,25 +272,48 @@ let relaunched = 0
 /** fake mode: how many times Yogurt would have restarted to install a new version */
 let updateRestarts = 0
 
+/** Ole's meetings server list (#149), set once Ole is wired; never reads the calendar, so the fallback can't loop */
+let oleServerMeetings: ((from: number, to: number) => ReturnType<OleSession['serverMeetings']>) | undefined
+// Ole (#149): with no Mac calendar access or no calendars, Yogurt's calendar reads show the meetings server's list
+const serverCalendar = createServerCalendar({
+  mac: upcoming, status: calendarStatus, calendars,
+  server: async (from, to) => oleServerMeetings ? oleServerMeetings(from, to) : null,
+  hideWithoutLink: () => loadSettings(join(userDataDir(), 'settings.json')).hideEventsWithoutCallLink === true,
+})
+
+/** the events and, when they came from Ole's meetings server instead of the Mac calendar, that server's name */
+async function readCalendarFrom(from: number, to: number, keep?: Parameters<typeof upcoming>[2]): Promise<CalendarRead> {
+  const read = await serverCalendar.read(from, to, keep)
+  refreshEventSnapshots(read.events)
+  return read
+}
 async function readCalendar(from: number, to: number, keep?: Parameters<typeof upcoming>[2]): Promise<CalEvent[]> {
-  const events = await upcoming(from, to, keep)
+  return (await readCalendarFrom(from, to, keep)).events
+}
+/** the Mac calendar alone: Ole's own calendar fallback (core meetingSource), which must never come back to its server */
+async function readMacCalendar(from: number, to: number): Promise<CalEvent[]> {
+  const events = await upcoming(from, to)
   refreshEventSnapshots(events)
   return events
 }
 
 /** What is still to come today and tomorrow (meetings on now included), soonest first */
-async function comingUp(): Promise<CalEvent[]> {
+async function comingUpFrom(): Promise<CalendarRead> {
   const now = isFake() ? fakeNow() : Date.now()
   const end = new Date(now); end.setDate(end.getDate() + 2); end.setHours(0, 0, 0, 0)
-  return (await readCalendar(now, end.getTime())).filter((e) => e.end > now && e.start < end.getTime()).sort((a, b) => a.start - b.start)
+  const read = await readCalendarFrom(now, end.getTime())
+  return { ...read, events: read.events.filter((e) => e.end > now && e.start < end.getTime()).sort((a, b) => a.start - b.start) }
 }
+async function comingUp(): Promise<CalEvent[]> { return (await comingUpFrom()).events }
 
 /** The events on the day of this time, earliest first */
-async function eventsOn(at: number, purpose?: 'link-event'): Promise<CalEvent[]> {
+async function eventsOnFrom(at: number, purpose?: 'link-event'): Promise<CalendarRead> {
   const from = new Date(at); from.setHours(0, 0, 0, 0)
   const to = new Date(from); to.setDate(to.getDate() + 1)
-  return (await readCalendar(from.getTime(), to.getTime(), purpose ?? (event => eventIds(event).some(id => !!storeRef?.meetingForEvent(id))))).sort((a, b) => a.start - b.start)
+  const read = await readCalendarFrom(from.getTime(), to.getTime(), purpose ?? (event => eventIds(event).some(id => !!storeRef?.meetingForEvent(id))))
+  return { ...read, events: read.events.sort((a, b) => a.start - b.start) }
 }
+async function eventsOn(at: number, purpose?: 'link-event'): Promise<CalEvent[]> { return (await eventsOnFrom(at, purpose)).events }
 
 /** the Mac's full name: who "You" is unless Settings says otherwise (fake mode: a fixed one) */
 /** fake mode's call (callNames/fake.ts), loaded only in fake mode */
@@ -307,7 +332,7 @@ let indexerRef: { schedule(): Promise<unknown> } | undefined
 function startDetection() {
   if (isFake()) setHelper(fakeHelper)
   const signals = createSignals({ helper: runHelper, events: readCalendar })
-  refreshCalendarConsumers = () => signals.invalidateCalendar()
+  refreshCalendarConsumers = () => { serverCalendar.invalidate(); signals.invalidateCalendar() }
   const now = isFake() ? fakeNow : Date.now
   let fakeSilence: number | undefined
   const watcher: Watcher = new Watcher({
@@ -437,7 +462,7 @@ function startDetection() {
       } else { const note = prepareMeeting(current); goTo(`/note/${note.id}`) }
     },
   })
-  refreshCalendarConsumers = () => { signals.invalidateCalendar(); void tray.refreshCalendar() }
+  refreshCalendarConsumers = () => { serverCalendar.invalidate(); signals.invalidateCalendar(); void tray.refreshCalendar() }
   setTrayVisible = tray.setVisible
   trayShown = tray.shown
   // cheap, and only while Yogurt runs; more often while recording, so the end of a quiet call is noticed promptly
@@ -582,7 +607,8 @@ app.whenReady().then(() => {
     // what the user types in their notes during the call reaches live bullets and Ask (#77); a local read
     notes: (id) => store.notes(id).mine,
     // the calendar names a default-titled call (#56) and starts auto-prepare (#52)
-    upcoming: async (from, to) => (await readCalendar(from, to)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end })),
+    // the Mac calendar only: Ole's meeting source already asks the servers first (#149: no loop through the fallback)
+    upcoming: async (from, to) => (await readMacCalendar(from, to)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end })),
     // the call's summary, open questions and commitments (#82)
     saveCall: (id, memory) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-call.json'), JSON.stringify(memory, null, 2)),
     loadCall: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-call.json'); return existsSync(p) ? savedCallMemory(JSON.parse(readFileSync(p, 'utf8'))) : null },
@@ -613,6 +639,8 @@ app.whenReady().then(() => {
         !!b && typeof b === 'object' && typeof b.id === 'string' && typeof b.text === 'string' && typeof b.source === 'string' && typeof b.at === 'number') : []
     },
   })
+  // the Agenda and Yogurt's other calendar reads fall back to the meetings server's list (#149)
+  oleServerMeetings = (from, to) => ole.serverMeetings(from, to)
   onMeetingStart((m) => ole.meetingStarted({ id: m.id, title: m.title }))
   onMeetingChange((m) => ole.meetingRenamed({ id: m.id, title: m.title }))
   // a Mac that slept may have missed a server going down (#33)
@@ -1104,8 +1132,12 @@ app.whenReady().then(() => {
   const calendarList = async () => {
     const list = await calendars(), settings = loadSettings(settingsFile), hidden = settings.hiddenCalendarIds ?? []
     const linkIds = new Set(calendarLinks?.list().map((l) => l.id) ?? [])
+    // Ole (#149): the meetings server the Agenda reads while the Mac calendar has none
+    serverCalendar.invalidate()
+    const server = await serverCalendar.inUse().catch(() => null)
     return { status: calendarStatus(), systemStatus: systemCalendarStatus(), hideEventsWithoutCallLink: settings.hideEventsWithoutCallLink === true,
-      calendars: list.map((c) => ({ ...c, enabled: !hidden.includes(c.id), ...(linkIds.has(c.id) ? { link: true } : {}) })) }
+      calendars: list.map((c) => ({ ...c, enabled: !hidden.includes(c.id), ...(linkIds.has(c.id) ? { link: true } : {}) })),
+      ...(server ? { server } : {}) }
   }
   ipcMain.handle('calendar:list', calendarList)
   ipcMain.handle('calendar:set-enabled', async (_e, id: unknown, enabled: unknown) => {
@@ -1127,16 +1159,19 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('calendar:day', async (_e, at: unknown, purpose?: unknown) => {
     if (typeof at !== 'number' || !Number.isFinite(at) || !Number.isFinite(new Date(at).getTime())) return { status: 'error', events: [] }
-    const events = (await eventsOn(at, purpose === 'link-event' ? 'link-event' : undefined)).map((event) => {
+    const read = await eventsOnFrom(at, purpose === 'link-event' ? 'link-event' : undefined)
+    const events = read.events.map((event) => {
       const meeting = eventIds(event).map((id) => store.meetingForEvent(id)).find(Boolean)
       const note = meeting && withStopState(meeting)
       return { ...event, attendees: resolvePeople(store.db, event.attendees), ...(note ? { note: { id: note.id, state: note.state, ...(note.source ? { source: note.source } : {}) } } : {}) }
     })
-    return { status: calendarStatus(), events }
+    // events from Ole's meetings server (#149) are a calendar the Agenda can show, whatever the Mac's access
+    return { status: read.server ? 'granted' as const : calendarStatus(), events }
   })
   ipcMain.handle('calendar:coming-up', async () => {
-    const events = (await comingUp()).map(event => ({ ...event, attendees: resolvePeople(store.db, event.attendees) }))
-    return { status: calendarStatus(), events }
+    const read = await comingUpFrom()
+    const events = read.events.map(event => ({ ...event, attendees: resolvePeople(store.db, event.attendees) }))
+    return { status: read.server ? 'granted' as const : calendarStatus(), events }
   })
   // not asked yet: the Mac's own question; turned off: the Mac's settings, where only the person can turn it on
   ipcMain.handle('calendar:links', () => calendarLinks?.list() ?? [])
@@ -1153,6 +1188,7 @@ app.whenReady().then(() => {
     return true
   })
   ipcMain.handle('calendar:connect', async () => {
+    serverCalendar.invalidate()
     // a calendar link is pasted in Settings' calendars: the same form as the first run's
     if (calendarLinks && caps.calendarLink) { goTo('/settings'); return refreshCalendarStatus() }
     const was = await refreshCalendarStatus()
