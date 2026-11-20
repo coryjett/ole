@@ -43,7 +43,7 @@ const state = () => handlers.get('ole:state')!() as { bullets: Array<{ id: strin
 beforeEach(() => { openaiChat.mockClear() })
 
 describe('pin, rate and ask during a call (#53, #54, #55)', () => {
-  it('pinned bullets go into the notes when the call ends; a rating is remembered for later calls', async () => {
+  it('pinned bullets reach the summary when the call ends, never My notes (#168); a rating is remembered for later calls', async () => {
     const { ole, file, appendNotes } = await setup()
     ole.meetingStarted({ id: ID, title: 'Acme renewal' })
     ole.segment({ meetingId: ID, track: 'them', text: 'when is the renewal again', startMs: 0 })
@@ -58,7 +58,8 @@ describe('pin, rate and ask during a call (#53, #54, #55)', () => {
     await handlers.get('ole:bullet:rate')!({}, b.id, 'great')
     expect(state().bullets[0].rating).toBe('up')
     ole.meetingStopped(ID)
-    expect(appendNotes).toHaveBeenCalledWith(ID, '## Pinned from the call\n- Renewal is in March (opportunity: Renewal)')
+    expect(appendNotes).not.toHaveBeenCalled()
+    expect(ole.notesInput(ID)).toBe('## Pinned from the call\n- Renewal is in March (opportunity: Renewal)')
   })
 
   it("a question aimed at another meeting is refused (#125)", async () => {

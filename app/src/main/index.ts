@@ -787,6 +787,8 @@ app.whenReady().then(() => {
     summaryLanguage: () => summaryLanguageSetting(loadSettings(settingsFile)),
     // Ole: a title written from the notes starts with the organization the call matched (#154)
     generatedTitle: (id, title) => ole.generatedTitle(id, title),
+    // Ole: pinned bullets and its record of the call reach the summary without landing in My notes (#168)
+    extraNotes: (id) => ole.notesInput(id),
     store, queue, model, language: meetingLanguage, onStop: onMeetingStopSaved, named: (id) => callNames.finished(id), earlier: (id) => readAhead.parts(id), me,
     transcribed: async (id) => { await recordingFinished(id); await transcriptFinished(id) },
     send: (v) => win?.webContents.send('notes:changed', v),
