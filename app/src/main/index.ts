@@ -612,6 +612,9 @@ app.whenReady().then(() => {
     // the call's summary, open questions and commitments (#82)
     saveCall: (id, memory) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-call.json'), JSON.stringify(memory, null, 2)),
     loadCall: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-call.json'); return existsSync(p) ? savedCallMemory(JSON.parse(readFileSync(p, 'utf8'))) : null },
+    // the organization the call matched, for the title written after it (#154)
+    saveOrg: (id, org) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-org.json'), JSON.stringify({ org })),
+    loadOrg: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-org.json'); if (!existsSync(p)) return null; const o: unknown = JSON.parse(readFileSync(p, 'utf8')); return o && typeof o === 'object' && typeof (o as { org?: unknown }).org === 'string' ? (o as { org: string }).org : null },
     saveBriefing: (id, text) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-briefing.md'), text),
     loadBriefing: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-briefing.md'); return existsSync(p) ? readFileSync(p, 'utf8').slice(0, 50_000) : '' },
     // the call's bullets turns, for Export for replay (#70): on this Mac only
@@ -781,6 +784,8 @@ app.whenReady().then(() => {
     // Windows and Linux: a note waiting while the model loads says so (a Mac shows what it always did)
     showLoading: platform !== 'darwin',
     summaryLanguage: () => summaryLanguageSetting(loadSettings(settingsFile)),
+    // Ole: a title written from the notes starts with the organization the call matched (#154)
+    generatedTitle: (id, title) => ole.generatedTitle(id, title),
     store, queue, model, language: meetingLanguage, onStop: onMeetingStopSaved, named: (id) => callNames.finished(id), earlier: (id) => readAhead.parts(id), me,
     transcribed: async (id) => { await recordingFinished(id); await transcriptFinished(id) },
     send: (v) => win?.webContents.send('notes:changed', v),

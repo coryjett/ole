@@ -22,6 +22,7 @@ import { feedbackOf, recordRating } from './feedback'
 import { createTurnRecorder, type RecordedCall } from './turnRecorder'
 import { createCallSummarizer, EMPTY_MEMORY, fromOleNotes, isEmptyMemory } from './callSummary'
 import { buildReplayFixture, exportFileName } from './replayExport'
+import { cleanOrg, matchedOrg, titleWithOrg } from './orgTitle'
 
 /** tools older than this are gathered again before the meeting source uses them (#98) */
 const TOOLS_FRESH_MS = 10 * 60_000
@@ -54,6 +55,12 @@ export type OleSession = {
   /** the recording was renamed (calendar match or the person): a briefing from a default title is prepared again once (#44) */
   meetingRenamed(m: { id: string; title: string }): void
   meetingStopped(id: string): void
+  /**
+   * A title the host generated for a finished meeting, as it should be saved (#154): with the organization the call
+   * matched in front, unless it already names it. The host calls this only for titles it writes itself, never for one
+   * the person set. Unchanged for an unmatched call, the live one, or a meeting Ole kept no organization for.
+   */
+  generatedTitle(meetingId: string, title: string): string
   segment(seg: { meetingId: string; track: 'me' | 'them'; speaker?: string | null; text: string; startMs: number }): void
   bulletsOf(id: string): OleBullet[]
   /** hands over the host's own model for Prepare once it exists (#5; Yogurt: its notes queue) */
@@ -166,6 +173,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   const finished = new Map<string, OleBullet[]>()
   const finishedBriefings = new Map<string, string>()
   const finishedCalls = new Map<string, OleCallMemory>()
+  /** the organization each finished call matched (#154), for the title the host writes after the call */
+  const finishedOrgs = new Map<string, string>()
   /** the call's bullets turns as they happen (#70); kept in memory, saved with the meeting when it stops */
   let recorder: ReturnType<typeof createTurnRecorder> | null = null
   const finishedTurns = new Map<string, RecordedCall>()
@@ -734,6 +743,9 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
         try { host.files.saveTurns?.(id, turns) } catch (e) { host.log.warn('saving the bullets turns failed', e) }
         recorder = null
       }
+      // the organization the call matched goes with the meeting, for the title written after it (#154)
+      const org = matchedOrg(prepared, hasMatchedRecord(prepared))
+      if (org) { finishedOrgs.set(id, org); try { host.files.saveOrg?.(id, org) } catch (e) { host.log.warn('saving the call\'s organization failed', e) } }
       if (prepared?.text) { finishedBriefings.set(id, prepared.text); try { host.files.saveBriefing?.(id, prepared.text) } catch (e) { host.log.warn('saving the briefing failed', e) } }
       engine = null
       meetingId = null
@@ -745,6 +757,16 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       send()
       // Home shows the next meeting again (#126); with the background timers off (tests) only on request
       if (autoEvery > 0) void refreshNext()
+    },
+    generatedTitle(id, title) {
+      if (typeof id !== 'string' || !ID.test(id) || id === meetingId) return title
+      let org = finishedOrgs.get(id)
+      if (org === undefined) {
+        try { org = cleanOrg(host.files.loadOrg?.(id)) } catch (e) { host.log.warn('reading the call\'s organization failed', e); org = '' }
+        // remembered either way, so a meeting without one doesn't read the disk on every title
+        finishedOrgs.set(id, org)
+      }
+      return titleWithOrg(title, org)
     },
     setLocal(run) { local = run; send() },
     checkServers,
