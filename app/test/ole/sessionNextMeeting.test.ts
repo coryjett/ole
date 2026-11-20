@@ -147,6 +147,31 @@ describe('Prepare now (#142)', () => {
     s.meetingStopped(ID)
   })
 
+  it('a failed Prepare now leaves the meeting to auto-prepare (#144)', async () => {
+    let start = 0
+    const { s, now } = await session(() => [{ id: 'e7', title: 'Globex renewal', start, end: start + 30 * 60_000 }])
+    start = now() + 60 * 60_000
+    await s.refreshNext()
+    openaiChat.mockRejectedValueOnce(new Error('503'))
+    await s.handlers.prepareNext()
+    expect(s.handlers.state().error).toBeTruthy()
+    // auto-prepare still owns it: the label says when it will run
+    expect(s.handlers.state().nextMeeting?.status).toBe('scheduled')
+  })
+
+  it('a same-titled call far from the meeting start does not reuse its briefing (#144)', async () => {
+    let start = 0
+    const { s, now } = await session(() => [{ id: 'e8', title: 'Globex renewal', start, end: start + 4 * 60 * 60_000 }])
+    start = now() + 2 * 60 * 60_000
+    await s.refreshNext()
+    await s.handlers.prepareNext()
+    const n = prepareCount()
+    // a call with the same title two hours before the meeting, with no event on now
+    s.meetingStarted({ id: ID, title: 'Globex renewal' })
+    await vi.waitFor(() => expect(prepareCount()).toBeGreaterThan(n), { timeout: 3000 })
+    s.meetingStopped(ID)
+  })
+
   it('refused during a call, while preparing, and with no next meeting', async () => {
     let start = 0
     const { s, now } = await session(() => [{ id: 'e1', title: 'Globex renewal', start, end: start + 30 * 60_000 }])
