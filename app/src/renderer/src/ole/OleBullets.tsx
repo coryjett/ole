@@ -15,7 +15,19 @@ export function SourceName({ b }: { b: Pick<OleBullet, 'source' | 'url'> }) {
   return b.url ? <a data-testid="ole-bullet-link" href={b.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'inherit' }}>{b.source}</a> : <>{b.source}</>
 }
 
-export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now() }: { bullets: OleBullet[]; prepared: OlePrepared | null; maxHeight?: number; now?: number }) {
+/** pin (#54) and thumbs (#55): small text buttons that say when they are on */
+function BulletControls({ b, onPin, onRate }: { b: OleBullet; onPin: (id: string, on: boolean) => void; onRate: (id: string, r: 'up' | 'down' | null) => void }) {
+  const btn = (on: boolean) => `text-[12px] leading-none ${on ? 'opacity-100' : 'opacity-50 hover:opacity-90'}`
+  return <span className="ml-2 inline-flex gap-2 align-middle">
+    <button data-testid="ole-bullet-pin" aria-pressed={!!b.pinned} title={b.pinned ? 'Unpin' : 'Pin: keep it in the notes and summary'} className={btn(!!b.pinned)} onClick={() => onPin(b.id, !b.pinned)}>📌</button>
+    <button data-testid="ole-bullet-up" aria-pressed={b.rating === 'up'} title="Useful" className={btn(b.rating === 'up')} onClick={() => onRate(b.id, b.rating === 'up' ? null : 'up')}>👍</button>
+    <button data-testid="ole-bullet-down" aria-pressed={b.rating === 'down'} title="Not useful" className={btn(b.rating === 'down')} onClick={() => onRate(b.id, b.rating === 'down' ? null : 'down')}>👎</button>
+  </span>
+}
+
+export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(), onPin, onRate }: { bullets: OleBullet[]; prepared: OlePrepared | null; maxHeight?: number; now?: number
+  /** live call only: pin (#54) and rate (#55); a saved meeting shows the marks without buttons */
+  onPin?: (id: string, on: boolean) => void; onRate?: (id: string, r: 'up' | 'down' | null) => void }) {
   const [all, setAll] = useState(false)
   const header = !prepared ? 'Not prepared yet'
     : `Prepared for: ${[prepared.meetingTitle, prepared.focus].filter(Boolean).join(' · ') || 'the next call'}`
@@ -30,7 +42,8 @@ export function OleBullets({ bullets, prepared, maxHeight = 320, now = Date.now(
           {/* a bullet from the last few seconds has a green edge, so what just changed stands out */}
           {shown.map(b => <li key={b.id} data-testid="ole-bullet" data-new={now - b.at < NEW_MS || undefined} className="widget-preview-bubble text-[13px] leading-[18px]" dir="auto"
             style={now - b.at < NEW_MS ? { boxShadow: 'inset 3px 0 0 #6cc463' } : undefined}>
-            <span>{b.text}</span>
+            <span>{b.pinned && !onPin && <span data-testid="ole-bullet-pinned" title="Pinned">📌 </span>}{b.text}</span>
+            {onPin && onRate && <BulletControls b={b} onPin={onPin} onRate={onRate} />}
             {b.heard && <span data-testid="ole-bullet-heard" className="block text-[11px] leading-[16px] text-[#B8B8C0]">Heard: “{b.heard}”</span>}
             {b.quote
               ? <span data-testid="ole-bullet-source" className="block text-[11px] leading-[16px] text-[#B8B8C0]">From <SourceName b={b} />: “{b.quote}”</span>

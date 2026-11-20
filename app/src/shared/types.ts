@@ -473,6 +473,8 @@ export type OleLiveState = {
   prepared: { meetingTitle: string | null; focus: string | null; preparedAt: number; text: string } | null
   error: string | null
   bullets: import('../main/ole/types').OleBullet[]
+  /** questions asked during this call, newest first (#53) */
+  answers: import('../main/ole/types').OleAnswer[]
   /** why Prepare and live context are off (Assistant on Local, or no OpenAI key); null when they can run */
   blocked: string | null
   /** enabled MCP servers Ole couldn't use for this briefing or call, and why (#33) */
@@ -489,4 +491,12 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   bullets(meetingId: string): Promise<import('../main/ole/types').OleBullet[]>
   /** a meeting's briefing as it stood when the call ended; '' when there was none (#35) */
   briefing(meetingId: string): Promise<string>
+  /** pin a bullet of the call on now (#54) */
+  pinBullet(id: string, on: boolean): Promise<OleLiveState>
+  /** thumbs up or down on a bullet; null takes it back (#55) */
+  rateBullet(id: string, rating: 'up' | 'down' | null): Promise<OleLiveState>
+  /** ask a question during the call (#53) */
+  ask(question: string): Promise<OleLiveState>
+  /** a meeting's questions and answers; [] when none */
+  answers(meetingId: string): Promise<import('../main/ole/types').OleAnswer[]>
 }

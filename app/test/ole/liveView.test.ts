@@ -6,7 +6,7 @@ import { LiveView } from '../../src/renderer/src/ole/OlePanel'
 
 const text = '## Before you join\n- Kickoff moves POC to production\n- Bedrock fix still owed\n- They want one place for policy\n- extra\n## Who\n- Artem, architect'
 const state = (bullets = [{ id: 'a', text: 'Same 429s at a fintech', source: 'call', at: 0 }]) => ({
-  meetingId: 'm', preparing: false, error: null, blocked: null, unavailable: [], bullets,
+  meetingId: 'm', preparing: false, error: null, blocked: null, unavailable: [], answers: [], bullets,
   prepared: { meetingTitle: 'Kickoff', focus: null, preparedAt: 1, text },
 })
 

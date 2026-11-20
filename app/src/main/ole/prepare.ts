@@ -23,6 +23,7 @@ export const PREPARE_SYSTEM = [
   '- About 150 words in total. Leave out detail: anything else can be looked up during the call.',
   '- After each fact, its source as a short markdown link or record name, e.g. ([opportunity](https://...)) or (call, 19 Nov). Never tool names, never square-bracket citations.',
   'Leave out anything no tool returned. Never invent facts, names or numbers.',
+  'If the meeting has no customer account (an internal, partner or new-contact call with no account record), make the first line exactly "No customer account for this call." and brief only the meeting, its people and its topic: no account, deal or other customers\' details. (#57)',
   'If you cannot match the call to a meeting or an account, reply with exactly this one line and nothing else: "Couldn\'t match this call to a meeting or account. Type a company in Focus and press Refresh briefing." (#44)',
 ].join('\n')
 
@@ -69,7 +70,7 @@ export async function prepareContext(opts: {
 
   const ask = [
     `Now: ${new Date(now).toISOString()}.`,
-    meetingTitle ? `Meeting: ${meetingTitle}` : 'Meeting: not given; look for the next upcoming meeting if a tool can find it.',
+    meetingTitle ? `Meeting: ${meetingTitle}` : 'Meeting: not given; look only for a meeting happening now (started in the last 15 minutes or starting in the next 15) if a tool can find it. Never brief a later meeting.',
     focus ? `Focus: ${focus}` : null,
     'Gather the facts, then write the briefing.',
   ].filter(Boolean).join('\n')

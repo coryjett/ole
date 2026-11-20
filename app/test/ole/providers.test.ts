@@ -13,7 +13,7 @@ let file = ''
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ole-providers-')); file = join(dir, 'settings.json'); hookOleProviders({ file }) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); handlers.clear() })
 
-const DEFAULTS = { transcription: 'local', assistant: 'local', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '' }
+const DEFAULTS = { transcription: 'local', assistant: 'local', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: true, autoPrepare: true, autoPrepareLead: 10 }
 
 it('defaults to local for both and the documented OpenAI models', () => {
   expect(providersOf({})).toEqual(DEFAULTS)

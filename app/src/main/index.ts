@@ -42,8 +42,10 @@ import { hookOleSecrets, readSecret } from './ole/secrets'
 import { hookOleProviders, providersOf } from './ole/providers'
 import { createOpenAIModel } from './ole/openaiModel'
 import { hookOle, testServer } from './ole/session'
+import type { OleAnswer } from './ole/types'
 import type { Llm } from './notes/enhance'
 import { hookOleServers } from './ole/servers'
+import { protectFromCapture } from './ole/capture'
 import { loginItemOn, openedAtLogin, setLoginItem, syncLoginItem } from './loginItem'
 import { createMedia } from './media'
 import { createTray, linuxTrayHost } from './tray'
@@ -550,7 +552,11 @@ app.whenReady().then(() => {
   const settingsFile = join(userDataDir(), 'settings.json')
   // Ole: keys, providers and the live call companion (ole/)
   hookOleSecrets({ file: settingsFile })
-  hookOleProviders({ file: settingsFile })
+  // Ole's windows stay out of screen sharing unless turned off (#51): every window as it opens, and at once on a change
+  const protect = (on: boolean) => protectFromCapture(BrowserWindow.getAllWindows(), on)
+  hookOleProviders({ file: settingsFile, onChange: (p) => protect(p.hideWhileSharing) })
+  app.on('browser-window-created', (_e, w) => protectFromCapture([w], providersOf(loadSettings(settingsFile)).hideWhileSharing))
+  protect(providersOf(loadSettings(settingsFile)).hideWhileSharing)
   hookOleServers({ file: settingsFile, test: testServer })
   const oleProviders = () => providersOf(loadSettings(settingsFile))
   const ole = hookOle({
@@ -558,6 +564,17 @@ app.whenReady().then(() => {
     send: (s) => { win?.webContents.send('ole:state', s); sendWidgetTranscript('ole:state', s) },
     save: (id, bullets) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-bullets.json'), JSON.stringify(bullets, null, 2)),
     notify: (title, body) => { if (Notification.isSupported()) new Notification({ title, body }).show() },
+    // pinned bullets join the meeting's own notes (#54); notes is ready long before a call ends
+    appendNotes: (id, md) => { const mine = store.notes(id).mine.trimEnd(); notes.setMine(id, mine ? `${mine}\n\n${md}` : md) },
+    saveAnswers: (id, list) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-answers.json'), JSON.stringify(list, null, 2)),
+    loadAnswers: (id) => {
+      const path = join(userDataDir(), 'meetings', id, 'ole-answers.json')
+      if (!existsSync(path)) return []
+      const list: unknown = JSON.parse(readFileSync(path, 'utf8'))
+      return Array.isArray(list) ? list.slice(0, 200).filter((a): a is OleAnswer => !!a && typeof a === 'object' && typeof a.id === 'string' && typeof a.question === 'string' && typeof a.text === 'string' && typeof a.at === 'number') : []
+    },
+    // the calendar names a default-titled call (#56) and starts auto-prepare (#52)
+    upcoming: async (from, to) => (await readCalendar(from, to)).map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end })),
     saveBriefing: (id, text) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-briefing.md'), text),
     loadBriefing: (id) => { const p = join(userDataDir(), 'meetings', id, 'ole-briefing.md'); return existsSync(p) ? readFileSync(p, 'utf8').slice(0, 50_000) : '' },
     load: (id) => {

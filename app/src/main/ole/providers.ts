@@ -26,8 +26,13 @@ export const PROVIDER_DEFAULTS: OleProviders = {
   customBaseUrl: '',
   customModel: '',
   prepareOn: 'assistant',
-  warmupInstructions: ''
+  warmupInstructions: '',
+  hideWhileSharing: true,
+  autoPrepare: true,
+  autoPrepareLead: 10,
 }
+
+export const AUTO_PREPARE_LEADS = [5, 10, 15] as const
 
 export const MAX_WARMUP_INSTRUCTIONS = 8000
 
@@ -76,7 +81,11 @@ export function providersOf(s: Settings): OleProviders {
 
   const prepareOn = settings.olePrepareOn === 'local' ? 'local' as const : 'assistant' as const
 
-  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel, prepareOn }
+  const hideWhileSharing = s.oleHideWhileSharing !== false
+  const autoPrepare = s.oleAutoPrepare !== false
+  const autoPrepareLead = (AUTO_PREPARE_LEADS as readonly number[]).includes(s.oleAutoPrepareLead ?? -1) ? s.oleAutoPrepareLead! : PROVIDER_DEFAULTS.autoPrepareLead
+
+  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel, prepareOn, hideWhileSharing, autoPrepare, autoPrepareLead }
 }
 
 export function setProviders(file: string, patch: unknown): OleProviders {
@@ -121,13 +130,22 @@ export function setProviders(file: string, patch: unknown): OleProviders {
     }
   }
 
+  if ('hideWhileSharing' in p && typeof p.hideWhileSharing === 'boolean') settingsPatch.oleHideWhileSharing = p.hideWhileSharing
+  if ('autoPrepare' in p && typeof p.autoPrepare === 'boolean') settingsPatch.oleAutoPrepare = p.autoPrepare
+  if ('autoPrepareLead' in p && (AUTO_PREPARE_LEADS as readonly unknown[]).includes(p.autoPrepareLead)) settingsPatch.oleAutoPrepareLead = p.autoPrepareLead
+
   if ('warmupInstructions' in p && typeof p.warmupInstructions === 'string') {
     const text = warmupOf(p.warmupInstructions)
     settingsPatch.oleWarmupInstructions = text === '' ? undefined : text
   }
 
-  return providersOf(updateSettings(file, settingsPatch as Partial<Settings>))
+  const next = providersOf(updateSettings(file, settingsPatch as Partial<Settings>))
+  changed?.(next)
+  return next
 }
+
+/** told after Settings change the providers, so the windows follow "hide while sharing" at once (#51) */
+let changed: ((p: OleProviders) => void) | undefined
 
 type Kind = 'transcription' | 'assistant'
 const KINDS: Kind[] = ['transcription', 'assistant']
@@ -154,7 +172,8 @@ export function revertOpenAI(file: string, o: { undo: boolean }): { reverted: Ki
   return { reverted, providers: providersOf(updateSettings(file, patch)) }
 }
 
-export function hookOleProviders(d: { file: string }): void {
+export function hookOleProviders(d: { file: string; onChange?: (p: OleProviders) => void }): void {
+  changed = d.onChange
   ipcMain.handle('ole:providers:get', () => providersOf(loadSettings(d.file)))
 
   ipcMain.handle('ole:providers:set', (_e, patch: unknown) => setProviders(d.file, patch))

@@ -16,3 +16,12 @@ describe("a saved meeting's context bullets", () => {
     expect(renderToStaticMarkup(createElement(OleSavedBulletsView, { bullets: [] }))).toBe('')
   })
 })
+
+describe('a saved meeting keeps its pins and questions (#53, #54)', () => {
+  it('marks pinned bullets and lists the questions asked', () => {
+    const html = renderToStaticMarkup(createElement(OleSavedBulletsView, { bullets: [{ ...b('a', 1), pinned: true }], answers: [{ id: 'q1', question: 'who signs?', text: 'The CFO.', at: 3 }] }))
+    expect(html).toContain('📌')
+    expect(html).toContain('Questions (1)')
+    expect(html).toContain('The CFO.')
+  })
+})

@@ -214,6 +214,33 @@ function ChoiceRow<T extends string>({ id, label, description, value, disabled, 
   )
 }
 
+function SwitchRow({ id, label, description, on, disabled, onChange }: { id: string; label: string; description: string; on: boolean; disabled: boolean; onChange: (on: boolean) => void }) {
+  return <div className="settings-row">
+    <div className="settings-row-copy">
+      <p className="settings-label">{label}</p>
+      <p className="settings-description">{description}</p>
+    </div>
+    <button data-testid={id} role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className="settings-toggle">
+      <span className="settings-toggle-knob" />
+    </button>
+  </div>
+}
+
+/** during and before calls: hide while sharing (#51), and prepare before calendar meetings (#52) */
+export function CallRows({ hideWhileSharing, autoPrepare, autoPrepareLead, disabled, patch }: {
+  hideWhileSharing: boolean; autoPrepare: boolean; autoPrepareLead: number; disabled: boolean; patch: (p: Partial<OleProviders>) => void
+}) {
+  return <>
+    <SwitchRow id="ole-hide-sharing" label="Hide Ole while sharing your screen" on={hideWhileSharing} disabled={disabled} onChange={(v) => patch({ hideWhileSharing: v })}
+      description="Ole's windows stay out of screen sharing and recordings, so the people on the call never see your briefing. Most call apps honour this; a few may still show it." />
+    <SwitchRow id="ole-auto-prepare" label="Prepare before calendar meetings" on={autoPrepare} disabled={disabled} onChange={(v) => patch({ autoPrepare: v })}
+      description="Ole writes the briefing shortly before a meeting on your calendar and tells you when it's ready." />
+    {autoPrepare && <ChoiceRow id="ole-auto-prepare-lead" label="When" description="How long before the meeting starts."
+      choices={[['5', '5 minutes before'], ['10', '10 minutes before'], ['15', '15 minutes before']]} value={String(autoPrepareLead)} disabled={disabled}
+      onChange={(v) => patch({ autoPrepareLead: Number(v) })} />}
+  </>
+}
+
 type OpenAIModelList = Awaited<ReturnType<OleSettingsApi['openaiModels']>>
 
 /** Assistant = Custom server (#17): any OpenAI-compatible server the person runs: its address, key, model and a Test */
@@ -414,6 +441,10 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
           value={providers?.openaiPrepareModel ?? ''} options={models?.chat} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiPrepareModel: v })} />
         <ModelSelect id="ole-chat-model" role="live" label="Live bullets and summaries model" hint="Runs during the call and after it."
           value={providers?.openaiChatModel ?? ''} options={models?.chat} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiChatModel: v })} />
+      </div>
+      <h3 className="settings-section-heading">Calls</h3>
+      <div data-testid="ole-call-settings" className="settings-group">
+        <CallRows hideWhileSharing={providers?.hideWhileSharing ?? true} autoPrepare={providers?.autoPrepare ?? true} autoPrepareLead={providers?.autoPrepareLead ?? 10} disabled={off} patch={patch} />
       </div>
       <h3 className="settings-section-heading">MCP servers</h3>
       <OleServers api={api} initialServers={initialServers} initialStatus={initialStatus}

@@ -1,7 +1,7 @@
 // Ole: the live call companion. Before the call, the model gathers a briefing from the MCP servers' read-only tools
 // (prepare.ts); during it, context bullets from the transcript, the briefing and throttled tool lookups (bullets.ts).
 import { ipcMain } from 'electron'
-import type { McpServerConfig, OleBullet, OleTool, PreparedContext } from './types'
+import type { McpServerConfig, OleAnswer, OleBullet, OleTool, PreparedContext } from './types'
 import type { OleLiveState } from '../../shared/types'
 import { loadSettings } from '../settings'
 import { readSecret } from './secrets'
@@ -13,7 +13,10 @@ import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, is
 import { prepareContext } from './prepare'
 import { genericTitle } from '../titles'
 import { createLocalChat, type LocalRun } from './localChat'
-import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
+import { createBulletsEngine, generalTools, hasCustomerAccount, pinnedNotes, type BulletsEngine, type ChatFn } from './bullets'
+import { answerQuestion } from './ask'
+import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
+import { feedbackOf, recordRating } from './feedback'
 
 /** a prepared briefing older than this is gathered again when a meeting starts */
 const STALE_MS = 2 * 60 * 60_000
@@ -29,7 +32,20 @@ type Deps = {
   notify?: (title: string, body: string) => void
   /** how often the servers are checked in the background; 0 turns the background check off (tests) */
   checkEveryMs?: number
+  /** adds markdown to the end of a meeting's own notes, so pinned bullets reach the summary (#54) */
+  appendNotes?: (meetingId: string, md: string) => void
+  /** a meeting's questions and answers (#53), saved with it and read back */
+  saveAnswers?: (meetingId: string, answers: OleAnswer[]) => void
+  loadAnswers?: (meetingId: string) => OleAnswer[]
+  /** calendar events between two times (#52, #56); without it Ole never reads the calendar */
+  upcoming?: (fromMs: number, toMs: number) => Promise<Upcoming[]>
+  /** how often auto-prepare looks at the calendar; 0 turns the timer off (tests) */
+  autoEveryMs?: number
 }
+
+/** a question is cut to this */
+const QUESTION_MAX = 500
+const ID = /^[0-9a-f-]{36}$/i
 
 export function hookOle(d: Deps): {
   meetingStarted(m: { id: string; title: string }): void
@@ -42,6 +58,8 @@ export function hookOle(d: Deps): {
   setLocal(run: LocalRun): void
   /** check the MCP servers now (at startup, on a timer, on wake), so a broken one is found before the call (#33) */
   checkServers(): Promise<void>
+  /** prepare for a calendar meeting about to start, once per event (#52) */
+  autoPrepare(): Promise<void>
 } {
   let prepared: PreparedContext | null = null
   let preparing = false
@@ -56,6 +74,15 @@ export function hookOle(d: Deps): {
   let prepareSeq = 0
   /** the call's briefing came from a default title, so a real title prepares it once more (#44) */
   let preparedFromDefault = false
+  /** the briefing came from auto-prepare for this calendar title (#52) */
+  let autoTitle: string | null = null
+  /** live bullets and Ask get the lookup-style tools only (#15), and no customer records on a call without an account (#57) */
+  const liveTools = () => { const live = tools.filter(isLiveTool); return hasCustomerAccount(prepared) ? live : generalTools(live) }
+  /** calendar events already auto-prepared */
+  const autoDone = new Set<string>()
+  let answers: OleAnswer[] = []
+  let answerSeq = 0
+  const finishedAnswers = new Map<string, OleAnswer[]>()
   const finished = new Map<string, OleBullet[]>()
   const finishedBriefings = new Map<string, string>()
 
@@ -77,7 +104,7 @@ export function hookOle(d: Deps): {
     return null
   }
   const state = (): OleLiveState => ({
-    meetingId, preparing, error, bullets, blocked: blocked(), unavailable,
+    meetingId, preparing, error, bullets, answers, blocked: blocked(), unavailable,
     prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt, text: prepared.text } : null,
   })
   const send = () => d.send(state())
@@ -152,6 +179,31 @@ export function hookOle(d: Deps): {
   const every = d.checkEveryMs ?? 10 * 60_000
   if (every > 0) { setTimeout(() => void checkServers(), 5_000).unref?.(); setInterval(() => void checkServers(), every).unref?.() }
 
+  /** the calendar event on now, for a call with a default title (#56) */
+  async function calendarTitle(): Promise<string | null> {
+    if (!d.upcoming) return null
+    try { const now = Date.now(); return eventNow(await d.upcoming(now - 12 * 60 * 60_000, now + 60 * 60_000), now)?.title ?? null }
+    catch (e) { console.warn('reading the calendar failed', e); return null }
+  }
+
+  async function autoPrepare(): Promise<void> {
+    const p = providersOf(loadSettings(d.file))
+    if (!p.autoPrepare || !d.upcoming || meetingId || preparing || blocked()) return
+    if (!serversOf(loadSettings(d.file)).some(s => s.enabled)) return
+    const now = Date.now(), lead = p.autoPrepareLead * 60_000
+    let next: Upcoming | null
+    try { next = pickAutoPrepare(await d.upcoming(now, now + lead), now, lead, autoDone) } catch (e) { console.warn('reading the calendar failed', e); return }
+    if (!next) return
+    autoDone.add(next.id)
+    await prepare({ meetingTitle: next.title })
+    if (prepared?.meetingTitle === next.title && !error) {
+      autoTitle = next.title
+      d.notify?.('Your briefing is ready', next.title)
+    }
+  }
+  const autoEvery = d.autoEveryMs ?? 2 * 60_000
+  if (autoEvery > 0) setInterval(() => void autoPrepare().catch(e => console.warn('auto-prepare failed', e)), autoEvery).unref?.()
+
   ipcMain.handle('ole:state', () => state())
   ipcMain.handle('ole:briefing', (_e, id: unknown) => {
     if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) return ''
@@ -168,6 +220,43 @@ export function hookOle(d: Deps): {
     if (found) return found
     try { return d.load?.(id) ?? [] } catch { return [] }
   })
+  // pin (#54) and rate (#55) a bullet of the call on now
+  ipcMain.handle('ole:bullet:pin', (_e, id: unknown, on: unknown) => {
+    if (typeof id === 'string' && typeof on === 'boolean') engine?.update(id, { pinned: on })
+    return state()
+  })
+  ipcMain.handle('ole:bullet:rate', (_e, id: unknown, rating: unknown) => {
+    if (typeof id !== 'string' || !(rating === 'up' || rating === 'down' || rating === null) || !engine) return state()
+    const b = engine.update(id, { rating })
+    if (b) try { recordRating(d.file, b.text, rating) } catch (e) { console.warn('saving the rating failed', e) }
+    return state()
+  })
+  // a question during the call (#53)
+  ipcMain.handle('ole:ask', async (_e, q: unknown) => {
+    const question = typeof q === 'string' ? q.trim().slice(0, QUESTION_MAX) : ''
+    const forMeeting = meetingId
+    if (!question || !forMeeting || liveBlocked()) return state()
+    const id = `a${++answerSeq}`
+    answers = [{ id, question, text: '', at: Date.now(), pending: true }, ...answers]
+    send()
+    let got: Omit<OleAnswer, 'id' | 'question' | 'at'>
+    try {
+      got = await answerQuestion({ chat, question, context: prepared, lines: engine?.recent() ?? [], tools: liveTools(), call: (n, a) => call(n, a) })
+    } catch (e) { got = { text: `Couldn't answer: ${e instanceof Error ? e.message : String(e)}` } }
+    // the call ended while answering: the answer belongs to it, not to the next call
+    const done = (a: OleAnswer): OleAnswer => a.id === id ? { id, question, at: a.at, ...got } : a
+    if (forMeeting === meetingId) answers = answers.map(done)
+    else { const kept = (finishedAnswers.get(forMeeting) ?? []).map(done); finishedAnswers.set(forMeeting, kept); try { d.saveAnswers?.(forMeeting, kept) } catch { /* kept in memory */ } }
+    send()
+    return state()
+  })
+  ipcMain.handle('ole:answers', (_e, id: unknown) => {
+    if (typeof id !== 'string' || !ID.test(id)) return []
+    if (id === meetingId) return answers
+    const found = finishedAnswers.get(id)
+    if (found) return found
+    try { return d.loadAnswers?.(id) ?? [] } catch { return [] }
+  })
   ipcMain.handle('ole:prepare', (_e, o: unknown) => {
     const input = (o && typeof o === 'object' ? o : {}) as Record<string, unknown>
     return prepare({ focus: text(input.focus, 200), meetingTitle: text(input.meetingTitle, 300) })
@@ -177,21 +266,35 @@ export function hookOle(d: Deps): {
     meetingStarted(m) {
       meetingId = m.id
       bullets = []
-      // a local Prepare never runs during a call (#5): the bullets just get the tools
-      const prepareNow = (!prepared || Date.now() - prepared.preparedAt > STALE_MS) && providersOf(loadSettings(d.file)).prepareOn !== 'local'
-      // "Meeting", "Zoom call", "Untitled": a default title says nothing, so look for the meeting happening now instead (#44)
+      answers = []
+      const local = providersOf(loadSettings(d.file)).prepareOn === 'local'
       const named = genericTitle(m.title) ? null : m.title
-      preparedFromDefault = prepareNow && !named
-      if (prepareNow) void prepare({ meetingTitle: named, forMeeting: m.id })
-      else void loadTools().then(send, e => console.warn('loading the MCP tools failed', e))
+      // an auto-prepared briefing for another meeting is not this call's (#52)
+      const otherMeeting = !!autoTitle && !!named && autoTitle !== named
+      autoTitle = null
+      // a local Prepare never runs during a call (#5): the bullets just get the tools
+      const prepareNow = (!prepared || Date.now() - prepared.preparedAt > STALE_MS || otherMeeting) && !local
+      if (prepareNow) {
+        // "Meeting", "Zoom call", "Untitled": a default title says nothing, so the calendar event on now names it (#44, #56)
+        void (async () => {
+          const title = named ?? await calendarTitle()
+          preparedFromDefault = !title
+          await prepare({ meetingTitle: title, forMeeting: m.id })
+        })()
+      } else {
+        preparedFromDefault = false
+        void loadTools().then(send, e => console.warn('loading the MCP tools failed', e))
+      }
       // bullets need the OpenAI key; without it the meeting records as Yogurt does
       engine = !liveBlocked() ? createBulletsEngine({
         chat,
         // live bullets get the lookup-style tools only (#15)
-        tools: () => tools.filter(isLiveTool),
+        // a call with no customer account never looks up customer records (#57)
+        tools: () => liveTools(),
         callTool: (name, argsJson) => call(name, argsJson),
         context: () => prepared,
         onBullets: all => { bullets = all; send() },
+        feedback: () => { try { return feedbackOf(d.file) } catch { return { useful: [], notUseful: [] } } },
       }) : null
       send()
     },
@@ -209,6 +312,11 @@ export function hookOle(d: Deps): {
       engine?.stop()
       finished.set(id, bullets)
       try { d.save?.(id, bullets) } catch (e) { console.warn('saving the context bullets failed', e) }
+      // pinned bullets join the person's own notes, so the summary and the notes keep them (#54)
+      const pinned = pinnedNotes(bullets)
+      if (pinned) try { d.appendNotes?.(id, pinned) } catch (e) { console.warn('adding the pinned bullets to the notes failed', e) }
+      if (answers.length) { finishedAnswers.set(id, answers); try { d.saveAnswers?.(id, answers) } catch (e) { console.warn('saving the answers failed', e) } }
+      answers = []
       if (prepared?.text) { finishedBriefings.set(id, prepared.text); try { d.saveBriefing?.(id, prepared.text) } catch (e) { console.warn('saving the briefing failed', e) } }
       engine = null
       meetingId = null
@@ -219,6 +327,7 @@ export function hookOle(d: Deps): {
     },
     setLocal(run) { local = run; send() },
     checkServers,
+    autoPrepare,
     bulletsOf: (id) => finished.get(id) ?? (id === meetingId ? bullets : []),
   }
 }
