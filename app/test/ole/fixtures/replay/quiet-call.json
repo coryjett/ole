@@ -1,0 +1,152 @@
+{
+  "name": "quiet-call",
+  "briefing": {
+    "meetingTitle": "Intro call",
+    "focus": null,
+    "text": "No customer account for this call.\n## General\n- Beacon 2.3 adds token-bucket rate limits (product docs: Release notes 2.3)"
+  },
+  "transcript": [
+    {
+      "speaker": "Me",
+      "text": "Hello, can you hear me?",
+      "startMs": 0
+    },
+    {
+      "speaker": "Them",
+      "text": "Yes, loud and clear. We reached out after we saw something.",
+      "startMs": 30000
+    },
+    {
+      "speaker": "Them",
+      "text": "We saw the release notes about token buckets.",
+      "startMs": 60000
+    },
+    {
+      "speaker": "Me",
+      "text": "Great, before that, tell me about your team.",
+      "startMs": 90000
+    },
+    {
+      "speaker": "Them",
+      "text": "We are four engineers running a small storefront.",
+      "startMs": 120000
+    },
+    {
+      "speaker": "Me",
+      "text": "And what made the release notes stand out?",
+      "startMs": 150000
+    },
+    {
+      "speaker": "Me",
+      "text": "Nice, that shipped recently.",
+      "startMs": 180000
+    },
+    {
+      "speaker": "Them",
+      "text": "Our checkout gets hammered during sales.",
+      "startMs": 210000
+    },
+    {
+      "speaker": "Me",
+      "text": "How big are the spikes?",
+      "startMs": 240000
+    },
+    {
+      "speaker": "Them",
+      "text": "Maybe ten times normal traffic.",
+      "startMs": 270000
+    },
+    {
+      "speaker": "Me",
+      "text": "Okay.",
+      "startMs": 300000
+    },
+    {
+      "speaker": "Them",
+      "text": "We mostly want something simple.",
+      "startMs": 330000
+    },
+    {
+      "speaker": "Me",
+      "text": "Simple is the goal.",
+      "startMs": 360000
+    },
+    {
+      "speaker": "Them",
+      "text": "Do you have a free tier?",
+      "startMs": 390000
+    },
+    {
+      "speaker": "Me",
+      "text": "There is a community edition.",
+      "startMs": 420000
+    },
+    {
+      "speaker": "Them",
+      "text": "Good to know.",
+      "startMs": 450000
+    },
+    {
+      "speaker": "Me",
+      "text": "I can send a getting started link.",
+      "startMs": 480000
+    },
+    {
+      "speaker": "Them",
+      "text": "Please do.",
+      "startMs": 510000
+    },
+    {
+      "speaker": "Me",
+      "text": "Anything else?",
+      "startMs": 540000
+    },
+    {
+      "speaker": "Them",
+      "text": "No, that covers it.",
+      "startMs": 570000
+    },
+    {
+      "speaker": "Me",
+      "text": "Thanks, bye.",
+      "startMs": 600000
+    }
+  ],
+  "turns": [
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": [
+            {
+              "text": "Token-bucket rate limits shipped in Beacon 2.3",
+              "source": "product docs: Release notes 2.3",
+              "heard": "release notes about token buckets",
+              "quote": "Beacon 2.3 adds token-bucket rate limits"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    }
+  ]
+}

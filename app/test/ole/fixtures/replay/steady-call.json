@@ -1,0 +1,237 @@
+{
+  "name": "steady-call",
+  "briefing": {
+    "meetingTitle": "Harbor Lane Freight: Beacon evaluation",
+    "focus": null,
+    "text": "## Who and why\n- Dana Ruiz, platform lead, wants to cut p99 latency on the shipment API (call brief, 4 Nov)\n## Deals\n- Platform expansion, 180k, stage Evaluate, close 15 Dec (opportunity: Platform expansion)\n## Open issues\n- Rate limits returned 429 under burst load; fixed in Beacon 2.3 (issue #412, https://tracker.example.com/issues/412)\n## Competition\n- Comparing against an open source proxy they run today (call brief, 4 Nov)"
+  },
+  "transcript": [
+    {
+      "speaker": "Me",
+      "text": "Hi Dana, thanks for making the time today.",
+      "startMs": 0
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "Happy to. I have about thirty minutes.",
+      "startMs": 15000
+    },
+    {
+      "speaker": "Me",
+      "text": "Great. Last time we talked about the shipment API.",
+      "startMs": 30000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "Right, and finance asked me about the expansion budget again.",
+      "startMs": 45000
+    },
+    {
+      "speaker": "Me",
+      "text": "Understood, we can walk through the numbers later.",
+      "startMs": 60000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "Sure. The bigger problem is that we keep seeing 429s at peak.",
+      "startMs": 75000
+    },
+    {
+      "speaker": "Me",
+      "text": "Is that during the morning dispatch burst?",
+      "startMs": 90000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "Yes, every morning around seven, for about ten minutes.",
+      "startMs": 105000
+    },
+    {
+      "speaker": "Me",
+      "text": "And the clients retry right away?",
+      "startMs": 120000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "They do, which makes it worse.",
+      "startMs": 135000
+    },
+    {
+      "speaker": "Me",
+      "text": "Okay. Tell me about what you run today in front of the API.",
+      "startMs": 150000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "It is the open source proxy, what we run today has been fine until now.",
+      "startMs": 165000
+    },
+    {
+      "speaker": "Me",
+      "text": "How many instances?",
+      "startMs": 180000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "Six, across two regions.",
+      "startMs": 195000
+    },
+    {
+      "speaker": "Me",
+      "text": "And latency at p99 right now?",
+      "startMs": 210000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "Around four hundred milliseconds, we want it under two hundred.",
+      "startMs": 225000
+    },
+    {
+      "speaker": "Me",
+      "text": "That is a reasonable target with local caching.",
+      "startMs": 240000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "We tried caching, it helped a little.",
+      "startMs": 255000
+    },
+    {
+      "speaker": "Me",
+      "text": "We could set up a benchmark during the pilot.",
+      "startMs": 270000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "That would help me make the case internally.",
+      "startMs": 285000
+    },
+    {
+      "speaker": "Me",
+      "text": "I will send a plan for the benchmark.",
+      "startMs": 300000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "Thanks. Anything else from your side?",
+      "startMs": 315000
+    },
+    {
+      "speaker": "Me",
+      "text": "Just the timeline for the decision.",
+      "startMs": 330000
+    },
+    {
+      "speaker": "Dana Ruiz",
+      "text": "We want to decide before the end of the year.",
+      "startMs": 345000
+    },
+    {
+      "speaker": "Me",
+      "text": "Perfect, talk soon.",
+      "startMs": 360000
+    }
+  ],
+  "turns": [
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": [
+            {
+              "text": "Platform expansion is 180k, closes 15 Dec",
+              "source": "opportunity: Platform expansion",
+              "heard": "the expansion budget",
+              "quote": "Platform expansion, 180k, stage Evaluate, close 15 Dec"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": [
+            {
+              "text": "Burst 429s fixed in Beacon 2.3",
+              "source": "issue #412",
+              "heard": "we keep seeing 429s at peak",
+              "quote": "Rate limits returned 429 under burst load; fixed in Beacon 2.3",
+              "url": "https://tracker.example.com/issues/412"
+            },
+            {
+              "text": "Dana wants lower p99 latency",
+              "source": "Who and why"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": [
+            {
+              "text": "Platform expansion is 180k, closes 15 Dec",
+              "source": "opportunity: Platform expansion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": [
+            {
+              "text": "They run an open source proxy today",
+              "source": "call brief, 4 Nov",
+              "heard": "what we run today",
+              "quote": "they evaluated three vendors last spring"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": [
+            {
+              "text": "Consider relating the latency discussion to the earlier benchmark results from the pilot phase last quarter",
+              "source": "call brief, 4 Nov",
+              "url": "https://docs.example.com/made-up-page"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "replies": [
+        {
+          "bullets": []
+        }
+      ]
+    }
+  ]
+}
