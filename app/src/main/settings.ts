@@ -57,6 +57,7 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   oleAssistant?: 'local' | 'openai'
   oleTranscribeModel?: string
   oleChatModel?: string
+  olePrepareModel?: string
   /** Ole: the person's own instructions for the pre-call warm-up (ole/providers.ts); at most 8000 characters */
   oleWarmupInstructions?: string
   /** Ole: the MCP servers the person added (ole/servers.ts); each key is the secret `mcp:<id>` */

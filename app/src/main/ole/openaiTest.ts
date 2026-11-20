@@ -38,3 +38,31 @@ export async function testOpenAI(o: {
     transcribeModel: { name: o.transcribeModel, found: ids.has(o.transcribeModel) },
   }
 }
+
+export type OpenAIModels = { ok: boolean; error?: string; chat: string[]; transcribe: string[] }
+
+/** a model id that answers chat with tools (not audio, images, embeddings, moderation or realtime) */
+export const isChatModel = (id: string) => /^(gpt-|o\d|chatgpt-)/.test(id) && !/(transcribe|tts|audio|realtime|image|embedding|search|moderation|dall-e|whisper|instruct|codex)/.test(id)
+export const isTranscribeModel = (id: string) => /(transcribe|^whisper)/.test(id)
+
+/** the models this key can use, for Settings' model dropdowns; newest-looking names first */
+export async function listOpenAIModels(o: { key: string | null; fetch?: typeof fetch; baseUrl?: string; timeoutMs?: number }): Promise<OpenAIModels> {
+  if (!o.key) return { ok: false, error: 'Save an OpenAI key to see your models', chat: [], transcribe: [] }
+  let res: Response
+  try {
+    res = await (o.fetch ?? fetch)(`${(o.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '')}/models`, {
+      headers: { Authorization: `Bearer ${o.key}` }, signal: AbortSignal.timeout(o.timeoutMs ?? OPENAI_TEST_TIMEOUT_MS),
+    })
+  } catch {
+    return { ok: false, error: "Couldn't reach OpenAI", chat: [], transcribe: [] }
+  }
+  if (res.status === 401) return { ok: false, error: 'OpenAI rejected the key', chat: [], transcribe: [] }
+  if (!res.ok) return { ok: false, error: `OpenAI answered ${res.status}`, chat: [], transcribe: [] }
+  let ids: string[] = []
+  try {
+    const data = (await res.json())?.data
+    ids = Array.isArray(data) ? data.map((m: { id?: unknown }) => String(m?.id ?? '')).filter(id => /^[A-Za-z0-9._:-]{1,100}$/.test(id)) : []
+  } catch { /* an unreadable list: no models */ }
+  const sorted = [...new Set(ids)].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+  return { ok: true, chat: sorted.filter(isChatModel).slice(0, 200), transcribe: sorted.filter(isTranscribeModel).slice(0, 50) }
+}

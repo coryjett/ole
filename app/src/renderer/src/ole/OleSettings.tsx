@@ -16,6 +16,8 @@ export type OleSettingsApi = {
   testServer(id: string): Promise<ServerTestResult>
   /** the saved OpenAI key against OpenAI's model list (#2) */
   testOpenAI(): Promise<import('../../../main/ole/openaiTest').OpenAITestResult>
+  /** the models the saved key can use (#8) */
+  openaiModels(): Promise<import('../../../main/ole/openaiTest').OpenAIModels>
 }
 
 const CHOICES: Array<[ProviderChoice, string]> = [['local', 'Local'], ['openai', 'OpenAI']]
@@ -176,19 +178,33 @@ function ChoiceRow({ id, label, description, value, disabled, onChange }: { id: 
   )
 }
 
-function ModelRow({ id, label, value, disabled, onSave, maxLength = 100 }: { id: string; label: string; value: string; disabled: boolean; onSave: (v: string) => void; maxLength?: number }) {
-  const [draft, setDraft] = useState(value)
-  useEffect(() => setDraft(value), [value])
-  const commit = () => { if (draft.trim() && draft.trim() !== value) onSave(draft.trim()); else setDraft(value) }
+type OpenAIModelList = Awaited<ReturnType<OleSettingsApi['openaiModels']>>
+
+/** a model dropdown filled from the key's model list; the saved value always stays selectable (#8) */
+export function ModelSelect({ id, label, hint, value, options, note, disabled, onChange }: {
+  id: string; label: string; hint: string; value: string; options?: string[]; note?: string; disabled: boolean; onChange: (v: string) => void
+}) {
+  const list = options ?? []
+  const missing = !!value && list.length > 0 && !list.includes(value)
+  const all = value && !list.includes(value) ? [value, ...list] : list
   return (
     <div className="settings-row">
-      <label htmlFor={id} className="settings-label settings-row-copy">{label}</label>
-      <input id={id} data-testid={id} value={draft} disabled={disabled} spellCheck={false} maxLength={maxLength}
-        onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-        className="settings-name-field" />
+      <div className="settings-row-copy">
+        <label htmlFor={id} className="settings-label">{label}</label>
+        <p className="settings-description">{hint}</p>
+        {missing && <p data-testid={`${id}-missing`} role="alert" className="settings-description" style={{ color: '#ff6b6b' }}>{value} isn't available to this key</p>}
+        {!list.length && note && <p data-testid={`${id}-note`} className="settings-description">{note}</p>}
+      </div>
+      <span className="settings-select-wrap">
+        <select id={id} data-testid={id} value={value} disabled={disabled || all.length === 0} onChange={(e) => onChange(e.target.value)} className="settings-select">
+          {all.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <ChevronDown size={14} aria-hidden="true" />
+      </span>
     </div>
   )
 }
+
 
 const MAX_WARMUP = 8000
 const WARMUP_PLACEHOLDER = "How should Ole prepare? e.g. Look up the account for the meeting's company, its open deals and their stage, open support issues, and the last two calls. Lead with risks."
@@ -219,12 +235,17 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
   const [status, setStatus] = useState<SecretStatus | undefined>(initialStatus)
   const [servers, setServerList] = useState<McpServerConfig[] | undefined>(initialServers)
   const [error, setError] = useState('')
+  const [models, setModels] = useState<OpenAIModelList | undefined>()
+  const loadModels = () => void api.openaiModels?.().then(setModels, () => setModels({ ok: false, error: "Couldn't load the model list", chat: [], transcribe: [] }))
+  const modelsNote = models && !models.ok ? models.error : models ? undefined : 'Loading your models…'
 
   useEffect(() => {
     if (!initialProviders) void api.getProviders().then(setProviders).catch(() => setError('Could not load Ole settings'))
     if (!initialStatus) void api.secretStatus().then(setStatus).catch(() => setError('Could not load Ole settings'))
     if (!initialServers) void api.getServers().then(setServerList).catch(() => setError('Could not load Ole settings'))
   }, [api])
+  // the model list follows the OpenAI key: loaded on open, and again when the key changes
+  useEffect(() => { if (status?.openai?.set) loadModels(); else if (status) setModels({ ok: false, error: 'Save an OpenAI key to see your models', chat: [], transcribe: [] }) }, [status?.openai?.set, status?.openai?.masked])
 
   const patch = (p: Partial<OleProviders>) => {
     setError('')
@@ -257,11 +278,13 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
           value={providers?.transcription ?? 'local'} disabled={off} onChange={(v) => patch({ transcription: v })} />
         <ChoiceRow id="ole-assistant" label="Assistant" description="Who writes notes and answers questions. Anthropic and Vertex: coming later"
           value={providers?.assistant ?? 'local'} disabled={off} onChange={(v) => patch({ assistant: v })} />
-        <ModelRow id="ole-transcribe-model" label="OpenAI transcription model" value={providers?.openaiTranscribeModel ?? ''} disabled={off}
-          onSave={(v) => patch({ openaiTranscribeModel: v })} />
-        <ModelRow id="ole-chat-model" label="OpenAI chat model" value={providers?.openaiChatModel ?? ''} disabled={off}
-          onSave={(v) => patch({ openaiChatModel: v })} />
         <OpenAIKeyRow status={status?.openai} save={saveKey} test={() => api.testOpenAI()} />
+        <ModelSelect id="ole-transcribe-model" label="Transcription model" hint="Turns call audio into text."
+          value={providers?.openaiTranscribeModel ?? ''} options={models?.transcribe} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiTranscribeModel: v })} />
+        <ModelSelect id="ole-prepare-model" label="Prepare model" hint="Writes the briefing before a call. A larger model picks tools and writes better."
+          value={providers?.openaiPrepareModel ?? ''} options={models?.chat} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiPrepareModel: v })} />
+        <ModelSelect id="ole-chat-model" label="Live bullets and summaries model" hint="Runs during the call and after it. A fast model keeps bullets on topic."
+          value={providers?.openaiChatModel ?? ''} options={models?.chat} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiChatModel: v })} />
       </div>
       <h3 className="settings-section-heading">MCP servers</h3>
       <div data-testid="ole-servers" className="settings-group">
