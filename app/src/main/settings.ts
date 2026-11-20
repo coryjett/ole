@@ -56,6 +56,8 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   oleTranscription?: 'local' | 'openai'
   oleAssistant?: 'local' | 'openai' | 'custom'
   oleTranscribeModel?: string
+  /** Ole: the retiring transcription model the saved one was moved off (#89), until the notice is dismissed */
+  oleTranscribeModelSwitched?: import('./ole/core/types').TranscribeModelSwitch
   /** Ole: stream live calls to OpenAI (#85); unset means on */
   oleTranscribeStreaming?: boolean
   oleChatModel?: string

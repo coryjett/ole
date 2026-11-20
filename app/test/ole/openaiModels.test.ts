@@ -8,10 +8,11 @@ const list = (ids: string[]) => vi.fn<typeof fetch>(async () => new Response(JSO
 
 describe('OpenAI model list (#8)', () => {
   it('splits chat and transcription models and drops the rest', async () => {
-    const r = await listOpenAIModels({ key: 'sk-test-123456', fetch: list(['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-4o-mini-transcribe', 'whisper-1', 'text-embedding-3-small', 'gpt-4o-mini-tts', 'dall-e-3', 'o4-mini', 'gpt-realtime']) })
+    const r = await listOpenAIModels({ key: 'sk-test-123456', fetch: list(['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-4o-mini-transcribe', 'whisper-1', 'gpt-transcribe', 'gpt-live-transcribe', 'gpt-realtime-whisper', 'text-embedding-3-small', 'gpt-4o-mini-tts', 'dall-e-3', 'o4-mini', 'gpt-realtime']) })
     expect(r.ok).toBe(true)
     expect(r.chat).toEqual(['o4-mini', 'gpt-5.6-terra', 'gpt-5.6-luna'])
-    expect(r.transcribe.sort()).toEqual(['gpt-4o-mini-transcribe', 'whisper-1'])
+    // Realtime-only models are left out: /audio/transcriptions refuses them (#89)
+    expect(r.transcribe.sort()).toEqual(['gpt-4o-mini-transcribe', 'gpt-transcribe', 'whisper-1'])
   })
   it('says why there is no list without a key, without calling OpenAI', async () => {
     const f = list([])
