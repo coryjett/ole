@@ -16,6 +16,7 @@ import { meetingWords, respell, whisperPrompt } from '../vocab'
 import type { TranscriptPartial } from '../../shared/types'
 import type { Chunk } from './chunker'
 import { createOpenAITranscriber } from '../ole/openaiTranscribe'
+import { createOpenAIStreaming, type Streaming, type WsFactory } from '../ole/openaiStream'
 
 /**
  * Live transcription of the meeting being recorded: the capture's audio goes through a pipeline (chunks, whisper-server,
@@ -26,6 +27,8 @@ type Session = { complete?: () => boolean; pipeline: Pipeline | null; priorLines
   /** a saved recording that could not be read to the end (transcribeRecorded): the meeting keeps waiting */
   failed?: boolean
   replacement?: boolean
+  /** Ole: OpenAI's streaming transcription of a live recording (#85); hears the audio before the pipeline */
+  stream?: Streaming
   /** Apple's speech listens in this locale for the meeting (null: whisper only); off once whisper hears another language */
   speech?: string | null
   /** Live input only: saved-file transcription must never influence call detection. */
@@ -161,7 +164,7 @@ export function hookTranscription(p: {
   modelPath: () => string | undefined
   /** Ole: transcribe through OpenAI instead of the local model (read when a meeting opens); no local model needed then */
   useOpenAI?: () => boolean
-  openai?: { key: () => string | null; model: () => string; fetch?: typeof fetch }
+  openai?: { key: () => string | null; model: () => string; fetch?: typeof fetch; streaming?: () => boolean; ws?: WsFactory }
   send: (seg: Omit<Segment, 'id'>) => void
   /** saved echoes changed during recording or the final sweep: the window reads them again */
   refresh?: (meetingId: string) => void
@@ -207,6 +210,7 @@ export function hookTranscription(p: {
     const warned = new Set<TranscribeWarn>()
     const warnOnce = (k: TranscribeWarn) => { if (!warned.has(k)) { warned.add(k); p.warn(k) } }
     let transcribe: Transcribe | undefined
+    let stream: Streaming | undefined
     const langs = new Map<string, number>()
     heard.set(id, langs)
     const hear = (lang: string, chars: number, locked = false) => {
@@ -218,7 +222,12 @@ export function hookTranscription(p: {
     if (p.transcriber) { const f = p.transcriber; transcribe = async (c, o) => f(c, (l, n, locked) => hear(l, n, locked), o) }
     // fake mode's stand-in is loaded only in fake mode, so it stays out of what real runs load
     else if (isFake()) transcribe = async (c, o) => (await import('./fake')).fakeTranscribe(c, o, promptOf(), whisperLanguage(spokenNow()))
-    else if (p.useOpenAI?.() && p.openai) transcribe = createOpenAITranscriber(p.openai)
+    else if (p.useOpenAI?.() && p.openai) {
+      const chunked = createOpenAITranscriber(p.openai)
+      // a live recording streams (#85), falling back to chunks; a saved one has no live view to hurry
+      if (!later && p.openai.streaming?.()) { stream = createOpenAIStreaming({ key: p.openai.key, fallback: chunked, ws: p.openai.ws }); transcribe = stream.transcribe }
+      else transcribe = chunked
+    }
     else {
       const model = p.modelPath()
       if (model) {
@@ -247,7 +256,7 @@ export function hookTranscription(p: {
     }
     const s: Session = {
       complete: () => !!transcribe && !pendingBefore && !saveFailed && !warned.has('transcribe-failed') && !s.failed && !options?.signal?.aborted,
-      replacement: !!options?.save, store: p.store, refresh: p.refresh, speech: speechLocaleFor(id), priorLines: new Set(p.store.segments?.(id).map((s) => s.id) ?? []),
+      replacement: !!options?.save, stream, store: p.store, refresh: p.refresh, speech: speechLocaleFor(id), priorLines: new Set(p.store.segments?.(id).map((s) => s.id) ?? []),
       pipeline: transcribe ? createPipeline({ meetingId: id, transcribe, save: (segs) => {
         try { if(options?.save) options.save(segs); else p.store.addSegments(segs) } catch (e) { saveFailed = true; throw e }
         if (segs.some(s => s.hidden)) p.refresh?.(id)
@@ -287,6 +296,7 @@ export function hookTranscription(p: {
     s.live = { quietSince: Date.now(), frames: {} }
     c.on('pcm', (track, ms, samples) => {
       if (!samples.length) return
+      s.stream?.push(track, ms, samples)
       s.pipeline?.push(track, ms, samples)
       const now = Date.now(), live = s.live!
       // A gap, restart or pause must earn a new quiet minute, not count missing audio as silence.
@@ -347,7 +357,7 @@ function sweepEcho(id: string, s: Session) {
 /** After the recorder is done (no more audio coming), the pipeline finishes what it has, then echoes are swept */
 function finishSession(id: string, s: Session, audioDone: () => Promise<void> = () => Promise.resolve(), store?: SessionStore): Promise<void> {
   s.store ??= store
-  s.done ??= audioDone().then(() => s.pipeline?.finish()).then(() => {
+  s.done ??= audioDone().then(() => { s.stream?.flush(); return s.pipeline?.finish() }).then(() => {
     if (!s.replacement) sweepEcho(id, s)
     if (!s.replacement && s.complete?.()) s.store?.updateMeeting(id, { transcriptionPending: false })
   }).catch((e) => { s.failed = true; console.error('finishing the transcript failed', e) }).finally(() => {
@@ -355,6 +365,7 @@ function finishSession(id: string, s: Session, audioDone: () => Promise<void> = 
     const lang = meetingLanguage(id)
     if (lang) { try { s.store?.updateMeeting(id, { language: lang }) } catch (e) { console.error('saving the language failed', e) } }
     heard.delete(id)
+    s.stream?.close()
     if (sessions.get(id) === s) sessions.delete(id)
     armServerIdle()
   })

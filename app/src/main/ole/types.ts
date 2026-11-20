@@ -11,6 +11,8 @@ export type OleProviders = {
   transcription: ProviderChoice;
   assistant: AssistantChoice;
   openaiTranscribeModel: string;
+  /** OpenAI transcription streams live calls over the Realtime API, falling back to chunks (#85); on unless turned off */
+  openaiStreaming: boolean;
   /** live bullets and summaries: fast */
   openaiChatModel: string;
   /** the pre-call briefing: picks tools and writes, so a larger model */

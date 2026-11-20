@@ -10,6 +10,10 @@ Download the `.dmg` from the pre-releases at https://github.com/coryjett/ole/rel
 
 New versions download in the background and macOS shows "Ole x is ready"; Settings > Updates has the restart button.
 
+## Lower-latency OpenAI transcription
+
+With Transcription on OpenAI, a live call streams each track over the Realtime API (`gpt-live-transcribe`, `app/src/main/ole/openaiStream.ts`, #85), so a line lands once the pause that ends it is heard (no upload and full re-read after it) and quick readings show while people talk; any chunk the stream can't give, and the rest of the recording after an auth, model or repeated connection error, goes through the chunked `/audio/transcriptions` path instead. Settings > Ole > Live streaming turns it off.
+
 ## Fork rules
 
 - Tracking fork: Yogurt is the `upstream` remote. Never rewrite its history.
@@ -92,7 +96,7 @@ Exported files hold real call content: keep them out of the repo. `ole-replay-*.
 - `app/src/shared/i18n.ts`: `t()` brands the message
 - `app/src/main/paths.ts`: data folder `Ole`
 - `app/src/main/index.ts`: app name and id; Ole keys, providers and session hooks; OpenAI notes model wrapper; transcription options
-- `app/src/main/asr/index.ts`: OpenAI transcriber branch in `open()`, model gate in `recorded()`
+- `app/src/main/asr/index.ts`: OpenAI transcriber branch in `open()`, model gate in `recorded()`; the live recording's audio also goes to the OpenAI stream (`stream.push` before the pipeline's, `flush`/`close` in `finishSession`)
 - `app/src/main/settings.ts`: Ole settings fields
 - `app/src/main/trayMenu.ts`: tooltip name
 - `app/src/preload/index.ts`, `app/src/shared/types.ts`: `window.yogurt.ole`

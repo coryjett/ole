@@ -21,6 +21,7 @@ export const PROVIDER_DEFAULTS: OleProviders = {
   transcription: 'local',
   assistant: 'local',
   openaiTranscribeModel: 'gpt-4o-mini-transcribe',
+  openaiStreaming: true,
   openaiChatModel: 'gpt-5.6-luna',
   openaiPrepareModel: 'gpt-5.6-terra',
   customBaseUrl: '',
@@ -81,11 +82,12 @@ export function providersOf(s: Settings): OleProviders {
 
   const prepareOn = settings.olePrepareOn === 'local' ? 'local' as const : 'assistant' as const
 
+  const openaiStreaming = s.oleTranscribeStreaming !== false
   const hideWhileSharing = s.oleHideWhileSharing === true
   const autoPrepare = s.oleAutoPrepare !== false
   const autoPrepareLead = (AUTO_PREPARE_LEADS as readonly number[]).includes(s.oleAutoPrepareLead ?? -1) ? s.oleAutoPrepareLead! : PROVIDER_DEFAULTS.autoPrepareLead
 
-  return { transcription, assistant, openaiTranscribeModel, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel, prepareOn, hideWhileSharing, autoPrepare, autoPrepareLead }
+  return { transcription, assistant, openaiTranscribeModel, openaiStreaming, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel, prepareOn, hideWhileSharing, autoPrepare, autoPrepareLead }
 }
 
 export function setProviders(file: string, patch: unknown): OleProviders {
@@ -130,6 +132,7 @@ export function setProviders(file: string, patch: unknown): OleProviders {
     }
   }
 
+  if ('openaiStreaming' in p && typeof p.openaiStreaming === 'boolean') settingsPatch.oleTranscribeStreaming = p.openaiStreaming
   if ('hideWhileSharing' in p && typeof p.hideWhileSharing === 'boolean') settingsPatch.oleHideWhileSharing = p.hideWhileSharing
   if ('autoPrepare' in p && typeof p.autoPrepare === 'boolean') settingsPatch.oleAutoPrepare = p.autoPrepare
   if ('autoPrepareLead' in p && (AUTO_PREPARE_LEADS as readonly unknown[]).includes(p.autoPrepareLead)) settingsPatch.oleAutoPrepareLead = p.autoPrepareLead

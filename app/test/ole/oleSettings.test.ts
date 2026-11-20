@@ -4,7 +4,7 @@ import { expect, it, vi } from 'vitest'
 import { OleSettings, type OleSettingsApi, type SecretStatus } from '../../src/renderer/src/ole/OleSettings'
 import type { McpServerConfig } from '../../src/main/ole/types'
 
-const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: false, autoPrepare: true, autoPrepareLead: 10 } as const
+const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiStreaming: true, openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: false, autoPrepare: true, autoPrepareLead: 10 } as const
 const servers: McpServerConfig[] = [
   { id: 'crm', name: 'CRM', url: 'https://crm.example/mcp', enabled: true },
   { id: 'docs', name: 'Docs', url: 'https://docs.example/mcp', enabled: false },
@@ -83,4 +83,16 @@ it('renders disabled controls while loading', () => {
   expect(html).toMatch(/<textarea[^>]*disabled/)
   expect(html).toMatch(/data-testid="ole-server-add-save"[^>]*disabled/)
   expect(html).toContain('Not set')
+})
+
+it('Live streaming sits under Transcription when it is OpenAI, on by default, and is gone for Local (#85)', () => {
+  const on = render({ initialProviders: { ...providers, transcription: 'openai' } as never })
+  expect(on).toMatch(/data-testid="ole-transcribe-streaming"[^>]*aria-checked="true"/)
+  expect(on).toContain('if streaming isn&#x27;t available, Ole sends audio in chunks')
+  // right after the Transcription row, before the Assistant one
+  expect(on.indexOf('ole-transcribe-streaming')).toBeGreaterThan(on.indexOf('id="ole-transcription"'))
+  expect(on.indexOf('ole-transcribe-streaming')).toBeLessThan(on.indexOf('id="ole-assistant"'))
+  const off = render({ initialProviders: { ...providers, transcription: 'openai', openaiStreaming: false } as never })
+  expect(off).toMatch(/data-testid="ole-transcribe-streaming"[^>]*aria-checked="false"/)
+  expect(render()).not.toContain('ole-transcribe-streaming')
 })

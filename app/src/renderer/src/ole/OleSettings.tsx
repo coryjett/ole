@@ -427,6 +427,8 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
       <div data-testid="ole-settings" className="settings-group">
         <ChoiceRow id="ole-transcription" label="Transcription" description="Who turns meeting audio into text."
           value={providers?.transcription ?? 'local'} disabled={off} onChange={(v) => patch({ transcription: v })} />
+        {providers?.transcription === 'openai' && <SwitchRow id="ole-transcribe-streaming" label="Live streaming" on={providers.openaiStreaming} disabled={off} onChange={(v) => patch({ openaiStreaming: v })}
+          description="Text shows a second or two after it's said, using OpenAI's gpt-live-transcribe; if streaming isn't available, Ole sends audio in chunks with the Transcription model." />}
         <ChoiceRow id="ole-assistant" label="Assistant" description="Who writes notes and answers questions. Prepare and live context need OpenAI or your own server: with Local they are off and your MCP servers are not used. Anthropic and Vertex: coming later"
           choices={ASSISTANT_CHOICES} value={providers?.assistant ?? 'local'} disabled={off} onChange={(v) => patch({ assistant: v })} />
         <ChoiceRow id="ole-prepare-on" label="Prepare runs on" description="Where the briefing before a call is written. This Mac uses the local notes model: private and free, slower, and best with a larger model (around 26B and up); it runs only before a call, never during one. Live context always uses the Assistant."

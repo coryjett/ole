@@ -13,7 +13,7 @@ let file = ''
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ole-providers-')); file = join(dir, 'settings.json'); hookOleProviders({ file }) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); handlers.clear() })
 
-const DEFAULTS = { transcription: 'local', assistant: 'local', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: false, autoPrepare: true, autoPrepareLead: 10 }
+const DEFAULTS = { transcription: 'local', assistant: 'local', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiStreaming: true, openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: false, autoPrepare: true, autoPrepareLead: 10 }
 
 it('defaults to local for both and the documented OpenAI models', () => {
   expect(providersOf({})).toEqual(DEFAULTS)
@@ -55,4 +55,12 @@ it('no longer reads or writes an MCP URL', () => {
   expect(providersOf({ oleMcpUrl: 'https://x.example/mcp' } as unknown as Settings)).toEqual(DEFAULTS)
   setProviders(file, { mcpUrl: 'https://x.example/mcp' })
   expect('oleMcpUrl' in loadSettings(file)).toBe(false)
+})
+
+it('streaming is on unless turned off, saved as oleTranscribeStreaming, and ignores non-booleans (#85)', () => {
+  expect(providersOf({}).openaiStreaming).toBe(true)
+  expect(setProviders(file, { openaiStreaming: false }).openaiStreaming).toBe(false)
+  expect((loadSettings(file) as Settings & Record<string, unknown>).oleTranscribeStreaming).toBe(false)
+  expect(setProviders(file, { openaiStreaming: 'yes' } as never).openaiStreaming).toBe(false)
+  expect(setProviders(file, { openaiStreaming: true }).openaiStreaming).toBe(true)
 })
