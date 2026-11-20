@@ -3,7 +3,8 @@
 import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
-import { callKey, hasMatchedRecord, latestNotes, noRecordRule, readableSource, urlSource } from './bullets'
+import { callKey, hasMatchedRecord, latestNotes, noRecordRule, readableSource } from './bullets'
+import { linkAndLabel, receivedUrls } from './links'
 
 /** lookup rounds before the model must answer */
 const TOOL_ROUNDS = 2
@@ -73,12 +74,11 @@ export async function answerQuestion(o: {
   const text = typeof parsed.answer === 'string' && parsed.answer.trim() ? parsed.answer.trim().slice(0, ANSWER_MAX) : ''
   if (!text) return { text: NO_ANSWER, ok: false }
   const source = typeof parsed.source === 'string' && parsed.source.trim() ? readableSource(parsed.source.trim()).slice(0, 120) : undefined
-  // a link is kept only if Ole has it: models invent plausible URLs (#42)
+  // a link is kept only if Ole received that exact address: models invent plausible URLs (#42, #107); a source that is
+  // a bare web address becomes a short label taken from the link actually used (#102, #107)
   const material = `${o.context?.text ?? ''}\n${messages.filter(m => m.role === 'tool').map(m => m.content ?? '').join('\n')}`
-  const given = typeof parsed.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(parsed.url.trim()) && material.includes(parsed.url.trim()) ? parsed.url.trim() : undefined
-  // a source that is a bare web address becomes a short label, and the link if Ole received it (#102)
-  const asAddress = source ? urlSource(source, material) : null
-  const url = given ?? asAddress?.url
-  const shown = asAddress?.source ?? source
+  const linked = linkAndLabel(typeof parsed.url === 'string' ? parsed.url : undefined, source, receivedUrls(material))
+  const url = linked.url
+  const shown = linked.source
   return { text, ...(shown ? { source: shown } : {}), ...(url ? { url } : {}), ok: true }
 }
