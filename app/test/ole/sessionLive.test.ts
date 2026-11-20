@@ -61,6 +61,16 @@ describe('pin, rate and ask during a call (#53, #54, #55)', () => {
     expect(appendNotes).toHaveBeenCalledWith(ID, '## Pinned from the call\n- Renewal is in March (opportunity: Renewal)')
   })
 
+  it("a question aimed at another meeting is refused (#125)", async () => {
+    const { ole } = await setup()
+    ole.meetingStarted({ id: ID, title: 'Acme renewal' })
+    await handlers.get('ole:ask')!({}, 'when is the renewal?', 'r-other-1', '00000000-0000-4000-8000-0000000000ff')
+    expect(state().answers).toHaveLength(0)
+    await handlers.get('ole:ask')!({}, 'when is the renewal?', 'r-mine-1', ID)
+    expect(state().answers).toHaveLength(1)
+    ole.meetingStopped(ID)
+  })
+
   it('a question during the call is answered and kept with the call', async () => {
     const saveAnswers = vi.fn()
     const { ole } = await setup({ saveAnswers })

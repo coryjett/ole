@@ -75,7 +75,8 @@ export type OleHandlers = {
    * ole:ask: a question during the call (#53). requestId (optional, from the UI): the handle ole:ask:cancel stops it
    * by (#122)
    */
-  ask(question: unknown, requestId?: unknown): Promise<OleLiveState>
+  /** a question for the live call; forMeeting, when given, must be the live meeting (#125) */
+  ask(question: unknown, requestId?: unknown, forMeeting?: unknown): Promise<OleLiveState>
   /** ole:ask:cancel: Stop on the Ask panel (#122); the pending answer is dropped, never saved */
   cancelAsk(requestId: unknown): OleLiveState
   /** ole:call: a saved meeting's summary, open questions and commitments (#82); null when Ole kept none */
@@ -348,9 +349,11 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       return state()
     },
     // a question during the call (#53)
-    ask: async (q: unknown, requestId?: unknown) => {
+    ask: async (q: unknown, requestId?: unknown, forMeeting?: unknown) => {
       const question = typeof q === 'string' ? q.trim().slice(0, QUESTION_MAX) : ''
       if (!question || !meetingId || liveBlocked()) return state()
+      // a question from another meeting's note never reaches this call (#125)
+      if (forMeeting !== undefined && forMeeting !== meetingId) return state()
       const rid = typeof requestId === 'string' && REQUEST_ID.test(requestId) && !asking.has(requestId) ? requestId : null
       const ac = rid ? new AbortController() : null
       if (rid && ac) asking.set(rid, ac)

@@ -134,7 +134,7 @@ it('Ask sends the question with a request id; Stop cancels that request and show
   expect(find(tree, 'ole-ask-clear')).toBeDefined()
   find(tree, 'ole-ask-send').props.onClick()
   tree = panel()
-  expect(ask).toHaveBeenCalledWith('when is the renewal?', expect.stringMatching(/^[A-Za-z0-9_-]{1,64}$/))
+  expect(ask).toHaveBeenCalledWith('when is the renewal?', expect.stringMatching(/^[A-Za-z0-9_-]{1,64}$/), 'm1')
   const rid = (ask.mock.calls[0] as unknown[])[1]
   expect(find(tree, 'ole-ask-input').props.value).toBe('')
   find(tree, 'ole-ask-stop').props.onClick()
