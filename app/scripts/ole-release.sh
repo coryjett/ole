@@ -7,8 +7,10 @@
 set -e
 cd "$(dirname "$0")/.."
 VERSION=$(node -p "require('./package.json').version")
+# a version like 0.1.0-alpha.1 is published as a GitHub pre-release
+case "$VERSION" in *-*) PRE=--prerelease ;; *) PRE= ;; esac
 gh release view "v$VERSION" --repo coryjett/ole >/dev/null 2>&1 && { echo "v$VERSION is already released; bump the version" >&2; exit 1; }
 [ "${OLE_SKIP_BUILD:-0}" = 1 ] || YOGURT_SIGN_ID='Ole Local' YOGURT_NOTARIZE=0 sh scripts/release-mac.sh
-gh release create "v$VERSION" --repo coryjett/ole --title "Ole $VERSION" $(case "$VERSION" in *-*) echo --prerelease;; esac) --notes "${OLE_NOTES:-Ole $VERSION}" \
+gh release create "v$VERSION" --repo coryjett/ole --title "Ole $VERSION" $PRE --notes "${OLE_NOTES:-Ole $VERSION}" \
   dist/latest-mac.yml dist/Ole-*.dmg dist/Ole-*.zip dist/*.blockmap
 echo "published v$VERSION"
