@@ -11,6 +11,7 @@ import { openaiChat } from './openaiModel'
 import { createMcpClient, McpError } from './mcp'
 import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, isLiveTool, isReadOnly, type Unavailable } from './tools'
 import { prepareContext } from './prepare'
+import { genericTitle } from '../titles'
 import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
 
@@ -32,6 +33,8 @@ type Deps = {
 
 export function hookOle(d: Deps): {
   meetingStarted(m: { id: string; title: string }): void
+  /** the recording was renamed (calendar match or the person): a briefing from a default title is prepared again once (#44) */
+  meetingRenamed(m: { id: string; title: string }): void
   meetingStopped(id: string): void
   segment(seg: { meetingId: string; track: 'me' | 'them'; speaker?: string | null; text: string; startMs: number }): void
   bulletsOf(id: string): OleBullet[]
@@ -51,6 +54,8 @@ export function hookOle(d: Deps): {
   let unavailable: Unavailable[] = []
   let call: (name: string, argsJson: string) => Promise<string> = async () => 'No MCP tools are available'
   let prepareSeq = 0
+  /** the call's briefing came from a default title, so a real title prepares it once more (#44) */
+  let preparedFromDefault = false
   const finished = new Map<string, OleBullet[]>()
   const finishedBriefings = new Map<string, string>()
 
@@ -174,7 +179,10 @@ export function hookOle(d: Deps): {
       bullets = []
       // a local Prepare never runs during a call (#5): the bullets just get the tools
       const prepareNow = (!prepared || Date.now() - prepared.preparedAt > STALE_MS) && providersOf(loadSettings(d.file)).prepareOn !== 'local'
-      if (prepareNow) void prepare({ meetingTitle: m.title, forMeeting: m.id })
+      // "Meeting", "Zoom call", "Untitled": a default title says nothing, so look for the meeting happening now instead (#44)
+      const named = genericTitle(m.title) ? null : m.title
+      preparedFromDefault = prepareNow && !named
+      if (prepareNow) void prepare({ meetingTitle: named, forMeeting: m.id })
       else void loadTools().then(send, e => console.warn('loading the MCP tools failed', e))
       // bullets need the OpenAI key; without it the meeting records as Yogurt does
       engine = !liveBlocked() ? createBulletsEngine({
@@ -186,6 +194,11 @@ export function hookOle(d: Deps): {
         onBullets: all => { bullets = all; send() },
       }) : null
       send()
+    },
+    meetingRenamed(m) {
+      if (m.id !== meetingId || !preparedFromDefault || genericTitle(m.title)) return
+      preparedFromDefault = false
+      if (providersOf(loadSettings(d.file)).prepareOn !== 'local') void prepare({ meetingTitle: m.title, forMeeting: m.id })
     },
     segment(seg) {
       if (seg.meetingId !== meetingId || !engine || !seg.text.trim()) return

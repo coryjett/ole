@@ -569,6 +569,7 @@ app.whenReady().then(() => {
     },
   })
   onMeetingStart((m) => ole.meetingStarted({ id: m.id, title: m.title }))
+  onMeetingChange((m) => ole.meetingRenamed({ id: m.id, title: m.title }))
   // a Mac that slept may have missed a server going down (#33)
   powerMonitor.on('resume', () => void ole.checkServers())
   onMeetingStop((m) => ole.meetingStopped(m.id))

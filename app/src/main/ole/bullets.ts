@@ -74,7 +74,8 @@ export function onlyHeadings(source: string, headings: Set<string>): boolean {
   const parts = source.split(/[;,·]/).map(p => p.replace(/[[\]()]/g, '').trim().toLowerCase()).filter(Boolean)
   const vague = (p: string) => {
     const rest = p.replace(/^prepared context\s*(?:[-—:–]\s*)?/, '').trim()
-    return !rest || headings.has(rest) || /^transcript\b/.test(rest) || /^(get|list|search|find|lookup|read|query|fetch|describe)_[a-z0-9_]+(\s*:.*)?$/.test(rest)
+    // a bare tool name says nothing; "get_account_details: Acme" names a record, so it's a real source (#48)
+    return !rest || headings.has(rest) || /^transcript\b/.test(rest) || /^(get|list|search|find|lookup|read|query|fetch|describe)_[a-z0-9_]+\s*:?\s*$/.test(rest)
   }
   return !parts.length || parts.every(vague)
 }
@@ -99,6 +100,11 @@ const clip = (s: string, n: number) => {
   return `${(space > n * 0.6 ? cut.slice(0, space) : cut).replace(/[;,:\s]+$/, '')}…`
 }
 
+/** "[get_account_details: Acme]" reads as "account details: Acme" (#48) */
+export function readableSource(source: string): string {
+  return source.split(/\s*;\s*/).map(p => p.replace(/^\[|\]$/g, '').replace(/^(?:get|list|search|find|lookup|read|query|fetch|describe)_([a-z0-9_]+)\s*:/i, (_m, rest: string) => `${rest.replace(/_/g, ' ')}:`).trim()).filter(Boolean).join('; ')
+}
+
 export function parseBullets(content: string | null): Array<{ text: string; source: string; heard?: string; quote?: string; url?: string }> {
   if (!content) return []
   const body = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
@@ -115,7 +121,7 @@ export function parseBullets(content: string | null): Array<{ text: string; sour
     const heard = typeof item?.heard === 'string' ? clip(item.heard.trim().replace(/^["“]|["”]$/g, ''), 100) : ''
     const quote = typeof item?.quote === 'string' ? clip(item.quote.trim().replace(/^["“]|["”]$/g, ''), 160) : ''
     const url = typeof item?.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(item.url.trim()) ? item.url.trim() : ''
-    if (text && source) out.push({ text: short, source, ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
+    if (text && source) out.push({ text: short, source: readableSource(source), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
     if (out.length === 3) break
   }
   return out
@@ -201,9 +207,10 @@ export function createBulletsEngine(opts: {
       const seen = new Set(list.map(b => normalise(b.text)))
       const fresh: OleBullet[] = []
       const headings = briefingHeadings(opts.context()?.text ?? '')
+      let dropped = 0
       for (const b of parseBullets(reply.content)) {
         // a briefing heading isn't a source you can check (#37)
-        if (onlyHeadings(b.source, headings)) continue
+        if (onlyHeadings(b.source, headings)) { dropped++; continue }
         const key = normalise(b.text)
         if (seen.has(key)) continue
         seen.add(key)
@@ -216,6 +223,8 @@ export function createBulletsEngine(opts: {
         const url = b.url && sources.includes(b.url) ? b.url : undefined
         fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
       }
+      // never silent again (#48): a turn whose bullets were all dropped says so in the log
+      if (dropped) console.warn(`ole bullets: dropped ${dropped} without a real source`)
       if (fresh.length) { list = [...fresh, ...list]; opts.onBullets([...list]) }
     } catch {
       // Swallowed: the panel stays quiet and the next interval tries again.
