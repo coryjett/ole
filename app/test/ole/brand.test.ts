@@ -14,16 +14,16 @@ const read = (path: string) => readFileSync(join(root, path), 'utf8').replaceAll
 afterEach(() => setLanguage('en'))
 
 it('brand() swaps the product name in user text only', () => {
-  expect(brand('Open Yogurt')).toBe('Open Ole')
-  expect(brand('Quit Yogurt')).toBe('Quit Ole')
-  expect(brand("Yogurt's folder")).toBe("Ole's folder")
+  expect(brand('Open Yogurt')).toBe('Open ¡ole!')
+  expect(brand('Quit Yogurt')).toBe('Quit ¡ole!')
+  expect(brand("Yogurt's folder")).toBe("¡ole!'s folder")
   expect(brand('yogurt-audio')).toBe('yogurt-audio')
   expect(brand('YogurtX')).toBe('YogurtX')
 })
 
 it('t() returns branded text for any locale', () => {
   setLanguage('en')
-  expect(t('Open Yogurt')).toBe('Open Ole')
+  expect(t('Open Yogurt')).toBe('Open ¡ole!')
   setLanguage('de')
   expect(t('Open Yogurt')).not.toMatch(/\bYogurt\b/)
 })
@@ -50,4 +50,12 @@ it('helper bundle ids and the MCP helper path are Ole', () => {
   expect(swift).toContain('"net.cjett.ole"')
   expect(swift).not.toContain('so.yogurt.app')
   expect(swift).not.toContain('Application Support/Yogurt')
+})
+
+it('shows ¡ole! but keeps the internal name Ole, so saved keys, the data folder and logs stay where they are (#162)', () => {
+  const index = read('src/main/index.ts')
+  expect(index).toContain('app.setName(APP_NAME)')
+  expect(read('src/shared/brand.ts')).toMatch(/APP_NAME = 'Ole'/)
+  expect(read('src/renderer/index.html')).toContain('<title>¡ole!</title>')
+  expect(read('electron-builder.yml')).toMatch(/^productName: Ole$/m)
 })

@@ -4,6 +4,7 @@ import { transcriptSpeaker } from './transcript'
  * Markdown file with the notes and the transcript. Built from the same document the editor uses (markdown.ts), so
  * what is copied is what is shown. The person's own words keep their text, not their styling.
  */
+import { PRODUCT_NAME } from './brand'
 import { language, t } from './i18n'
 import { docToMd, escapeText, mdToDoc, type PMNode } from './markdown'
 import { clock, turns } from './transcript'
@@ -129,7 +130,7 @@ export function toMarkdownFile(meeting: Meeting, notes: string, segments: Segmen
   const title = meeting.title.replace(/\s+/g, ' ').trim()
   // a small credit on the date line: whoever the file is shared with can find the app
   // Ole credits Yogurt outside t(): t() shows Yogurt's name as Ole's, which would make this "a fork of Ole"
-  const credit = `${t('Recorded with {app}', { app: 'Ole' })} (a fork of [Yogurt](https://yogurt.so))`
+  const credit = `${t('Recorded with {app}', { app: PRODUCT_NAME })} (a fork of [Yogurt](https://yogurt.so))`
   const head = [`# ${escapeText(title)}`, '', `${when} · ${credit}`]
   const people = meeting.attendees.map((a) => a.name.trim()).filter(Boolean)
   if (people.length) head.push('', t('With: {names}', { names: people.join(', ') }))
