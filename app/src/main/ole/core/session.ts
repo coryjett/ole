@@ -11,9 +11,12 @@ import { prepareContext } from './prepare'
 import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from './bullets'
 import { answerQuestion, askErrorKind } from './ask'
-import { createEnricher, type Enricher } from './enrich'
-import { pickAutoPrepare } from './calendarMatch'
-import { createMeetingSource, type Meeting, type SourceCall } from './meetingSource'
+import { createEnricher, mayGetNames, type Enricher } from './enrich'
+import { nextMeeting as pickNextMeeting, pickAutoPrepare, sameEvent } from './calendarMatch'
+import { createMeetingSource, failureKind, type Meeting, type SourceCall } from './meetingSource'
+import { accountSearchTools, autoPickDue, createSubjectResolver, resultNames, searchArgs, SUBJECT_AUTO_PICK_MS, SUBJECT_NAME_MAX, SUBJECT_RETRY_MS, type SubjectResolution, type SubjectResolver } from './subject'
+import { matchedRecordName, mentions } from './anonymize'
+import { MEETING_CONTEXT_TOOL } from './tools'
 import { feedbackOf, recordRating } from './feedback'
 import { createTurnRecorder, type RecordedCall } from './turnRecorder'
 import { createCallSummarizer, EMPTY_MEMORY, fromOleNotes, isEmptyMemory } from './callSummary'
@@ -23,6 +26,10 @@ import { buildReplayFixture, exportFileName } from './replayExport'
 const TOOLS_FRESH_MS = 10 * 60_000
 /** a prepared briefing older than this is gathered again when a meeting starts */
 const STALE_MS = 2 * 60 * 60_000
+/** how far ahead Home looks for the next meeting (#126) */
+const NEXT_AHEAD_MS = 12 * 60 * 60_000
+/** one account search for a heard name may take this long (#126) */
+const SUBJECT_SEARCH_TIMEOUT_MS = 8_000
 
 export type OleSessionOptions = {
   /** how often the servers are checked in the background; 0 turns the background check off (tests) */
@@ -54,6 +61,8 @@ export type OleSession = {
   checkServers(): Promise<void>
   /** prepare for a calendar meeting about to start, once per event (#52) */
   autoPrepare(): Promise<void>
+  /** read the next meeting for Home (#126); the session's own timer does this, a host may also call it */
+  refreshNext(): Promise<void>
   /** the UI's requests, one per IPC channel in Yogurt; each takes the UI's input unchecked and validates it */
   handlers: OleHandlers
 }
@@ -87,6 +96,11 @@ export type OleHandlers = {
   exportReplay(id: unknown, o: unknown): Promise<OleExportResult>
   /** ole:prepare */
   prepare(o: unknown): Promise<OleLiveState>
+  /**
+   * ole:subject:choose (#126): during a call, prepare for this name (a chip the conversation offered, or one the user
+   * typed) and replace the call's briefing; the chosen record becomes the call's own record for anonymized sources
+   */
+  chooseSubject(name: unknown): Promise<OleLiveState>
 }
 
 export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleSession {
@@ -113,8 +127,20 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
   let prepareSeq = 0
   /** the call's briefing came from a default title, so a real title prepares it once more (#44) */
   let preparedFromDefault = false
-  /** the briefing came from auto-prepare for this calendar title (#52) */
-  let autoTitle: string | null = null
+  /** how the briefing before a call came about: auto-prepare for a calendar event (#52), or by hand; decides whether a call reuses it (#128) */
+  let preparedBy: { kind: 'auto'; event: Meeting } | { kind: 'manual'; at: number } | null = null
+  /** the next meeting, for Home (#126) */
+  let next: Meeting | null = null
+  /** the subject picked up from the conversation (#126): the resolver, the call's named title and start, the choice */
+  let resolver: SubjectResolver | null = null
+  let callTitle: string | null = null
+  let callStartsAt: number | null = null
+  let subject: { name: string; auto: boolean } | null = null
+  let chosen = false, autoPicked = false
+  /** the record each resolved name matched, lower-case name to record name */
+  const subjectRecords = new Map<string, string>()
+  /** bumped on every call start, stop and clear: a pending auto-pick from before never runs */
+  let pickToken = 0
   /** live bullets and Ask get the lookup-style tools only (#15), and no single-record lookups on a call with no matching record (#57) */
   const liveTools = () => { const live = tools.filter(isLiveTool); return hasMatchedRecord(prepared) ? live : generalTools(live) }
   /** calendar events already auto-prepared */
@@ -153,7 +179,19 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     meetingId, preparing, error, bullets, answers, blocked: blocked(), unavailable,
     openQuestions: memory.openQuestions, commitments: memory.commitments,
     prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt, text: prepared.text } : null,
+    matched: hasMatchedRecord(prepared),
+    // chips while the call is unmatched, and after Ole chose one by itself, so a click still switches (#126)
+    subjectCandidates: meetingId && resolver && (!hasMatchedRecord(prepared) || subject?.auto) ? resolver.candidates() : [],
+    subject: meetingId ? subject : null,
+    nextMeeting: nextState(),
     }
+  }
+  /** the next meeting's briefing for Home: ready (matched, for this meeting), preparing, or none yet (#126) */
+  function nextState(): OleLiveState['nextMeeting'] {
+    if (meetingId || !next) return null
+    const forIt = preparedBy?.kind === 'auto' ? sameEvent(preparedBy.event, next) : prepared?.meetingTitle === next.title
+    const briefing = preparing ? 'preparing' : prepared && forIt && hasMatchedRecord(prepared) ? 'ready' : 'none'
+    return { title: next.title, start: next.start, briefing }
   }
   const send = () => host.send(state())
 
@@ -202,7 +240,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     warn: (m, e) => host.log.warn(m, e),
   })
 
-  async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string; startsAt?: number | null; note?: Meeting['note']; noteSource?: string }): Promise<OleLiveState> {
+  async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string; startsAt?: number | null; note?: Meeting['note']; noteSource?: string; auto?: Meeting }): Promise<OleLiveState> {
     // enforced here, not only in the panel: Assistant = Local (without local Prepare) never reaches OpenAI or an MCP server
     if (blocked()) { error = null; send(); return state() }
     if (!serversOf(host.settings.get()).some(s => s.enabled)) { error = 'Add an MCP server in Settings'; send(); return state() }
@@ -228,6 +266,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       // the saved briefing records which servers it lacks
       prepared = unavailable.length ? { ...result, text: `${result.text}\n\n_Not included: ${unavailable.map(u => `${u.name} (${u.reason})`).join(', ')}._` } : result
       if (meetingId) prepared = { ...prepared, text: withSections(prepared.text) }
+      // before a call: how it came about decides whether the call reuses it (#128)
+      else preparedBy = o.auto ? { kind: 'auto', event: o.auto } : { kind: 'manual', at: host.clock.now() }
     } catch (e) {
       if (seq !== prepareSeq) return state()
       error = e instanceof Error ? e.message : String(e)
@@ -267,14 +307,81 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
     try { next = pickAutoPrepare(await meetings.upcomingMeetings(now, now + lead), now, lead, autoDone, host.genericTitle) } catch (e) { host.log.warn('reading the calendar failed', e); return }
     if (!next) return
     autoDone.add(next.id)
-    await prepare({ meetingTitle: next.title, startsAt: next.start, note: next.note, noteSource: next.source })
-    if (prepared?.meetingTitle === next.title && !error) {
-      autoTitle = next.title
-      host.notify?.('Your briefing is ready', next.title)
-    }
+    await prepare({ meetingTitle: next.title, startsAt: next.start, note: next.note, noteSource: next.source, auto: next })
+    if (prepared?.meetingTitle === next.title && !error) host.notify?.('Your briefing is ready', next.title)
+  }
+
+  /** the next meeting for Home (#126), from the meeting source's list (cached there for a few minutes) */
+  async function refreshNext(): Promise<void> {
+    const now = host.clock.now()
+    try { next = pickNextMeeting(await meetings.upcomingMeetings(now, now + NEXT_AHEAD_MS), now) } catch (e) { host.log.warn('reading the calendar failed', e); return }
+    if (!meetingId) send()
   }
   const autoEvery = o.autoEveryMs ?? 2 * 60_000
-  if (autoEvery > 0) host.clock.every(autoEvery, () => void autoPrepare().catch(e => host.log.warn('auto-prepare failed', e)))
+  if (autoEvery > 0) {
+    host.clock.after(5_000, () => void refreshNext())
+    host.clock.every(autoEvery, () => void refreshNext().then(() => autoPrepare()).catch(e => host.log.warn('auto-prepare failed', e)))
+  }
+
+  /**
+   * Whether a heard name is one of the user's records (#126): the meeting-context tool with the name as focus, then
+   * one account-style search; only tools allowed to receive names (#91). A match counts only when the result names
+   * the heard name, and a meeting-context match naming another record (a server matching on the time) does not.
+   */
+  async function resolveSubject(name: string): Promise<SubjectResolution> {
+    let lookups = 0
+    try {
+      lookups += tools.filter(t => t.tool === MEETING_CONTEXT_TOOL && mayGetNames(t)).length
+      const ctx = await meetings.meetingContext({ title: null, focus: name, startsAt: callStartsAt }, { allow: t => mayGetNames(t) })
+      if (ctx && resultNames(ctx.result, name)) {
+        const record = matchedRecordName(ctx.result)
+        if (!record || mentions(record, name) > 0 || mentions(name, record) > 0) {
+          subjectRecords.set(name.toLowerCase(), record ?? name)
+          return { resolved: true, via: 'context', lookups }
+        }
+      }
+      const search = serversAllowed() ? accountSearchTools(tools)[0] : undefined
+      if (search) {
+        lookups++
+        const result = await call(search.name, JSON.stringify(searchArgs(search, name)), { timeoutMs: SUBJECT_SEARCH_TIMEOUT_MS })
+        if (resultNames(result, name)) { subjectRecords.set(name.toLowerCase(), name); return { resolved: true, via: 'search', lookups } }
+      }
+      return { resolved: false, via: null, lookups }
+    } catch (e) {
+      return { resolved: false, via: null, lookups, failed: failureKind(e) }
+    }
+  }
+
+  /**
+   * Prepare for a subject during the call (#126): the name as focus, for the live meeting, replacing its briefing. The
+   * chosen record becomes the call's own record (#109, #116) when the briefing names it.
+   */
+  async function chooseSubject(name: string, auto: boolean): Promise<OleLiveState> {
+    if (!meetingId || blocked()) return state()
+    const callId = meetingId
+    if (auto) autoPicked = true
+    else { chosen = true; pickToken++ }
+    await prepare({ focus: name, meetingTitle: callTitle, forMeeting: callId, startsAt: callStartsAt })
+    if (meetingId !== callId || prepared?.focus !== name || error) return state()
+    const record = subjectRecords.get(name.toLowerCase()) ?? name
+    if (hasMatchedRecord(prepared) && mentions(prepared.text, record) > 0) prepared = { ...prepared, records: [record] }
+    subject = { name, auto }
+    console.info(`ole subject: prepared for a name of ${name.length} chars (${auto ? 'picked by Ole' : 'chosen'}), ${hasMatchedRecord(prepared) ? 'matched' : 'no match'}`)
+    send()
+    return state()
+  }
+
+  /** a minute after the first resolved name, Ole prepares for it once, unless the user chose (#126) */
+  function scheduleAutoPick(token: number): void {
+    host.clock.after(SUBJECT_AUTO_PICK_MS, function tryPick() {
+      if (token !== pickToken || !meetingId || !resolver) return
+      const matched = hasMatchedRecord(prepared)
+      const decide = { firstResolvedAt: resolver.firstResolvedAt(), now: host.clock.now(), chosen, autoPicked, matched, preparing }
+      if (autoPickDue(decide)) { const first = resolver.candidates()[0]; if (first) void chooseSubject(first.name, true); return }
+      // a Prepare is running: try again shortly; anything else (chosen, matched, done) ends it
+      if (preparing && !chosen && !autoPicked && !matched) host.clock.after(SUBJECT_RETRY_MS, tryPick)
+    })
+  }
 
   /** questions being answered, by the UI's request id, so Stop can cancel one (#122) */
   const asking = new Map<string, AbortController>()
@@ -409,6 +516,11 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       const input = (opts && typeof opts === 'object' ? opts : {}) as Record<string, unknown>
       return prepare({ focus: text(input.focus, 200), meetingTitle: text(input.meetingTitle, 300) })
     },
+    chooseSubject: (name: unknown) => {
+      const chosenName = text(name, SUBJECT_NAME_MAX)
+      if (!chosenName) return Promise.resolve(state())
+      return chooseSubject(chosenName, false)
+    },
   }
 
   return {
@@ -418,9 +530,18 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       answers = []
       const local = providersOf(host.settings.get()).prepareOn === 'local'
       const named = host.genericTitle(m.title) ? null : m.title
+      // the subject picked up from the conversation starts over with each call (#126)
+      pickToken++
+      callTitle = named
+      callStartsAt = null
+      subject = null
+      chosen = false
+      autoPicked = false
+      subjectRecords.clear()
+      const by = preparedBy
+      preparedBy = null
       // an auto-prepared briefing for another meeting is not this call's (#52)
-      const otherMeeting = !!autoTitle && !!named && autoTitle !== named
-      autoTitle = null
+      const otherMeeting = by?.kind === 'auto' && !!named && by.event.title !== named
       // a local Prepare never runs during a call (#5): the bullets just get the tools
       const prepareNow = (!prepared || host.clock.now() - prepared.preparedAt > STALE_MS || otherMeeting) && !local
       if (prepareNow) {
@@ -428,11 +549,13 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
         void (async () => {
           const event = named ? null : await calendarEvent()
           const title = named ?? event?.title ?? null
+          callStartsAt = event?.start ?? null
           preparedFromDefault = !title
           await prepare({ meetingTitle: title, forMeeting: m.id, startsAt: event?.start ?? null, note: event?.note, noteSource: event?.source })
         })()
       } else {
         preparedFromDefault = false
+        if (by?.kind === 'auto') callStartsAt = by.event.start
         void loadTools().then(send, e => host.log.warn('loading the MCP tools failed', e))
       }
       // each bullets turn is kept with the call, on this Mac, for Export for replay (#70)
@@ -473,6 +596,23 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
           send()
         },
       }) : null
+      // while the briefing has no matched record, names the other side says are checked against the user's records
+      // and offered as choices; a minute after the first one resolves, Ole prepares for it itself (#126)
+      const token = pickToken
+      let scheduled = false
+      resolver = engine ? createSubjectResolver({
+        resolve: name => resolveSubject(name),
+        // after Ole picked a subject itself, more names are still checked, so a later choice can switch
+        matched: () => hasMatchedRecord(prepared) && !subject?.auto,
+        busy: () => preparing,
+        material: () => prepared?.text ?? '',
+        onResolved: () => {
+          if (meetingId !== m.id) return
+          if (!scheduled) { scheduled = true; scheduleAutoPick(token) }
+          send()
+        },
+        now: () => host.clock.now(),
+      }) : null
       send()
     },
     meetingRenamed(m) {
@@ -486,6 +626,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       engine.push(line)
       summarizer?.push(line)
       enricher?.push(line, seg.track === 'me')
+      resolver?.push(line, seg.track === 'me')
     },
     meetingStopped(id) {
       if (id !== meetingId) return
@@ -493,6 +634,10 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       summarizer?.stop()
       enricher?.stop()
       enricher = null
+      resolver?.stop()
+      resolver = null
+      pickToken++
+      subject = null
       const memory = summarizer?.memory() ?? EMPTY_MEMORY
       summarizer = null
       // the call's open questions and commitments stay with the meeting (#82)
@@ -515,14 +660,18 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
       engine = null
       meetingId = null
       prepared = null
+      preparedBy = null
       sections = []
       // the call's bullets now live with the meeting (its note page); Home starts clean for the next call
       bullets = []
       send()
+      // Home shows the next meeting again (#126); with the background timers off (tests) only on request
+      if (autoEvery > 0) void refreshNext()
     },
     setLocal(run) { local = run; send() },
     checkServers,
     autoPrepare,
+    refreshNext,
     bulletsOf: (id) => finished.get(id) ?? (id === meetingId ? bullets : []),
     handlers,
   }

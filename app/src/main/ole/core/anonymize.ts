@@ -349,7 +349,7 @@ export function anonymizeSourceLink(source: string, url: string | undefined, o: 
 }
 
 /** whether a text names an organization, with or without its legal suffix; how often */
-const mentions = (text: string, name: string) => Math.max(...formsOf(name).map(f => (text.match(nameRegex(f)) ?? []).length))
+export const mentions = (text: string, name: string) => Math.max(...formsOf(name).map(f => (text.match(nameRegex(f)) ?? []).length))
 
 /**
  * The organizations to keep when there are more than `cap` (#116): those the briefing (and the sources in it) names

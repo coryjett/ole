@@ -80,10 +80,9 @@ export function OleTabLabel({ tab, unseen = 0 }: { tab: OleTab; unseen?: number 
 
 /** Live: Prepare and its warnings, the strip, the bullets, the call's lists, every answer from Ask (#122); the page scrolls, nothing is capped */
 export function OleLiveTab({ state }: { state: OleLiveState }) {
-  const [focus, setFocus] = useState('')
   const text = state.prepared?.text ?? ''
   return <div data-testid="ole-live-tab" className="flex flex-col gap-2">
-    <OlePanelHeader state={state} focus={focus} setFocus={setFocus} />
+    <OlePanelHeader state={state} />
     {text && <BeforeYouJoinStrip text={text} />}
     <OleBullets bullets={state.bullets} prepared={state.prepared} maxHeight="none"
       onPin={(id, on) => void window.yogurt.ole.pinBullet(id, on)} onRate={(id, r) => void window.yogurt.ole.rateBullet(id, r)} />
@@ -109,7 +108,7 @@ export function OleTabPanels({ tab, meetingId, recording, ole }: { tab: OleTab |
     <div className="note-page-width" style={{ paddingBlock: '18px 40px' }}>
       {live && <>
         <div hidden={tab !== 'live'}><OleLiveTab state={state} /></div>
-        <div hidden={tab !== 'briefing'}><BriefingTab text={state.prepared?.text ?? ''} empty="No briefing for this call yet. Prepare one on the Live tab." /></div>
+        <div hidden={tab !== 'briefing'}><BriefingTab text={state.prepared?.text ?? ''} empty="No briefing for this call yet. Ole picks up who it's with from the conversation; choose a name on the Live tab to prepare now." /></div>
       </>}
       {!recording && saved && <>
         <div hidden={tab !== 'context'}>

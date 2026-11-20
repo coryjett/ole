@@ -39,8 +39,11 @@ export type MeetingSource = {
    * server's list has none, from the host calendar too, since a server's list may leave out meetings already started
    */
   meetingNow(atMs: number): Promise<Meeting | null>
-  /** the first server's matched context for this meeting, or null when none matched */
-  meetingContext(q: MeetingQuery): Promise<MeetingContext | null>
+  /**
+   * the first server's matched context for this meeting, or null when none matched; allow, when given, leaves out the
+   * tools it refuses (the #126 subject lookups send a heard name, so only tools allowed to receive names, #91)
+   */
+  meetingContext(q: MeetingQuery, o?: { allow?: (tool: OleTool) => boolean }): Promise<MeetingContext | null>
 }
 
 export const UPCOMING_TOOL = 'get_upcoming_meetings'
@@ -136,8 +139,8 @@ export function createMeetingSource(o: {
       return eventNow(await o.calendar.upcoming(from, to), atMs)
     },
 
-    async meetingContext(q) {
-      const offering = (await o.tools()).filter(t => t.tool === MEETING_CONTEXT_TOOL)
+    async meetingContext(q, opts) {
+      const offering = (await o.tools()).filter(t => t.tool === MEETING_CONTEXT_TOOL && (!opts?.allow || opts.allow(t)))
       const ms = o.contextTimeoutMs ?? MEETING_CONTEXT_TIMEOUT_MS
       for (const tool of offering) {
         const argsJson = JSON.stringify(meetingContextArgs(tool, q))

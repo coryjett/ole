@@ -45,8 +45,9 @@ describe('createOleSession on an in-memory host', () => {
     const { createOleSession } = await import('../../src/main/ole/core/session')
     const m = memoryHost()
     const s = createOleSession(m.host, { summaryEveryMs: 0 })
-    // background checks go through the host's timers: one soon after start, then every 10 min; auto-prepare every 2 min
-    expect(m.timers).toEqual([{ ms: 5_000, every: false }, { ms: 600_000, every: true }, { ms: 120_000, every: true }])
+    // background checks go through the host's timers: one soon after start, then every 10 min; the next meeting for
+    // Home soon after start (#126), then with auto-prepare every 2 min
+    expect(m.timers).toEqual([{ ms: 5_000, every: false }, { ms: 600_000, every: true }, { ms: 5_000, every: false }, { ms: 120_000, every: true }])
     s.meetingStarted({ id: ID, title: 'Acme renewal' })
     s.segment({ meetingId: ID, track: 'them', text: 'when is the renewal again', startMs: 0 })
     await vi.waitFor(() => expect(s.handlers.state().bullets).toHaveLength(1), { timeout: 3000 })

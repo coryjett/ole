@@ -472,6 +472,8 @@ export type OleApi = import('../renderer/src/ole/OleSettings').OleSettingsApi & 
   onState(cb: (s: OleLiveState) => void): () => void
   /** the pre-call briefing from the MCP servers; focus: a company, person or topic to prepare for */
   prepare(o?: { focus?: string | null; meetingTitle?: string | null }): Promise<OleLiveState>
+  /** during a call: prepare for this name (a chip heard on the call, or typed) and replace the briefing (#126) */
+  chooseSubject(name: string): Promise<OleLiveState>
   /** try the MCP servers again (#33) */
   retryServers(): Promise<OleLiveState>
   /** a meeting's context bullets from the call, newest first; [] when there were none */

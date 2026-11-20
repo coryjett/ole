@@ -253,6 +253,7 @@ const api: YogurtApi = {
     state: () => ipcRenderer.invoke('ole:state'),
     onState: (cb) => { const f = (_e: unknown, s: OleLiveState) => cb(s); ipcRenderer.on('ole:state', f); return () => { ipcRenderer.off('ole:state', f) } },
     prepare: (o) => ipcRenderer.invoke('ole:prepare', o ?? {}),
+    chooseSubject: (name) => ipcRenderer.invoke('ole:subject:choose', name),
     retryServers: () => ipcRenderer.invoke('ole:retry-servers'),
     pinBullet: (id, on) => ipcRenderer.invoke('ole:bullet:pin', id, on),
     rateBullet: (id, rating) => ipcRenderer.invoke('ole:bullet:rate', id, rating),
