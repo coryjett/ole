@@ -85,7 +85,7 @@ describe('respell', () => {
   it('leaves everyday words alone: a lowercase word is never taken for a name, and short words are never touched', () => {
     expect(respell('a grand plan, hills and a job for Joe', w)).toBe('a grand plan, hills and a job for Joe')
     expect(respell('Mehar said so.', w)).toBe('Mehra said so.')
-    // a company that is an everyday word too: only a capitalised word is taken for it
+    // a company that is an everyday word too: only a capitalized word is taken for it
     expect(respell('the motion passed, Notion and Motion', { title: '', names: [], companies: ['Notion'] })).toBe('the motion passed, Notion and Notion')
   })
   it('changes nothing with no words to go by', () => {

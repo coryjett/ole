@@ -41,7 +41,7 @@ export function trayItems(active: { id?: string; title: string; paused?: boolean
 
 /**
  * How the icon looks. A Mac: the template mark (the system tints it) with the timer beside it.
- * Windows and Linux have no text beside a tray icon: a colour mark, a recording one while it records, the time in the tooltip.
+ * Windows and Linux have no text beside a tray icon: a color mark, a recording one while it records, the time in the tooltip.
  */
 export function trayLook(os: string, active: { paused: boolean } | null, elapsedMs: number): { icon: 'tray' | 'tray-color' | 'tray-recording'; template: boolean; title: string | null; tooltip: string } {
   const tooltip = active?.paused ? t('Recording paused') : active ? t('Yogurt is recording') : PRODUCT_NAME

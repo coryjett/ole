@@ -9,7 +9,7 @@ describe('permission status from the helper', () => {
     expect(parseStatus({ mic: 'authorized', systemAudio: 0, calendar: 'granted', accessibility: true })).toEqual({ mic: 'granted', systemAudio: 'granted', calendar: 'granted', accessibility: 'granted' })
     expect(parseStatus({ mic: 'denied', systemAudio: 1, calendar: 'denied', accessibility: false }, { axAsked: true })).toEqual({ mic: 'denied', systemAudio: 'denied', calendar: 'denied', accessibility: 'denied' })
     expect(parseStatus({ mic: 'restricted', systemAudio: 2, calendar: 'notDetermined', accessibility: false })).toEqual({ mic: 'restricted', systemAudio: 'unknown', calendar: 'unknown', accessibility: 'unknown' })
-    // a Mac managed by an organisation: its own state, never Open System Settings
+    // a Mac managed by an organization: its own state, never Open System Settings
     expect(parseStatus({ calendar: 'restricted' }).calendar).toBe('restricted')
     expect(parseStatus({ mic: 'notDetermined' })).toEqual({ mic: 'unknown', systemAudio: 'unknown', calendar: 'unknown', accessibility: 'unknown' })
   })

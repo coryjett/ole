@@ -66,11 +66,11 @@ export type PreparedContext = {
   preparedAt: number;
   /** a server's one-line note on the meeting this was prepared for (#98), with the server's name */
   note?: { text: string; source?: string };
-  /** the organisations Prepare's tool results named, described when they gave an industry or size (#109) */
+  /** the organizations Prepare's tool results named, described when they gave an industry or size (#109) */
   orgs?: Array<{ name: string; description?: string }>;
-  /** Prepare found more organisations than it kept (#116): sources replace every "Kind: Name" but the record's */
+  /** Prepare found more organizations than it kept (#116): sources replace every "Kind: Name" but the record's */
   orgsTruncated?: boolean;
-  /** which of them is the meeting's own matched record (#109): the only organisation a source may name */
+  /** which of them is the meeting's own matched record (#109): the only organization a source may name */
   records?: string[];
 };
 

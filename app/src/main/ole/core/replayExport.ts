@@ -11,7 +11,7 @@ export type ExportInput = {
   /** the fixture's name */
   name: string
   meetingTitle: string
-  /** the calendar attendees' names (and addresses), for anonymising */
+  /** the calendar attendees' names (and addresses), for anonymizing */
   attendees?: Array<{ name: string; email?: string | null }>
   segments: ExportSegment[]
   briefing: { text: string; meetingTitle?: string | null; focus?: string | null }
@@ -19,12 +19,12 @@ export type ExportInput = {
   tools: string[]
   /** the recorded bullets turns; none for a call recorded before they were kept (the fixture is then for --live) */
   turns?: RecordedTurn[]
-  anonymise?: boolean
+  anonymize?: boolean
   /** the host's default-title check (OleHost.genericTitle); English by default */
   genericTitle?: GenericTitle
 }
 
-/** labels the live engine itself gives a line with no name; they name nobody, so anonymising keeps them */
+/** labels the live engine itself gives a line with no name; they name nobody, so anonymizing keeps them */
 const GENERIC_SPEAKERS = new Set(['me', 'them', 'you'])
 /** what separates the account from the topic in a meeting title: "Acme: security review", "Acme <> Us", "Acme - sync" */
 const TITLE_SEPARATOR = /\s*(?::|\||<>|\s[-–—x]\s|\/\/)\s*/i
@@ -43,12 +43,12 @@ export function accountFromTitle(title: string): string | null {
 }
 
 /**
- * The replacements anonymising makes, longest first. Speakers and attendees become "Speaker 1", "Speaker 2"… in order
+ * The replacements anonymizing makes, longest first. Speakers and attendees become "Speaker 1", "Speaker 2"… in order
  * of first appearance (full name, and each part of it of 3+ letters, matched as whole words with their capital letter);
  * every link becomes https://example.com/link-N (the same link, the same N) and every email address "[email]";
  * the meeting title (unless it is a default one like "Meeting") and the account before its separator become "Account".
  */
-export function anonymiser(o: { meetingTitle: string; briefingTitle?: string | null; speakers: string[]; attendees: string[]; genericTitle?: GenericTitle }): {
+export function anonymizer(o: { meetingTitle: string; briefingTitle?: string | null; speakers: string[]; attendees: string[]; genericTitle?: GenericTitle }): {
   speaker(name: string): string
   text(s: string): string
 } {
@@ -109,13 +109,13 @@ const mapStrings = (v: unknown, f: (s: string) => string): unknown =>
     : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, mapStrings(x, f)])) : v
 
 /**
- * The replay fixture for a saved call. Anonymised, the same replacements run over every text in it (transcript,
+ * The replay fixture for a saved call. Anonymized, the same replacements run over every text in it (transcript,
  * briefing, replies, lookup arguments and results), so what the engine checks against still matches.
  */
 export function buildReplayFixture(i: ExportInput): ReplayFixture {
   const lines = i.segments.filter(s => s.text.trim()).sort((a, b) => a.startMs - b.startMs)
   const speakers = [...new Set(lines.map(lineSpeaker))]
-  const anon = i.anonymise ? anonymiser({ meetingTitle: i.meetingTitle, briefingTitle: i.briefing.meetingTitle, speakers, attendees: (i.attendees ?? []).map(a => a.name), genericTitle: i.genericTitle }) : null
+  const anon = i.anonymize ? anonymizer({ meetingTitle: i.meetingTitle, briefingTitle: i.briefing.meetingTitle, speakers, attendees: (i.attendees ?? []).map(a => a.name), genericTitle: i.genericTitle }) : null
   const text = anon ? anon.text : (s: string) => s
   const ends = lines.map(s => s.endMs ?? s.startMs)
   const endMs = ends.length ? Math.max(...ends) : undefined

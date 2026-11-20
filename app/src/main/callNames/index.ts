@@ -1,6 +1,6 @@
 import type { RecordingStart } from '../meeting'
 import type { Meeting, Store } from '../store'
-import { nameFor, othersIn, type CallSample } from './attribute'
+import { nameFor, onlyOther, othersIn, type CallSample } from './attribute'
 import { readCall, summarize, type AxWindow, type CallKind } from './parse'
 
 /**
@@ -155,7 +155,8 @@ export function hookCallNames(p: {
       const o = { myNames: p.myNames() }
       // every line of the other side again, now that the whole call is known
       const lines = p.store.segments(m.id, { hidden: true }).filter((x) => x.track === 'them' && !s.priorLines.has(x.id))
-      const names = lines.map((x) => ({ id: x.id, speaker: nameFor(x, tl, o) }))
+      const fallback = onlyOther(p.store.meeting(m.id)?.attendees ?? [], o.myNames)
+      const names = lines.map((x) => ({ id: x.id, speaker: nameFor(x, tl, o) ?? fallback }))
       const moved = names.filter((x, i) => x.speaker !== lines[i].speaker)
       if (moved.length) p.store.setSegmentSpeakers(moved)
       // everyone seen in the call is one of the people at the meeting
@@ -180,14 +181,20 @@ export function hookCallNames(p: {
       try { s.watch = p.watch(s.ids, (l) => onLine(id, s, l)) } catch (e) { console.error('call names: the watch did not start', e) }
     }
   }
-  ;(p.every ?? ((fn, ms) => setInterval(fn, ms).unref()))(checkQuiet, 2000)
+  ;(p.every ?? ((fn, ms) => {
+    const timer = setInterval(fn, ms)
+    ;(timer as unknown as { unref?: () => void }).unref?.()
+    return timer
+  }))(checkQuiet, 2000)
 
   return {
     checkQuiet,
     /** the name for a line of the other side just heard, or null for Them */
     nameFor(meetingId: string, startMs: number, endMs: number): string | null {
       const s = sessions.get(meetingId)
-      return s?.samples.length ? nameFor({ startMs, endMs }, timeline(s), { myNames: p.myNames() }) : null
+      const meeting = p.store.meeting(meetingId)
+      const mine = p.myNames()
+      return (s?.samples.length ? nameFor({ startMs, endMs }, timeline(s), { myNames: mine }) : null) ?? onlyOther(meeting?.attendees ?? [], mine)
     },
     /** resolves when the names after the meeting are in */
     finished: (id: string): Promise<void> => finals.get(id) ?? Promise.resolve(),

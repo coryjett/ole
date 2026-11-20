@@ -16,7 +16,7 @@ it('Windows and Linux builds have fixed file names, like the Mac one', () => {
   expect(config).toContain('artifactName: Yogurt-linux-${arch}.${ext}')
 })
 
-it("only Windows and Linux carry the colour tray icons (the Mac's package keeps its own files)", () => {
+it("only Windows and Linux carry the color tray icons (the Mac's package keeps its own files)", () => {
   const block = (name: string) => config.match(new RegExp(`^${name}:\\n((?:  .*\\n|\\n)*)`, 'm'))?.[1] ?? ''
   for (const os of ['win', 'linux']) expect(block(os)).toContain('filter: ["tray-color*.png", "tray-recording*.png"]')
   expect(config.split(/^win:$/m)[0]).not.toContain('tray-color')

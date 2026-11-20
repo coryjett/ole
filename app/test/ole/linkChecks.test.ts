@@ -51,7 +51,7 @@ describe('keepLink (#107)', () => {
 
 describe('labels from the link actually used (#107)', () => {
   const received = receivedUrls(`${page} ${other}`)
-  it('a source that is an address is labelled from the given link when both are received', () => {
+  it('a source that is an address is labeled from the given link when both are received', () => {
     expect(linkAndLabel(other, page, received)).toEqual({ source: sourceLabel(other), url: other })
     expect(sourceLabel(other)).toBe('docs.example.com › jwt')
   })

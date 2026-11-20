@@ -49,6 +49,12 @@ function whoAt(s: CallSample, o: Opts): string | null {
 }
 
 /** The name for a line of the other side spoken over [startMs, endMs], or null for Them */
+export function onlyOther(attendees: Array<{ name?: string | null }>, myNames: string[] = []): string | null {
+  const mine = new Set(myNames.map(norm).filter(Boolean))
+  const others = [...new Map(attendees.map((a) => [norm(a.name ?? ''), a.name?.trim() ?? ''])).values()].filter((name) => name && !mine.has(norm(name)))
+  return others.length === 1 ? others[0] : null
+}
+
 export function nameFor(span: { startMs: number; endMs: number }, samples: CallSample[], o: Opts = {}): string | null {
   if (!samples.length) return null
   const sorted = [...samples].sort((a, b) => a.ms - b.ms)

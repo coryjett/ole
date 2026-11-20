@@ -3,7 +3,7 @@ import type { BrowserWindowConstructorOptions } from 'electron'
 /** the toolbar's height: the window buttons off a Mac sit in it */
 const TITLE_BAR_HEIGHT = 52
 
-/** Windows and Linux: the system's window buttons, drawn in the colours of the bar under them (styles.css --chrome and --ink) */
+/** Windows and Linux: the system's window buttons, drawn in the colors of the bar under them (styles.css --chrome and --ink) */
 export const titleBarOverlay = (dark: boolean) =>
   ({ ...(dark ? { color: '#242425', symbolColor: '#E7E6EB' } : { color: '#F3F3F3', symbolColor: '#29292C' }), height: TITLE_BAR_HEIGHT })
 

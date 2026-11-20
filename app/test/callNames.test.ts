@@ -240,7 +240,16 @@ describe('hookCallNames', () => {
     expect(s.logs.filter((l) => l.includes('not-trusted'))).toHaveLength(1)
   })
 
-  it('a meeting in an app it can\'t read starts no watch', async () => {
+  it('uses the only other attendee as the speaker when Accessibility is unavailable', async () => {
+    const s = setup({ attendees: [{ name: 'Dana Smith', email: 'dana@example.com' }] })
+    s.start()
+    s.store.addSegments([{ meetingId: s.m.id, track: 'them', startMs: 1000, endMs: 3000, text: 'hello', speaker: null }])
+    s.stop(); s.transcribed()
+    await s.hook.finished(s.m.id)
+    expect(s.store.segments(s.m.id)[0].speaker).toBe('Dana Smith')
+  })
+
+  it("a meeting in an app it can't read starts no watch", async () => {
     const s = setup({ app: 'FaceTime' })
     s.start()
     expect(s.watched).toEqual([])

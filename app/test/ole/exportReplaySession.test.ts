@@ -52,7 +52,7 @@ async function setup() {
 const exportReplay = (id: unknown, o?: unknown) => handlers.get('ole:export-replay')!({}, id, o) as Promise<{ status: string; turns?: number; error?: string }>
 
 describe('a call keeps its bullets turns and exports as a replay fixture (#70)', () => {
-  it('records the turns, saves them when the call stops, and exports them anonymised by default', async () => {
+  it('records the turns, saves them when the call stops, and exports them anonymized by default', async () => {
     const { ole, saveTurns, written } = await setup()
     ole.meetingStarted({ id: ID, title: 'Copperline Parcel: renewal' })
     ole.segment({ meetingId: ID, track: 'them', speaker: 'Dana Reyes', text: 'When is the renewal for Copperline Parcel?', startMs: 0 })
@@ -74,14 +74,14 @@ describe('a call keeps its bullets turns and exports as a replay fixture (#70)',
     expect(f.turns).toHaveLength(call.turns.length)
     expect(written[0].content).not.toMatch(/Dana|Reyes|Copperline/)
 
-    // Anonymise off: as said
-    await exportReplay(ID, { anonymise: false })
+    // Anonymize off: as said
+    await exportReplay(ID, { anonymize: false })
     expect((JSON.parse(written[1].content) as ReplayFixture).transcript[0].speaker).toBe('Dana Reyes')
   })
 
   it('a call from before turns were kept exports the transcript and briefing only', async () => {
     const { written } = await setup()
-    expect(await exportReplay(OLD, { anonymise: false })).toEqual({ status: 'saved', turns: 0 })
+    expect(await exportReplay(OLD, { anonymize: false })).toEqual({ status: 'saved', turns: 0 })
     const f = JSON.parse(written[0].content) as ReplayFixture
     expect(f.turns).toEqual([])
     expect(f.briefing).toEqual({ meetingTitle: 'Copperline Parcel: renewal', focus: null, text: '## Who\n- Dana Reyes' })

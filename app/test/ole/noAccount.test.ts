@@ -43,7 +43,7 @@ describe('calls without a customer account (#57)', () => {
 })
 
 describe('general patterns from other customers stay allowed (#57)', () => {
-  it('the rule allows anonymised cross-customer patterns and keeps search tools', () => {
+  it('the rule allows anonymized cross-customer patterns and keeps search tools', () => {
     expect(NO_RECORD_RULE).toContain('a common pattern among fintech startups')
     expect(generalTools([tool('search_calls')]).map(t => t.tool)).toEqual(['search_calls'])
   })

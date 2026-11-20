@@ -4,7 +4,7 @@ import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
 import { anonymityFor, callKey, hasMatchedRecord, latestNotes, noRecordRule, readableSource, SOURCE_ANONYMITY } from './bullets'
-import { anonymiseSourceLink } from './anonymise'
+import { anonymizeSourceLink } from './anonymize'
 import { linkAndLabel, receivedUrls } from './links'
 
 /** lookup rounds before the model must answer */
@@ -22,8 +22,8 @@ export const ASK_SYSTEM = [
   '"answer": one to three short sentences, the fact first. No preamble, no advice unless asked.',
   '"source": the record the answer came from, named the way the briefing or the tool result names it. "url": its web address exactly as given there; leave it out when there is none. Never make one up.',
   'Answer from the briefing and the call first; call a tool only when they lack the answer.',
-  "Never put an organisation's or person's name in a search of public documentation.",
-  'Other organisations and people stay anonymous unless they are part of this meeting. Never invent facts: when you cannot find the answer, say so in the answer and leave source out.',
+  "Never put an organization's or person's name in a search of public documentation.",
+  'Other organizations and people stay anonymous unless they are part of this meeting. Never invent facts: when you cannot find the answer, say so in the answer and leave source out.',
   SOURCE_ANONYMITY,
 ].join('\n')
 
@@ -102,9 +102,9 @@ export async function answerQuestion(o: {
   // a bare web address becomes a short label taken from the link actually used (#102, #107)
   const material = `${o.context?.text ?? ''}\n${messages.filter(m => m.role === 'tool').map(m => m.content ?? '').join('\n')}`
   const linked = linkAndLabel(typeof parsed.url === 'string' ? parsed.url : undefined, source, receivedUrls(material))
-  // the source names no organisation but the meeting's own (#109)
+  // the source names no organization but the meeting's own (#109)
   const looked = messages.filter(m => m.role === 'tool').map(m => m.content ?? '')
-  const anon = linked.source ? anonymiseSourceLink(linked.source, linked.url, anonymityFor(o.context, [o.context?.text ?? '', ...looked])) : { source: undefined, url: linked.url }
+  const anon = linked.source ? anonymizeSourceLink(linked.source, linked.url, anonymityFor(o.context, [o.context?.text ?? '', ...looked])) : { source: undefined, url: linked.url }
   const url = anon.url
   const shown = anon.source
   return { text, ...(shown ? { source: shown } : {}), ...(url ? { url } : {}), ok: true }

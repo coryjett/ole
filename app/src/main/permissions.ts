@@ -1,7 +1,7 @@
 import type { Helper } from './calendar'
 
 /**
- * What Yogurt may use. unknown: not asked yet. restricted: the Mac is managed by an organisation, which decides.
+ * What Yogurt may use. unknown: not asked yet. restricted: the Mac is managed by an organization, which decides.
  * asked: notifications only, requested already (this bridge does not read the person's answer).
  */
 export type Access = 'granted' | 'denied' | 'unknown' | 'restricted' | 'asked'

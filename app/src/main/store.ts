@@ -462,7 +462,7 @@ export class Store {
     if (o.last) return (this.db.prepare(`SELECT * FROM (SELECT * FROM segments WHERE ${where} ORDER BY start_ms DESC, id DESC LIMIT ?) ORDER BY start_ms, id`).all(meetingId, o.last) as Row[]).map(toSegment)
     return (this.db.prepare(`SELECT * FROM segments WHERE ${where} ORDER BY start_ms, id`).all(meetingId) as Row[]).map(toSegment)
   }
-  /** Full saved history establishes legacy colours; new names append even after late attribution. */
+  /** Full saved history establishes legacy colors; new names append even after late attribution. */
   speakerOrder(meetingId: string, arriving?: string | null): string[] {
     const row = this.db.prepare('SELECT speaker_order FROM meetings WHERE id = ?').get(meetingId) as Row | undefined
     if (!row) return []
@@ -473,7 +473,7 @@ export class Store {
     const next = speakerOrder(previous, [...names, arriving ?? null])
     if (next.length !== previous.length) {
       try { this.db.prepare('UPDATE meetings SET speaker_order = ? WHERE id = ?').run(JSON.stringify(next), meetingId) }
-      catch (e) { console.warn('Could not save speaker colour order', e); return previous }
+      catch (e) { console.warn('Could not save speaker color order', e); return previous }
     }
     return next
   }

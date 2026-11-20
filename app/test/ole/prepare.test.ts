@@ -138,7 +138,7 @@ describe('prepareContext', () => {
     }
   })
 
-  it('keeps server prompts out of the system role, as labelled guidance; the person\'s instructions stay in it', async () => {
+  it('keeps server prompts out of the system role, as labeled guidance; the person\'s instructions stay in it', async () => {
     const chat = vi.fn<PrepareChatFn>().mockResolvedValue({ content: 'b' })
     await prepareContext({
       chat, tools, call: vi.fn(), now,

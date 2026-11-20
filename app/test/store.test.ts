@@ -387,7 +387,7 @@ describe('round 3: the search index and hidden lines, on a fresh database and on
 })
 
 it('persists speaker order across reopening and late attribution, including hidden history', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'yogurt-colours-')); dirs.push(dir)
+  const dir = mkdtempSync(join(tmpdir(), 'yogurt-colors-')); dirs.push(dir)
   const file = join(dir, 'yogurt.db')
   const first = openStore(file)
   const m = first.createMeeting({ ...base, startedAt: 1 })

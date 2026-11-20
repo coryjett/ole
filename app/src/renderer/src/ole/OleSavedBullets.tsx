@@ -35,35 +35,35 @@ export function exportMessage(r: OleExportResult): string {
   return r.turns ? `Saved, with ${r.turns} of Ole's turns.` : "Saved the transcript and briefing. Ole's turns weren't kept for this call, so replay it with --live."
 }
 
-/** Export for replay (#70): the call as a file for the replay tool, anonymised by default */
-export function OleExportReplayView({ anonymise, busy, result, onAnonymise, onExport }: {
-  anonymise: boolean; busy: boolean; result: OleExportResult | null
-  onAnonymise: (on: boolean) => void; onExport: () => void
+/** Export for replay (#70): the call as a file for the replay tool, anonymized by default */
+export function OleExportReplayView({ anonymize, busy, result, onAnonymize, onExport }: {
+  anonymize: boolean; busy: boolean; result: OleExportResult | null
+  onAnonymize: (on: boolean) => void; onExport: () => void
 }) {
   const message = result ? exportMessage(result) : ''
   return <div data-testid="ole-export-replay" className="settings-group" style={{ padding: 12, margin: '8px 0' }}>
     <div className="flex flex-wrap items-center gap-3">
       <button data-testid="ole-export-replay-button" className="workspace-button" disabled={busy} onClick={onExport}>{busy ? 'Exporting…' : 'Export for replay'}</button>
       <label className="flex items-center gap-1 text-[12px]">
-        <input data-testid="ole-export-replay-anonymise" type="checkbox" checked={anonymise} onChange={e => onAnonymise(e.target.checked)} /> Anonymise
+        <input data-testid="ole-export-replay-anonymize" type="checkbox" checked={anonymize} onChange={e => onAnonymize(e.target.checked)} /> Anonymize
       </label>
     </div>
-    <p className="mt-1 text-[11px] leading-[16px]" style={{ color: 'var(--muted)' }}>Saves the call's transcript and Ole's turns to a file for the replay tool. Anonymise replaces names and removes links.</p>
+    <p className="mt-1 text-[11px] leading-[16px]" style={{ color: 'var(--muted)' }}>Saves the call's transcript and Ole's turns to a file for the replay tool. Anonymize replaces names and removes links.</p>
     {message && <p data-testid="ole-export-replay-result" role="status" className="mt-1 text-[12px] leading-[16px]" style={result?.status === 'failed' ? { color: 'var(--danger)' } : undefined}>{message}</p>}
   </div>
 }
 
 export function OleExportReplay({ meetingId }: { meetingId: string }) {
-  const [anonymise, setAnonymise] = useState(true)
+  const [anonymize, setAnonymize] = useState(true)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<OleExportResult | null>(null)
   const run = async () => {
     setBusy(true); setResult(null)
-    try { setResult(await window.yogurt.ole.exportReplay(meetingId, { anonymise })) }
+    try { setResult(await window.yogurt.ole.exportReplay(meetingId, { anonymize })) }
     catch { setResult({ status: 'failed', error: 'something went wrong.' }) }
     setBusy(false)
   }
-  return <OleExportReplayView anonymise={anonymise} busy={busy} result={result} onAnonymise={setAnonymise} onExport={() => void run()} />
+  return <OleExportReplayView anonymize={anonymize} busy={busy} result={result} onAnonymize={setAnonymize} onExport={() => void run()} />
 }
 
 export function OleSavedBullets({ meetingId }: { meetingId: string }) {

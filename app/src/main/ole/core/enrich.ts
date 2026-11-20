@@ -1,4 +1,4 @@
-// Ole: names said during the call that the briefing doesn't cover (#86). An organisation, person or project the
+// Ole: names said during the call that the briefing doesn't cover (#86). An organization, person or project the
 // conversation names is looked up once in the background with the servers' read-only tools, and what they know is
 // added to the briefing as a short sourced section, so the bullets, Ask, the panel and the saved briefing have it for
 // the rest of the call. Never blocks a bullets turn: one lookup at a time, started only while no turn is running.
@@ -7,7 +7,7 @@ import { isLiveTool, toOpenAiTools } from './tools'
 import { anonymityFor, callKey, EXCERPT_MATCH, isRecordTool, knownWords, MENTIONED_HEADING, nameTerms, onlyHeadings, overlap, readableSource, type CallToolFn, type ChatFn, type ChatMessage, type TranscriptLine } from './bullets'
 import { classifyFailure } from './replayFormat'
 import { keepLink, receivedUrls } from './links'
-import { anonymiseSourceLink } from './anonymise'
+import { anonymizeSourceLink } from './anonymize'
 
 /** names looked up per call */
 export const ENRICH_MAX_TERMS = 6
@@ -23,13 +23,13 @@ export const FACTS_MAX = 3
 const FACT_MAX = 160
 
 export const ENRICH_SYSTEM = [
-  'During a live call, someone named an organisation, person or project that the user\'s briefing does not cover. Find what the tools know about it.',
+  'During a live call, someone named an organization, person or project that the user\'s briefing does not cover. Find what the tools know about it.',
   'Use the tools to look the name up in the user\'s own records.',
-  "Never put an organisation's or person's name in a search of public documentation.",
+  "Never put an organization's or person's name in a search of public documentation.",
   'Reply with JSON only: {"facts":[{"text":"...","source":"...","quote":"...","url":"..."}]}.',
   `At most ${FACTS_MAX} facts, each one short line about this name, the fact first. "source": the record it came from, named the way the tool result names it. "quote": a short excerpt copied exactly from that tool result (under 25 words). "url": its web address exactly as the tool result gives it; leave it out when there is none.`,
-  'Sources follow the same anonymity rule as the bullet text: a "source" may name the organisation being looked up or one that is part of this meeting; any other organisation is described by kind and size, for example "call records: a large financial services company".',
-  'Only facts the tool results state about this name. If the tools find nothing about it, or it is a product, a place or a common word rather than an organisation, person or project, reply {"facts":[]}. Never invent facts.',
+  'Sources follow the same anonymity rule as the bullet text: a "source" may name the organization being looked up or one that is part of this meeting; any other organization is described by kind and size, for example "call records: a large financial services company".',
+  'Only facts the tool results state about this name. If the tools find nothing about it, or it is a product, a place or a common word rather than an organization, person or project, reply {"facts":[]}. Never invent facts.',
 ].join('\n')
 
 /** a name or description that suggests the tool reaches the internet or searches documentation */
@@ -108,7 +108,7 @@ export function parseFacts(content: string | null, material: string): Array<{ te
 const PRODUCT_WORD = String.raw`(?:apis?|sdks?|cli|plugins?|plug-ins?|clusters?|gateways?|servers?|operators?|integrations?|dashboards?|features?|modules?|services?|versions?|releases?|apps?|platforms?|connectors?|extensions?|librar(?:y|ies)|agents?|controllers?|proxy|proxies|instances?|licen[cs]es?|editions?|consoles?|pipelines?|deployments?|charts?|workflows?|configs?|configuration|endpoints?|upgrades?|nodes?|databases?|db|engine|runtime|framework|toolkit|add-?ons?|widgets?|modes?)`
 /** words that, straight before a term, say it is something used, not someone: "running Northwind", "upgraded to Contoso" */
 const PRODUCT_VERB = String.raw`(?:use|uses|using|used|run|runs|running|ran|deploy|deploys|deploying|deployed|install|installs|installing|installed|upgrade|upgrades|upgrading|upgraded|enable|enables|enabling|enabled|configure|configures|configuring|configured|migrate|migrating|migrated|integrate|integrating|integrated)(?:\s+(?:to|from|on|with|into))?(?:\s+(?:the|our|their|your|a|an))?`
-/** common products and tools a call names, lower case; never looked up as organisations */
+/** common products and tools a call names, lower case; never looked up as organizations */
 export const KNOWN_PRODUCTS = new Set(('kubernetes docker terraform ansible kafka postgres postgresql mysql redis mongodb elasticsearch linux windows macos ubuntu '
   + 'jenkins grafana prometheus envoy nginx python java javascript typescript golang rust node react excel powerpoint jira confluence github gitlab '
   + 'slack zoom teams okta vault consul helm argo openshift lambda bedrock copilot chatgpt').split(' '))
@@ -116,7 +116,7 @@ export const KNOWN_PRODUCTS = new Set(('kubernetes docker terraform ansible kafk
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
- * Whether a name the call said is a product or feature rather than an organisation, person or project (#109): a known
+ * Whether a name the call said is a product or feature rather than an organization, person or project (#109): a known
  * product; said straight before a product word ("Northwind gateway") or after a usage verb ("running Northwind"), in
  * the line or in what Ole has read; or written in lower case or CamelCase in most of the places Ole's material
  * (briefing, lookups) has it. Pure string work.
@@ -231,10 +231,10 @@ export function createEnricher(o: {
       if (stopped) return
       // facts come only from what the servers returned: no useful lookup, no section
       const material = messages.filter(m => m.role === 'tool' && !EMPTY_RESULT.test((m.content ?? '').trim())).map(m => m.content ?? '').join('\n')
-      // sources name no organisation but the meeting's own and the one looked up (#109)
+      // sources name no organization but the meeting's own and the one looked up (#109)
       const rules = anonymityFor(o.context(), [o.context()?.text ?? '', material], [item.term])
-      // the fact's own link is replaced by what anonymising kept, never spread back over it (#116)
-      const facts = parseFacts(reply.content, material).map(f => ({ text: f.text, ...anonymiseSourceLink(f.source, f.url, rules) }))
+      // the fact's own link is replaced by what anonymizing kept, never spread back over it (#116)
+      const facts = parseFacts(reply.content, material).map(f => ({ text: f.text, ...anonymizeSourceLink(f.source, f.url, rules) }))
       const section = material.trim() ? mentionedSection(item.term, facts) : ''
       log(`ole enrich: name of ${item.term.length} chars, ${lookups} lookups, ${section ? `${section.split('\n').length - 1} facts added` : 'nothing found'}`)
       if (section && !stopped) o.onSection(section)
@@ -256,7 +256,7 @@ export function createEnricher(o: {
       for (const term of nameTerms(line.text)) {
         const key = term.toLowerCase()
         if (taken.has(key) || covered(term)) continue
-        // products and features aren't organisations, people or projects (#109); they don't take a slot either
+        // products and features aren't organizations, people or projects (#109); they don't take a slot either
         if (productTerm(term, { said: line.text, material: materialNow() })) continue
         if (taken.size >= maxTerms) break
         taken.add(key)

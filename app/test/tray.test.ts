@@ -99,7 +99,7 @@ it('refreshes calendar targets without letting an older read overwrite a newer o
   tray.click('join'); expect(d.event).toHaveBeenCalledTimes(2)
 })
 
-it('Windows and Linux: a colour icon that turns to the recording one, the time in the tooltip, and a click opens Yogurt', () => {
+it('Windows and Linux: a color icon that turns to the recording one, the time in the tooltip, and a click opens Yogurt', () => {
   const d = actions()
   const tray = createTray({ show: true, os: 'win32', ...d })
   const icon = state.trays[0]

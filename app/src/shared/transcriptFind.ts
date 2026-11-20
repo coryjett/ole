@@ -21,7 +21,7 @@ export function stepTranscriptMatch(current: number, step: number, count: number
   return count ? ((current + step) % count + count) % count : 0
 }
 
-/** Keep fully visible matches still; centre an obscured match inside the usable reading area. */
+/** Keep fully visible matches still; center an obscured match inside the usable reading area. */
 export function transcriptFindScrollTop(hit: { top: number; bottom: number }, view: { top: number; bottom: number; scrollTop: number }): number | null {
   if (hit.top >= view.top && hit.bottom <= view.bottom) return null
   return view.scrollTop + (hit.top + hit.bottom - view.top - view.bottom) / 2

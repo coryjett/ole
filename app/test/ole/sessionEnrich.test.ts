@@ -21,7 +21,7 @@ const briefing = { text: '## Before you join\n- Renewal in March (opportunity: R
 type Req = { messages: Array<{ role: string; content: string | null }>; tools?: Array<{ function: { name: string } }> }
 const openaiChat = vi.fn(async (req: Req) => {
   const sys = req.messages[0].content ?? ''
-  if (sys.includes('named an organisation, person or project')) {
+  if (sys.includes('named an organization, person or project')) {
     if (!req.messages.some(m => m.role === 'tool')) return { role: 'assistant', content: null, tool_calls: [{ id: 'e1', type: 'function', function: { name: 'crm__search_accounts', arguments: '{"query":"Northwind Traders"}' } }] }
     return { role: 'assistant', content: JSON.stringify({ facts: [{ text: 'Customer since 2024, 40 seats', source: 'account: Northwind Traders', quote: 'customer since 2024, 40 seats' }] }) }
   }
@@ -56,7 +56,7 @@ describe('a name looked up mid-call joins the briefing everywhere (#86)', () => 
     await vi.waitFor(() => expect(state().prepared?.text).toContain(SECTION), { timeout: 3000 })
     expect(state().prepared!.text.startsWith('## Before you join')).toBe(true)
 
-    const enrichCalls = openaiChat.mock.calls.map(c => c[0] as Req).filter(r => r.messages[0].content?.includes('named an organisation'))
+    const enrichCalls = openaiChat.mock.calls.map(c => c[0] as Req).filter(r => r.messages[0].content?.includes('named an organization'))
     expect(enrichCalls[0].tools!.map(t => t.function.name)).toEqual(['crm__search_accounts'])
 
     // Ask reads the briefing with the section (bullets read the same `prepared`, see enrich.test.ts for the prompt)
