@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { parseTurnLog, replayCall, summarise, virtualClock, type ReplayFixture } from '../../src/main/ole/replay'
+import { liveToolsFor, parseTurnLog, redactReason, replayCall, replaySettings, summarise, virtualClock, type ReplayFixture } from '../../src/main/ole/replay'
 import type { ChatFn } from '../../src/main/ole/bullets'
 
 const dir = join(__dirname, 'fixtures', 'replay')
@@ -81,6 +81,43 @@ describe('replaying saved calls (#66)', () => {
     expect(r.turns.total).toBe(0)
     expect(r.quiet).toEqual({ longestMs: 1_000, fromMs: 0, toMs: 1_000, firstBulletMs: null })
     expect(summarise(r)).toContain('headlines: none shown')
+  })
+})
+
+describe('replay matches the app (security review)', () => {
+  const offeredNames = async (f: ReplayFixture) => {
+    const seen: string[][] = []
+    await replayCall(f, { chat: async req => { seen.push(((req.tools ?? []) as Array<{ function: { name: string } }>).map(t => t.function.name)); return { content: '{"bullets":[]}' } } })
+    return seen[0]
+  }
+
+  it('a call without an account is offered no customer-record tools and no write tools (#57)', async () => {
+    expect(await offeredNames(fixture('quiet-call'))).toEqual(['docs__search_docs'])
+  })
+
+  it('a call with an account gets the lookup-style tools only, as session.ts does', async () => {
+    const f = { ...fixture('quiet-call'), briefing: fixture('steady-call').briefing }
+    expect(await offeredNames(f)).toEqual(['crm__get_account_details', 'crm__list_opportunities', 'docs__search_docs'])
+    expect(liveToolsFor([], null)).toEqual([])
+  })
+
+  it('a fixture sets only the three engine settings, clamped; anything else is ignored', async () => {
+    expect(replaySettings({ minIntervalMs: 1, windowMs: 1e12, maxLookupsPerMinute: 99, chat: () => {}, now: () => 0, log: 'x' })).toEqual({ minIntervalMs: 1_000, windowMs: 1_800_000, maxLookupsPerMinute: 20 })
+    expect(replaySettings({ minIntervalMs: Number.NaN, windowMs: '5', maxLookupsPerMinute: -3 })).toEqual({ maxLookupsPerMinute: 0 })
+    expect(replaySettings(undefined)).toEqual({})
+    expect(replaySettings([1, 2])).toEqual({})
+    // a chat smuggled into settings never replaces the recorded replies
+    const f = { ...fixture('steady-call'), settings: { chat: 'not a function' } } as unknown as ReplayFixture
+    expect(summarise(await replayCall(f))).toBe(summarise(await replayCall(fixture('steady-call'))))
+  })
+
+  it('a failure reason in the report is short, with no URLs or keys', async () => {
+    expect(redactReason('OpenAI request failed (401): bad key sk-proj-abcdEFGH1234567890 at https://llm.example.com/v1/chat?k=1')).toBe('OpenAI request failed (401): bad key [key] at [url]')
+    expect(redactReason('Authorization: Bearer abc.def.ghi')).toBe('Authorization: Bearer [key]')
+    expect(redactReason('token 0123456789abcdef0123456789abcdef0123 leaked')).toBe('token [key] leaked')
+    expect(redactReason('word '.repeat(60))).toHaveLength(120)
+    const f: ReplayFixture = { name: 'fail', briefing: { text: '' }, transcript: [{ speaker: 'A', text: 'hello', startMs: 0 }], turns: [{ replies: [{ error: 'denied for sk-live-0123456789abcdef by https://api.example.com/v1' }] }] }
+    expect((await replayCall(f)).timeline[0].failed).toBe('denied for [key] by [url]')
   })
 })
 

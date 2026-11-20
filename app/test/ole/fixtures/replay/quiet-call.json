@@ -5,6 +5,12 @@
     "focus": null,
     "text": "No customer account for this call.\n## General\n- Beacon 2.3 adds token-bucket rate limits (product docs: Release notes 2.3)"
   },
+  "tools": [
+    "crm__get_account_details",
+    "crm__list_opportunities",
+    "crm__create_note",
+    "docs__search_docs"
+  ],
   "transcript": [
     {
       "speaker": "Me",

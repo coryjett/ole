@@ -1,7 +1,8 @@
 // Ole: replay a saved call through the live bullets engine and measure what it shows (#66).
 // Dev only: scripts/ole-replay.mjs and the tests import this; nothing in the app does (a test pins that).
-import { callKey, createBulletsEngine, parseBullets, type CallToolFn, type ChatFn, type ToolCall, type TranscriptLine } from './bullets'
-import type { OleBullet, OleTool } from './types'
+import { callKey, createBulletsEngine, generalTools, hasCustomerAccount, parseBullets, type CallToolFn, type ChatFn, type ToolCall, type TranscriptLine } from './bullets'
+import { isLiveTool } from './tools'
+import type { OleBullet, OleTool, PreparedContext } from './types'
 
 /** one lookup the model asked for, and what the server answered when the call was recorded */
 export type ReplayToolCall = { name: string; arguments?: Record<string, unknown>; result?: string }
@@ -54,7 +55,31 @@ export function parseTurnLog(line: string): Omit<TurnReport, 'atMs'> | null {
     return { back, shown, withoutSource, repeated, lookups }
   }
   const failed = line.match(/^ole bullets: turn failed: (.*)$/)
-  return failed ? { back: 0, shown: 0, withoutSource: 0, repeated: 0, lookups: 0, failed: failed[1] } : null
+  return failed ? { back: 0, shown: 0, withoutSource: 0, repeated: 0, lookups: 0, failed: redactReason(failed[1]) } : null
+}
+
+/** a failure reason short enough to share: no URLs, nothing key-shaped, at most 120 chars */
+export function redactReason(reason: string): string {
+  const out = reason
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url]')
+    .replace(/\b(?:sk|pk|rk|key|tok|ghp|gho|xox[a-z]?)[-_][A-Za-z0-9_*-]{6,}/gi, '[key]')
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [key]')
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[key]')
+    .replace(/\s+/g, ' ').trim()
+  return out.length > 120 ? `${out.slice(0, 119)}…` : out
+}
+
+/** the tools the app would offer this call (#57): lookup-style only, and no customer records on a call without an account */
+export function liveToolsFor(tools: OleTool[], context: PreparedContext | null): OleTool[] {
+  const live = tools.filter(isLiveTool)
+  return hasCustomerAccount(context) ? live : generalTools(live)
+}
+
+/** engine settings a fixture may set, clamped to sane ranges; anything else in the fixture is ignored */
+export function replaySettings(s: unknown): { minIntervalMs?: number; windowMs?: number; maxLookupsPerMinute?: number } {
+  const o = s && typeof s === 'object' && !Array.isArray(s) ? s as Record<string, unknown> : {}
+  const pick = (k: string, min: number, max: number) => typeof o[k] === 'number' && Number.isFinite(o[k]) ? { [k]: Math.min(max, Math.max(min, o[k] as number)) } : {}
+  return { ...pick('minIntervalMs', 1_000, 600_000), ...pick('windowMs', 10_000, 1_800_000), ...pick('maxLookupsPerMinute', 0, 20) }
 }
 
 /** a clock and timers that only move when the replay moves them */
@@ -170,12 +195,13 @@ export async function replayCall(fixture: ReplayFixture, opts: { chat?: ChatFn }
     return hit
   }
 
+  const context: PreparedContext = { meetingTitle: fixture.briefing.meetingTitle ?? null, focus: fixture.briefing.focus ?? null, text: fixture.briefing.text, preparedAt: 0 }
   const seen = new Set<string>()
   const engine = createBulletsEngine({
     chat,
-    tools: () => offered(fixture.tools ?? []),
+    tools: () => liveToolsFor(offered(fixture.tools ?? []), context),
     callTool,
-    context: () => ({ meetingTitle: fixture.briefing.meetingTitle ?? null, focus: fixture.briefing.focus ?? null, text: fixture.briefing.text, preparedAt: 0 }),
+    context: () => context,
     onBullets: all => {
       const turn = turns.at(-1)
       for (const b of all) if (!seen.has(b.id)) { seen.add(b.id); turn?.fresh.push(b) }
@@ -183,7 +209,7 @@ export async function replayCall(fixture: ReplayFixture, opts: { chat?: ChatFn }
     log: line => { const t = turns.at(-1); const parsed = parseTurnLog(line); if (t && parsed) t.log = parsed },
     now: clock.now,
     timers: clock.timers,
-    ...fixture.settings,
+    ...replaySettings(fixture.settings),
   })
 
   for (const line of lines) {
