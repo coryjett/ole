@@ -2,6 +2,7 @@
 // read-only lookup; each answer names its source and links it when Ole has the link.
 import { useState } from 'react'
 import type { OleAnswer } from '../../../main/ole/core/types'
+import { SourceName } from './OleBullets'
 
 export function OleAnswers({ answers }: { answers: OleAnswer[] }) {
   if (!answers.length) return null
@@ -10,7 +11,7 @@ export function OleAnswers({ answers }: { answers: OleAnswer[] }) {
       <span className="block text-[11px] leading-[16px] text-[#B8B8C0]">Q: {a.question}</span>
       {a.pending ? <span className="opacity-70">Looking…</span> : <span>{a.text}</span>}
       {a.source && <span className="block text-[11px] leading-[16px] text-[#B8B8C0]">
-        {a.url ? <a href={a.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'inherit' }}>{a.source}</a> : a.source}</span>}
+        <SourceName b={{ source: a.source, url: a.url }} /></span>}
     </li>)}
   </ul>
 }

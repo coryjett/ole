@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { cleanLabel, keepLink, LABEL_MAX, linkAndLabel, receivedUrls, sourceLabel } from '../../src/main/ole/core/links'
+import { cleanLabel, httpsHref, keepLink, LABEL_MAX, linkAndLabel, receivedUrls, shownSource, sourceLabel } from '../../src/main/ole/core/links'
+import { OleAnswers } from '../../src/renderer/src/ole/OleAsk'
+import { OleSavedBulletsView } from '../../src/renderer/src/ole/OleSavedBullets'
 import { createBulletsEngine, type ChatFn } from '../../src/main/ole/core/bullets'
 import { answerQuestion } from '../../src/main/ole/core/ask'
 import { parseFacts } from '../../src/main/ole/core/enrich'
@@ -108,5 +110,63 @@ describe('no hidden characters in labels (#107)', () => {
     const long = renderToStaticMarkup(createElement(SourceName, { b: { source: `https://docs.example.com/${'word-'.repeat(60)}end` } }))
     expect([...long].length).toBeLessThanOrEqual(LABEL_MAX)
     expect(long.endsWith('…')).toBe(true)
+  })
+})
+
+describe('link and label hardening (#111)', () => {
+  it('keepLink rejects a received address holding parentheses, brackets or quotes', () => {
+    for (const bad of ['https://a.example/x(1)', 'https://a.example/x)', 'https://a.example/[x]', 'https://a.example/x<y', 'https://a.example/x>', 'https://a.example/"x', "https://a.example/'x"]) {
+      expect(keepLink(bad, new Set([bad]))).toBe(false)
+    }
+    expect(keepLink('https://a.example/x', new Set(['https://a.example/x']))).toBe(true)
+  })
+  it('every label is cleaned and capped, text sources too', () => {
+    const received = receivedUrls(page)
+    expect(linkAndLabel(undefined, 'ticket ‮#4821​', received)).toEqual({ source: 'ticket #4821' })
+    const long = linkAndLabel(undefined, `call notes ${'x'.repeat(200)}`, received).source!
+    expect([...long].length).toBe(LABEL_MAX)
+    expect(long.endsWith('…')).toBe(true)
+    // nothing left after cleaning: no source at all
+    expect(linkAndLabel(undefined, '‮​', received)).toEqual({})
+  })
+  it('Ask carries a cleaned text label', async () => {
+    const ctx = { meetingTitle: 'Sync', focus: null, text: 'ticket #4821: rate limits are per key', preparedAt: 1 }
+    const chat = vi.fn<ChatFn>().mockResolvedValue({ content: JSON.stringify({ answer: 'Per key.', source: 'ticket ‮#4821' }) })
+    expect((await answerQuestion({ chat, question: 'limits?', context: ctx, lines: [], tools: [], call: vi.fn() })).source).toBe('ticket #4821')
+  })
+  it('the renderer and the core give the same label for the same source (one implementation)', () => {
+    const sources = ['ticket ‮#4821​', `notes ${'y'.repeat(120)}`, 'https://docs.example.com/guides/%E2%80%AEjwt', 'https://docs.example.com/', '  product docs  ']
+    for (const s of sources) {
+      expect(renderToStaticMarkup(createElement(SourceName, { b: { source: s } }))).toBe(renderToStaticMarkup(createElement('span', null, shownSource(s))).replace(/^<span>|<\/span>$/g, ''))
+    }
+    expect(shownSource('https://docs.example.com/guides/jwt')).toBe(sourceLabel('https://docs.example.com/guides/jwt'))
+    expect(shownSource('ticket ‮#4821')).toBe(cleanLabel('ticket ‮#4821'))
+  })
+  it('httpsHref passes only https addresses', () => {
+    expect(httpsHref(page)).toBe(page)
+    expect(httpsHref('HTTPS://docs.example.com/a')).toBe('HTTPS://docs.example.com/a')
+    for (const bad of ['javascript:alert(1)', 'http://docs.example.com/a', 'data:text/html,x', 'file:///etc/hosts', 'not a url', '', undefined]) expect(httpsHref(bad)).toBeUndefined()
+  })
+  it('a bullet with a non-https link shows its label without an href', () => {
+    const html = renderToStaticMarkup(createElement(SourceName, { b: { source: 'ticket #4821', url: 'javascript:alert(1)' } }))
+    expect(html).toBe('ticket #4821')
+    expect(renderToStaticMarkup(createElement(SourceName, { b: { source: 'ticket #4821', url: page } }))).toContain(`href="${page}"`)
+  })
+  it('Ask answers link only https, and clean their labels', () => {
+    const html = renderToStaticMarkup(createElement(OleAnswers, { answers: [
+      { id: 'a1', question: 'q1', text: 'one', source: 'ticket ‮#1', url: 'javascript:alert(1)', at: 1 },
+      { id: 'a2', question: 'q2', text: 'two', source: 'docs', url: page, at: 2 },
+    ] }))
+    expect(html).not.toContain('javascript:')
+    expect(html).not.toContain('‮')
+    expect(html).toContain(`href="${page}"`)
+  })
+  it('a saved meeting from an older version links only https', () => {
+    const html = renderToStaticMarkup(createElement(OleSavedBulletsView, {
+      bullets: [{ id: 'b1', text: 'old bullet', source: 'notes', url: 'http://plain.example/x', at: 1 }],
+      answers: [{ id: 'a1', question: 'q', text: 'a', source: 'notes', url: 'data:text/html,x', at: 1 }],
+    }))
+    expect(html).not.toContain('href="http://plain')
+    expect(html).not.toContain('data:text')
   })
 })
