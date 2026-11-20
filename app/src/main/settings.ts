@@ -54,10 +54,12 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   oleSecrets?: Partial<Record<import('./ole/types').SecretName, string>>
   /** Ole: providers for transcription and the notes model (ole/providers.ts) */
   oleTranscription?: 'local' | 'openai'
-  oleAssistant?: 'local' | 'openai'
+  oleAssistant?: 'local' | 'openai' | 'custom'
   oleTranscribeModel?: string
   oleChatModel?: string
   olePrepareModel?: string
+  oleCustomBaseUrl?: string
+  oleCustomModel?: string
   /** Ole: the person picked these providers themselves; the OpenAI key never changes them (#10) */
   oleTranscriptionChosen?: boolean
   oleAssistantChosen?: boolean

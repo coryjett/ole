@@ -25,9 +25,14 @@ export class OpenAIError extends Error {
   constructor(message: string, readonly status?: number) { super(message) }
 }
 
-const needKey = (key: string | null | undefined): string => {
-  if (!key?.trim()) throw new OpenAIError('Add an OpenAI key in Settings')
-  return key.trim()
+/** some proxies in front of self-hosted servers block default client user agents (#17) */
+export const OLE_USER_AGENT = 'Ole (+https://github.com/coryjett/ole)'
+
+/** OpenAI needs a key; a custom server (another baseUrl) may run without one (#17) */
+const needKey = (key: string | null | undefined, baseUrl?: string): string => {
+  if (key?.trim()) return key.trim()
+  if (baseUrl && baseUrl.replace(/\/+$/, '') !== OPENAI_BASE_URL) return ''
+  throw new OpenAIError('Add an OpenAI key in Settings')
 }
 
 /** the server's own reason, short, with anything key-shaped taken out (a 401 can echo part of the key) */
@@ -59,7 +64,7 @@ async function post(r: Request): Promise<Response> {
   if (r.response_format !== undefined) body.response_format = r.response_format
   const res = await (r.fetch ?? fetch)(`${(r.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '')}/chat/completions`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${r.key}`, 'Content-Type': 'application/json' },
+    headers: { ...(r.key ? { Authorization: `Bearer ${r.key}` } : {}), 'Content-Type': 'application/json', 'User-Agent': OLE_USER_AGENT },
     body: JSON.stringify(body),
     signal: r.signal,
   })
@@ -120,21 +125,22 @@ async function readStream(res: Response, onToken: (text: string) => void, signal
 }
 
 /** Yogurt's notes model surface, answered by OpenAI. Embeddings stay local. */
-export function createOpenAIModel(o: { key: () => string | null; model: () => string; fetch?: typeof fetch; baseUrl?: string }): NotesModel {
+export function createOpenAIModel(o: { key: () => string | null; model: () => string; fetch?: typeof fetch; baseUrl?: string | (() => string) }): NotesModel {
+  const baseUrl = () => typeof o.baseUrl === 'function' ? o.baseUrl() : o.baseUrl
   return {
     async llm(signal?: AbortSignal): Promise<Llm> {
-      needKey(o.key())
+      needKey(o.key(), baseUrl())
       return {
         contextSize: OPENAI_CONTEXT,
         count: async (texts) => texts.map((t) => Math.ceil(t.length / 4)),
         chat: async (prompt, onToken, opts) => {
-          const key = needKey(o.key())
+          const key = needKey(o.key(), baseUrl())
           // before: an earlier prompt and its answer, in that order (summary is a local-model hint, not needed here)
           const messages: OpenAIMessage[] = [
             ...(opts?.before ?? []).map((content, i): OpenAIMessage => ({ role: i % 2 ? 'assistant' : 'user', content })),
             { role: 'user', content: prompt },
           ]
-          const res = await postSampled({ key, model: o.model(), baseUrl: o.baseUrl, fetch: o.fetch, signal, messages, stream: true, maxTokens: opts?.maxTokens, temperature: opts?.temperature })
+          const res = await postSampled({ key, model: o.model(), baseUrl: baseUrl(), fetch: o.fetch, signal, messages, stream: true, maxTokens: opts?.maxTokens, temperature: opts?.temperature })
           return readStream(res, onToken, signal)
         },
       }
@@ -153,7 +159,7 @@ export async function openaiChat(o: {
   key: string | null; model: string; messages: OpenAIMessage[]; tools?: unknown[]; response_format?: unknown
   maxTokens?: number; temperature?: number; signal?: AbortSignal; fetch?: typeof fetch; baseUrl?: string
 }): Promise<OpenAIMessage> {
-  const key = needKey(o.key)
+  const key = needKey(o.key, o.baseUrl)
   const res = await postSampled({ ...o, key, stream: false })
   const message = (await res.json())?.choices?.[0]?.message
   if (!message) throw new OpenAIError('OpenAI returned no answer')

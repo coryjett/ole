@@ -18,6 +18,10 @@
   A fork of <a href="https://github.com/FrigadeHQ/yogurt">Yogurt</a> by Frigade.
 </p>
 
+<p align="center">
+  <img src="docs/assets/how-ole-works-story.svg" width="900" alt="A call with Ole. Before: Ole pulls a sourced briefing from your MCP servers. On the call: bullets with sources pop in while the customer talks, and no bot joins. After: a summary with next steps and the context from the call.">
+</p>
+
 ## What it does
 
 - **Ready before the call.** One click and the model works through your MCP servers' read-only tools to build a briefing for the meeting: the company, the people, open deals, open issues, recent conversations, whatever your servers offer. Add an optional **Focus** (a company, person or topic) to steer it.
@@ -28,9 +32,13 @@
 - **A summary when you hang up.** Discussion, decisions, next steps and open questions, from the transcript and your own notes.
 - **A library of every call.** Folders, search, copy and Markdown export.
 - **No bot in the meeting.** Ole records from your Mac; nobody sees an extra participant.
-- **Your choice of models.** Transcription and summaries run locally on your Mac or on OpenAI with your own key.
+- **Your choice of models.** Transcription runs on your Mac or OpenAI; the briefing, bullets and summaries run on OpenAI with your own key or on any OpenAI-compatible server you run, and summaries can also run on your Mac.
 
 ## How it works
+
+<p align="center">
+  <img src="docs/assets/how-ole-works-arch.svg" width="900" alt="You and Ole on your Mac take the customer's call audio, ask the AI model you chose (OpenAI or your own server), and look things up read-only on your MCP servers. Updates come from GitHub releases.">
+</p>
 
 1. **Prepare.** Before the call, Ole lists your MCP servers' read-only tools, reads each server's `prepare_for_meeting` prompt if it has one, adds your instructions, and lets the model gather a sourced briefing (up to 10 tool calls).
 2. **Listen.** Your microphone and the call audio are recorded as two tracks and transcribed live.
@@ -56,7 +64,7 @@ In **Settings > Ole**:
 | **MCP servers** | Add each server's name, URL (https, usually ending in `/mcp`) and key, then **Test** to see how many read-only tools Ole can use. If a server is behind a VPN, connect first. |
 | **Warm-up instructions** | Optional. How you want Ole to prepare, e.g. "Look up the account, its open deals and stage, open support issues and the last two calls. Lead with risks." |
 | **Transcription** | *Local* (whisper.cpp on your Mac) or *OpenAI*. |
-| **Assistant** | *Local* (a model on your Mac) or *OpenAI*. |
+| **Assistant** | *Local* (a model on your Mac, summaries only), *OpenAI*, or *Custom server*: any OpenAI-compatible server you run (address ending at `/v1`, optional key, model). Prepare and live context need OpenAI or a Custom server. |
 
 Keys are encrypted with the macOS Keychain and only ever shown masked.
 

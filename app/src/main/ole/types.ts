@@ -1,12 +1,15 @@
 // Ole: shared types for the Ole additions to Yogurt.
 
-export type SecretName = 'openai' | `mcp:${string}`;
+export type SecretName = 'openai' | 'custom' | `mcp:${string}`;
 
 export type ProviderChoice = 'local' | 'openai';
 
+/** who writes: on the Mac, OpenAI, or any OpenAI-compatible server the person runs (#17) */
+export type AssistantChoice = ProviderChoice | 'custom';
+
 export type OleProviders = {
   transcription: ProviderChoice;
-  assistant: ProviderChoice;
+  assistant: AssistantChoice;
   openaiTranscribeModel: string;
   /** live bullets and summaries: fast */
   openaiChatModel: string;
@@ -14,6 +17,10 @@ export type OleProviders = {
   openaiPrepareModel: string;
   /** the person's own instructions for the pre-call warm-up (which tools, what matters, the format); '' for none */
   warmupInstructions: string;
+  /** the Custom server's OpenAI-compatible base URL (https, ends at /v1); '' until set (#17) */
+  customBaseUrl: string;
+  /** the model asked of the Custom server for Prepare, bullets and summaries */
+  customModel: string;
 };
 
 /** an MCP server the person added in Settings; its key is the secret `mcp:<id>` */
