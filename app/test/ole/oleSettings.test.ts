@@ -1,10 +1,10 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it, vi } from 'vitest'
-import { OleSettings, type OleSettingsApi, type SecretStatus } from '../../src/renderer/src/ole/OleSettings'
+import { OleSettings, TranscribeSwitchNotice, type OleSettingsApi, type SecretStatus } from '../../src/renderer/src/ole/OleSettings'
 import type { McpServerConfig } from '../../src/main/ole/core/types'
 
-const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-4o-mini-transcribe', openaiStreaming: true, openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: false, autoPrepare: true, autoPrepareLead: 10 } as const
+const providers = { transcription: 'local', assistant: 'openai', openaiTranscribeModel: 'gpt-transcribe', transcribeModelSwitched: null, openaiStreaming: true, openaiChatModel: 'gpt-5.6-luna', openaiPrepareModel: 'gpt-5.6-terra', customBaseUrl: '', customModel: '', prepareOn: 'assistant', warmupInstructions: '', hideWhileSharing: false, autoPrepare: true, autoPrepareLead: 10 } as const
 const servers: McpServerConfig[] = [
   { id: 'crm', name: 'CRM', url: 'https://crm.example/mcp', enabled: true },
   { id: 'docs', name: 'Docs', url: 'https://docs.example/mcp', enabled: false },
@@ -13,7 +13,7 @@ const status: SecretStatus = { openai: { set: true, masked: 'sk-…3456' }, 'mcp
 const api = (): OleSettingsApi => ({
   getProviders: vi.fn(async () => providers), setProviders: vi.fn(async () => providers),
   setSecret: vi.fn(async () => status), secretStatus: vi.fn(async () => status),
-  getServers: vi.fn(async () => servers), setServers: vi.fn(async () => servers), testServer: vi.fn(async () => ({ ok: true, tools: 4 })), testOpenAI: vi.fn(async () => ({ ok: true })), adoptOpenAI: vi.fn(async () => ({ switched: [], providers })), revertOpenAI: vi.fn(async () => ({ reverted: [], providers })), customModels: vi.fn(async () => ({ ok: true, chat: [], transcribe: [] })), testCustom: vi.fn(async () => ({ ok: true })), openaiModels: vi.fn(async () => ({ ok: true, chat: ['gpt-5.6-luna', 'gpt-5.6-terra'], transcribe: ['gpt-4o-mini-transcribe'] })),
+  getServers: vi.fn(async () => servers), setServers: vi.fn(async () => servers), testServer: vi.fn(async () => ({ ok: true, tools: 4 })), testOpenAI: vi.fn(async () => ({ ok: true })), adoptOpenAI: vi.fn(async () => ({ switched: [], providers })), revertOpenAI: vi.fn(async () => ({ reverted: [], providers })), customModels: vi.fn(async () => ({ ok: true, chat: [], transcribe: [] })), testCustom: vi.fn(async () => ({ ok: true })), openaiModels: vi.fn(async () => ({ ok: true, chat: ['gpt-5.6-luna', 'gpt-5.6-terra'], transcribe: ['gpt-transcribe'] })),
 })
 const render = (p: Partial<{ initialServers: McpServerConfig[]; initialProviders: typeof providers }> = {}) =>
   renderToStaticMarkup(createElement(OleSettings, { api: api(), initialProviders: providers, initialStatus: status, initialServers: servers, ...p }))
@@ -95,4 +95,23 @@ it('Live streaming sits under Transcription when it is OpenAI, on by default, an
   const off = render({ initialProviders: { ...providers, transcription: 'openai', openaiStreaming: false } as never })
   expect(off).toMatch(/data-testid="ole-transcribe-streaming"[^>]*aria-checked="false"/)
   expect(render()).not.toContain('ole-transcribe-streaming')
+})
+
+it('a retiring transcription model Ole replaced: a dismissible notice under the Transcription model (#89)', () => {
+  const html = render({ initialProviders: { ...providers, transcribeModelSwitched: { from: 'gpt-4o-mini-transcribe', to: 'gpt-transcribe', retires: '2027-02-26' } } as never })
+  expect(html).toMatch(/data-testid="ole-transcribe-switched"[^>]*role="status"[^>]*>Switched from gpt-4o-mini-transcribe to gpt-transcribe: gpt-4o-mini-transcribe is retired by OpenAI on February 26, 2027\./)
+  expect(html).toContain('data-testid="ole-transcribe-switched-dismiss"')
+  // inside the Transcription model row, before the Prepare model
+  expect(html.indexOf('ole-transcribe-switched')).toBeGreaterThan(html.indexOf('ole-transcribe-model-advice'))
+  expect(html.indexOf('ole-transcribe-switched')).toBeLessThan(html.indexOf('id="ole-prepare-model"'))
+  expect(render()).not.toContain('ole-transcribe-switched')
+})
+
+it('Dismiss on the notice clears it (#89)', () => {
+  const onDismiss = vi.fn()
+  const el = TranscribeSwitchNotice({ s: { from: 'whisper-1', to: 'gpt-transcribe', retires: '2027-02-26' }, onDismiss })
+  const kids = ([] as unknown[]).concat((el.props as { children: unknown }).children)
+  const button = kids.find((k): k is { props: { onClick: () => void; 'data-testid': string } } => !!k && typeof k === 'object' && (k as { props?: Record<string, unknown> }).props?.['data-testid'] === 'ole-transcribe-switched-dismiss')
+  button!.props.onClick()
+  expect(onDismiss).toHaveBeenCalledOnce()
 })

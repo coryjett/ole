@@ -1,7 +1,7 @@
 // Ole: what the core needs from the app it runs in. A host (Yogurt today: ../yogurt/) implements OleHost and maps the
 // session's handlers (session.ts) and the settings handlers (settingsHandlers.ts) to its own IPC. Nothing in core/
 // imports the host; everything it needs comes through here. See OLE.md "Layout and porting".
-import type { OleAnswer, OleBullet, OleCallMemory, OleLiveState, SecretName, McpServerConfig } from './types'
+import type { OleAnswer, OleBullet, OleCallMemory, OleLiveState, SecretName, McpServerConfig, TranscribeModelSwitch } from './types'
 import type { LocalRun } from './localChat'
 import type { Upcoming } from './calendarMatch'
 import type { RecordedCall } from './turnRecorder'
@@ -13,6 +13,8 @@ export type OleSettings = {
   oleTranscription?: 'local' | 'openai'
   oleAssistant?: 'local' | 'openai' | 'custom'
   oleTranscribeModel?: string
+  /** a retiring model the saved one was moved off (#89), kept until the person dismisses the notice */
+  oleTranscribeModelSwitched?: TranscribeModelSwitch
   oleTranscribeStreaming?: boolean
   oleChatModel?: string
   olePrepareModel?: string

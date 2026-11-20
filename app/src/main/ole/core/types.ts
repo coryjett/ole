@@ -7,10 +7,15 @@ export type ProviderChoice = 'local' | 'openai';
 /** who writes: on the Mac, OpenAI, or any OpenAI-compatible server the person runs (#17) */
 export type AssistantChoice = ProviderChoice | 'custom';
 
+/** a retiring transcription model Ole replaced: what it was, what it is now, and the shutdown date (YYYY-MM-DD) */
+export type TranscribeModelSwitch = { from: string; to: string; retires: string };
+
 export type OleProviders = {
   transcription: ProviderChoice;
   assistant: AssistantChoice;
   openaiTranscribeModel: string;
+  /** the saved transcription model was a retiring one and Ole moved it to the successor (#89); null once dismissed */
+  transcribeModelSwitched: TranscribeModelSwitch | null;
   /** OpenAI transcription streams live calls over the Realtime API, falling back to chunks (#85); on unless turned off */
   openaiStreaming: boolean;
   /** live bullets and summaries: fast */

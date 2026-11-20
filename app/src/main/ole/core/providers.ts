@@ -1,7 +1,8 @@
 // Ole: which engine transcribes and which writes notes and answers (Local or OpenAI), with the OpenAI model names and the
 // warm-up instructions. Pure: reads and patches the host's settings through a SettingsStore.
 import type { OleSettings, SettingsStore } from './host'
-import type { AssistantChoice, OleProviders, ProviderChoice } from './types'
+import type { AssistantChoice, OleProviders, ProviderChoice, TranscribeModelSwitch } from './types'
+import { TRANSCRIBE_SUCCESSOR, migrateTranscribeModel } from './transcribeModels'
 
 /** as read from a file that may have been edited by hand: any string */
 type OleProviderSettings = Omit<OleSettings, 'oleTranscription' | 'oleAssistant' | 'olePrepareOn'> & {
@@ -19,7 +20,8 @@ type OleProviderSettings = Omit<OleSettings, 'oleTranscription' | 'oleAssistant'
 export const PROVIDER_DEFAULTS: OleProviders = {
   transcription: 'local',
   assistant: 'local',
-  openaiTranscribeModel: 'gpt-4o-mini-transcribe',
+  openaiTranscribeModel: TRANSCRIBE_SUCCESSOR,
+  transcribeModelSwitched: null,
   openaiStreaming: true,
   openaiChatModel: 'gpt-5.6-luna',
   openaiPrepareModel: 'gpt-5.6-terra',
@@ -53,15 +55,29 @@ function isValidModelName(v: string): boolean {
   return /^[A-Za-z0-9._:-]+$/.test(v)
 }
 
+/** the saved transcription model, a retiring one moved to its successor; an invalid or missing one is the default */
+function transcribeModelOf(v: unknown): { model: string; switched: TranscribeModelSwitch | null } {
+  const m = typeof v === 'string' ? v.trim() : ''
+  return isValidModelName(m) ? migrateTranscribeModel(m) : { model: PROVIDER_DEFAULTS.openaiTranscribeModel, switched: null }
+}
+
+/** a stored switch notice, or null when it is missing or malformed (the file may have been edited by hand) */
+function switchOf(v: unknown): TranscribeModelSwitch | null {
+  if (!v || typeof v !== 'object') return null
+  const { from, to, retires } = v as Record<string, unknown>
+  return typeof from === 'string' && typeof to === 'string' && typeof retires === 'string' && isValidModelName(from) && isValidModelName(to) && /^\d{4}-\d{2}-\d{2}$/.test(retires)
+    ? { from, to, retires } : null
+}
+
 export function providersOf(s: OleSettings): OleProviders {
   const settings = s as OleProviderSettings
   const transcription = isProviderChoice(settings.oleTranscription) ? settings.oleTranscription : PROVIDER_DEFAULTS.transcription
   const assistant = isAssistantChoice(settings.oleAssistant) ? settings.oleAssistant : PROVIDER_DEFAULTS.assistant
 
-  let openaiTranscribeModel = (settings.oleTranscribeModel ?? '').trim()
-  if (!isValidModelName(openaiTranscribeModel)) {
-    openaiTranscribeModel = PROVIDER_DEFAULTS.openaiTranscribeModel
-  }
+  // a retiring model is read as its successor, and saved that way on the next write (#89)
+  const { model: openaiTranscribeModel, switched } = transcribeModelOf(settings.oleTranscribeModel)
+  // the notice reaches the renderer over IPC: validated whether it was just made or read back from the file
+  const transcribeModelSwitched = switchOf(switched) ?? switchOf(settings.oleTranscribeModelSwitched)
 
   let openaiChatModel = (settings.oleChatModel ?? '').trim()
   if (!isValidModelName(openaiChatModel)) {
@@ -86,7 +102,7 @@ export function providersOf(s: OleSettings): OleProviders {
   const autoPrepare = s.oleAutoPrepare !== false
   const autoPrepareLead = (AUTO_PREPARE_LEADS as readonly number[]).includes(s.oleAutoPrepareLead ?? -1) ? s.oleAutoPrepareLead! : PROVIDER_DEFAULTS.autoPrepareLead
 
-  return { transcription, assistant, openaiTranscribeModel, openaiStreaming, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel, prepareOn, hideWhileSharing, autoPrepare, autoPrepareLead }
+  return { transcription, assistant, openaiTranscribeModel, transcribeModelSwitched, openaiStreaming, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel, prepareOn, hideWhileSharing, autoPrepare, autoPrepareLead }
 }
 
 export function setProviders(store: SettingsStore, patch: unknown): OleProviders {
@@ -108,12 +124,24 @@ export function setProviders(store: SettingsStore, patch: unknown): OleProviders
     auto.delete('assistant')
   }
   if ('transcription' in p || 'assistant' in p) settingsPatch.oleAutoSwitched = auto.size ? [...auto] : undefined
+  // a saved retiring model is written back as its successor on any write, and the notice is kept until dismissed (#89)
+  const saved = store.get().oleTranscribeModel
+  const moved = typeof saved === 'string' && isValidModelName(saved.trim()) ? switchOf(migrateTranscribeModel(saved.trim()).switched) : null
+  if (moved) {
+    settingsPatch.oleTranscribeModel = moved.to
+    settingsPatch.oleTranscribeModelSwitched = moved
+  }
   if ('openaiTranscribeModel' in p) {
     const model = typeof p.openaiTranscribeModel === 'string' ? p.openaiTranscribeModel.trim() : ''
     if (isValidModelName(model)) {
-      settingsPatch.oleTranscribeModel = model
+      const chosen = migrateTranscribeModel(model)
+      settingsPatch.oleTranscribeModel = chosen.model
+      // a model the person picks replaces any earlier notice; picking a retiring one still lands on the successor.
+      // Only a well-formed notice is saved
+      settingsPatch.oleTranscribeModelSwitched = switchOf(chosen.switched) ?? undefined
     }
   }
+  if ('transcribeModelSwitched' in p && p.transcribeModelSwitched === null) settingsPatch.oleTranscribeModelSwitched = undefined
   if ('customBaseUrl' in p && typeof p.customBaseUrl === 'string') {
     const url = p.customBaseUrl.trim()
     if (url === '' || isValidBaseUrl(url)) settingsPatch.oleCustomBaseUrl = url

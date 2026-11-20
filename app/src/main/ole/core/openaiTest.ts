@@ -44,7 +44,8 @@ export type OpenAIModels = { ok: boolean; error?: string; chat: string[]; transc
 
 /** a model id that answers chat with tools (not audio, images, embeddings, moderation or realtime) */
 export const isChatModel = (id: string) => /^(gpt-|o\d|chatgpt-)/.test(id) && !/(transcribe|tts|audio|realtime|image|embedding|search|moderation|dall-e|whisper|instruct|codex)/.test(id)
-export const isTranscribeModel = (id: string) => /(transcribe|^whisper)/.test(id)
+// Realtime-only models (gpt-live-transcribe, gpt-realtime-whisper) are left out: /audio/transcriptions refuses them
+export const isTranscribeModel = (id: string) => /(transcribe|^whisper)/.test(id) && !/(live|realtime)/.test(id)
 
 /** the models this key can use, for Settings' model dropdowns; newest-looking names first */
 export async function listOpenAIModels(o: { key: string | null; fetch?: typeof fetch; baseUrl?: string; timeoutMs?: number }): Promise<OpenAIModels> {

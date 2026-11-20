@@ -1,5 +1,6 @@
 // Ole: the Settings section for providers, keys and MCP servers. Keys are write-only from here; only masked status comes back.
-import { MODEL_ADVICE, isRecommended, type ModelRole } from './modelAdvice'
+import { MODEL_ADVICE, modelLabel, retiringText, type ModelRole } from './modelAdvice'
+import { retireDateText } from '../../../main/ole/core/transcribeModels'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { AssistantChoice, McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/core/types'
@@ -313,9 +314,16 @@ export function CustomServerRows({ api, providers, status, saveKey, disabled, pa
   </>
 }
 
+/** the saved transcription model was retiring and Ole moved it (#89): said once, until dismissed */
+export function TranscribeSwitchNotice({ s, onDismiss }: { s: { from: string; to: string; retires: string }; onDismiss: () => void }) {
+  return <p data-testid="ole-transcribe-switched" role="status" className="settings-description" style={{ marginTop: 6 }}>
+    Switched from {s.from} to {s.to}: {s.from} is retired by OpenAI on {retireDateText(s.retires)}.{' '}
+    <button data-testid="ole-transcribe-switched-dismiss" className="text-action" onClick={onDismiss}>Dismiss</button></p>
+}
+
 /** a model dropdown filled from the key's model list; the saved value always stays selectable (#8) */
-export function ModelSelect({ id, label, hint, role, value, options, note, disabled, onChange }: {
-  id: string; label: string; hint: string; role: ModelRole; value: string; options?: string[]; note?: string; disabled: boolean; onChange: (v: string) => void
+export function ModelSelect({ id, label, hint, role, value, options, note, notice, disabled, onChange }: {
+  id: string; label: string; hint: string; role: ModelRole; value: string; options?: string[]; note?: string; notice?: ReactNode; disabled: boolean; onChange: (v: string) => void
 }) {
   const list = options ?? []
   const missing = !!value && list.length > 0 && !list.includes(value)
@@ -328,10 +336,12 @@ export function ModelSelect({ id, label, hint, role, value, options, note, disab
         <p data-testid={`${id}-advice`} className="settings-description">{MODEL_ADVICE[role]}</p>
         {missing && <p data-testid={`${id}-missing`} role="alert" className="settings-description" style={{ color: '#ff6b6b' }}>{value} isn't available to this key</p>}
         {!list.length && note && <p data-testid={`${id}-note`} className="settings-description">{note}</p>}
+        {notice}
       </div>
       <span className="settings-select-wrap">
         <select id={id} data-testid={id} value={value} disabled={disabled || all.length === 0} onChange={(e) => onChange(e.target.value)} className="settings-select">
-          {all.map(m => <option key={m} value={m}>{isRecommended(role, m) ? `${m} (recommended)` : m}</option>)}
+          {/* a retiring model is shown so the list matches the account, but not offered: it would be moved off at once (#89) */}
+          {all.map(m => <option key={m} value={m} disabled={m !== value && !!retiringText(role, m)}>{modelLabel(role, m)}</option>)}
         </select>
         <ChevronDown size={14} aria-hidden="true" />
       </span>
@@ -456,7 +466,8 @@ export function OleSettings({ api, initialProviders, initialStatus, initialServe
           adopt={async () => { const r = await api.adoptOpenAI(); setProviders(r.providers); return r }}
           revert={async (undo) => { const r = await api.revertOpenAI(undo); setProviders(r.providers); return r }} />
         <ModelSelect id="ole-transcribe-model" role="transcribe" label="Transcription model" hint="Turns call audio into text."
-          value={providers?.openaiTranscribeModel ?? ''} options={models?.transcribe} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiTranscribeModel: v })} />
+          value={providers?.openaiTranscribeModel ?? ''} options={models?.transcribe} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiTranscribeModel: v })}
+          notice={providers?.transcribeModelSwitched && <TranscribeSwitchNotice s={providers.transcribeModelSwitched} onDismiss={() => patch({ transcribeModelSwitched: null })} />} />
         <ModelSelect id="ole-prepare-model" role="prepare" label="Prepare model" hint="Writes the briefing before a call."
           value={providers?.openaiPrepareModel ?? ''} options={models?.chat} note={modelsNote} disabled={off} onChange={(v) => patch({ openaiPrepareModel: v })} />
         <ModelSelect id="ole-chat-model" role="live" label="Live bullets and summaries model" hint="Runs during the call and after it."
