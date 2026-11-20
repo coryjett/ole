@@ -13,7 +13,7 @@ import { boundedSchema, collectTools, collectWarmupPrompts, createToolRunner, is
 import { prepareContext } from './prepare'
 import { genericTitle } from '../titles'
 import { createLocalChat, type LocalRun } from './localChat'
-import { createBulletsEngine, generalTools, hasCustomerAccount, pinnedNotes, type BulletsEngine, type ChatFn } from './bullets'
+import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, type BulletsEngine, type ChatFn } from './bullets'
 import { answerQuestion } from './ask'
 import { eventNow, pickAutoPrepare, type Upcoming } from './calendarMatch'
 import { feedbackOf, recordRating } from './feedback'
@@ -76,8 +76,8 @@ export function hookOle(d: Deps): {
   let preparedFromDefault = false
   /** the briefing came from auto-prepare for this calendar title (#52) */
   let autoTitle: string | null = null
-  /** live bullets and Ask get the lookup-style tools only (#15), and no customer records on a call without an account (#57) */
-  const liveTools = () => { const live = tools.filter(isLiveTool); return hasCustomerAccount(prepared) ? live : generalTools(live) }
+  /** live bullets and Ask get the lookup-style tools only (#15), and no single-record lookups on a call with no matching record (#57) */
+  const liveTools = () => { const live = tools.filter(isLiveTool); return hasMatchedRecord(prepared) ? live : generalTools(live) }
   /** calendar events already auto-prepared */
   const autoDone = new Set<string>()
   let answers: OleAnswer[] = []
@@ -289,7 +289,7 @@ export function hookOle(d: Deps): {
       engine = !liveBlocked() ? createBulletsEngine({
         chat,
         // live bullets get the lookup-style tools only (#15)
-        // a call with no customer account never looks up customer records (#57)
+        // a call with no matching record never looks up single records (#57)
         tools: () => liveTools(),
         callTool: (name, argsJson) => call(name, argsJson),
         context: () => prepared,

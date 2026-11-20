@@ -268,8 +268,8 @@ describe('bullets engine', () => {
     })
     const system = messages[0].content ?? ''
     const user = messages[1].content ?? ''
-    expect(system).toMatch(/anonymise/i)
-    expect(system).toMatch(/never name another customer/i)
+    expect(system).toMatch(/stay anonymous/i)
+    expect(system).toMatch(/unless they are part of this meeting/i)
     expect(system).toMatch(/source/i)
     expect(system).toContain('financial services')
     expect(user).toContain('earlier bullet')

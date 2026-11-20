@@ -34,36 +34,36 @@ const clock = (ms: number) => {
 }
 
 export const BULLETS_SYSTEM = [
-  'You help a sales engineer during a live customer call by surfacing short context bullets they can glance at.',
+  'You help the user during a live call by surfacing short context bullets they can glance at.',
   'Reply with JSON only: {"bullets":[{"text":"...","source":"...","heard":"...","quote":"..."}]}.',
   '"url": the source\'s web address exactly as it appears in the prepared context or a tool result (an issue, docs page, tracker or record); leave it out when there is none. Never make one up.',
   '"heard": the few words from the conversation this bullet answers, copied exactly (under 12 words). "quote": a short excerpt copied exactly from the prepared context or tool result the fact came from (under 25 words).',
   'Give 0 to 2 NEW bullets. Fewer is better: only what the people on the call do not already know.',
   'Each bullet is a headline the user can read mid-sentence: 10 words at most, the fact first, no advice verbs (assess, consider, relate, connect, note that). Good: "Same 429s at a fintech, fixed in 2.3". Bad: "Consider relating the rate limiting discussion to the earlier fintech case". Detail belongs in heard and quote.',
   'Never restate, summarise or comment on what is being said in the call; the user just heard it. "Transcript" is never a source.',
-  'Every bullet must cite the record its fact came from, the way the prepared context or the tool result names it, for example "opportunity: Platform expansion", "call brief, 12 Nov", "issue #412" or "product docs". Copy the source the prepared context gives for that fact. A section heading of the prepared context (such as "Deals" or "Who and why"), "prepared context" and a bare tool name are never sources. With no real source, give no bullet. Never invent facts.',
+  'Every bullet must cite the record its fact came from, the way the prepared context or the tool result names it, for example "ticket #4821", "call notes, 12 Nov", "issue #412" or "product docs". Copy the source the prepared context gives for that fact. A section heading of the prepared context (such as "Who" or "Open items"), "prepared context" and a bare tool name are never sources. With no real source, give no bullet. Never invent facts.',
   'Never repeat or rephrase an earlier bullet.',
-  'Anonymise other customers by industry and size, for example "a large financial services customer". Never name another customer; only the current account may be named.',
-  'Answer from the prepared context first. You may call the provided tools for facts the prepared context lacks, such as another customer\'s experience or a competitor with no notes. Lookups are limited, so call a tool only for a real gap.',
-  "Never put a customer's or person's name in a search of public documentation.",
+  'Other organisations and people the tools mention stay anonymous unless they are part of this meeting: describe them by kind and size, for example "a large financial services company".',
+  'Answer from the prepared context first. You may call the provided tools for facts the prepared context lacks, such as how a similar case went elsewhere, or a product or topic with no notes. Lookups are limited, so call a tool only for a real gap.',
+  "Never put an organisation's or person's name in a search of public documentation.",
   'When nothing useful applies, reply {"bullets":[]}.',
 ].join('\n')
 
-/** what a briefing says when the call has no customer account (#57); prepare.ts writes these lines */
-const NO_ACCOUNT_LINES = [/^no customer account for this call\b/i, /^couldn['’]t match this call to a meeting or account\b/i]
+/** what a briefing says when nothing in the tools matches the call (#57, #71); prepare.ts writes these lines (older wording kept) */
+const NO_RECORD_LINES = [/^no (?:matching record|customer account) for this call\b/i, /^couldn['’]t match this call to a meeting or (?:record|account)\b/i]
 
-/** the call has a customer account: a briefing exists and did not say it found none (#57) */
-export function hasCustomerAccount(context: PreparedContext | null): boolean {
+/** the call matched a record: a briefing exists and did not say it found none (#57) */
+export function hasMatchedRecord(context: PreparedContext | null): boolean {
   const first = context?.text?.trim().split('\n')[0]?.trim() ?? ''
-  return !!first && !NO_ACCOUNT_LINES.some(r => r.test(first))
+  return !!first && !NO_RECORD_LINES.some(r => r.test(first))
 }
 
-export const NO_ACCOUNT_RULE = 'This call has no customer account. Give general facts only: product docs, known issues, how a feature works, and patterns seen across customers, generalised and anonymised (for example "a common pattern among fintech startups"). Never one customer\'s account, deal, opportunity, contact or action-item details.'
+export const NO_RECORD_RULE = 'Nothing in the tools matches this call. Give general facts only: documentation, known issues, how something works, and patterns seen across many records, generalised and anonymised (for example "a common pattern among fintech startups"). Never details from one organisation\'s or person\'s records.'
 
-/** tools that fetch a customer's records: left out of a call with no customer account (#57) */
-const CUSTOMER_RECORD = /account|opportunit|deal|contact|action_item|interaction|customer|pipeline|poc|tracker|call_brief|transcript|note/i
+/** tools that fetch one organisation's or person's records (CRM-style names): left out of a call with no matching record (#57) */
+const SINGLE_RECORD = /account|opportunit|deal|contact|action_item|interaction|customer|pipeline|poc|tracker|call_brief|transcript|note/i
 export function generalTools(tools: OleTool[]): OleTool[] {
-  return tools.filter(t => !CUSTOMER_RECORD.test(t.tool))
+  return tools.filter(t => !SINGLE_RECORD.test(t.tool))
 }
 
 /** The system and user messages for one bullets turn. */
@@ -74,7 +74,7 @@ export function buildBulletsPrompt(args: { context: PreparedContext | null; line
     const about = [context.meetingTitle ? `meeting: ${context.meetingTitle}` : null, context.focus ? `focus: ${context.focus}` : null].filter(Boolean).join(', ')
     parts.push(`Prepared context${about ? ` (${about})` : ''}:\n${context.text}`)
   } else parts.push(`No context prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.focus ? ` Focus: ${context.focus}` : ''}`)
-  if (!hasCustomerAccount(context)) parts.push(NO_ACCOUNT_RULE)
+  if (!hasMatchedRecord(context)) parts.push(NO_RECORD_RULE)
   const earlier = previous.slice(0, PREVIOUS_IN_PROMPT)
   const mark = (b: OleBullet) => b.rating === 'down' ? ' (the user marked this not useful)' : b.rating === 'up' ? ' (the user marked this useful)' : ''
   parts.push(earlier.length ? `Earlier bullets (do not repeat):\n${earlier.map(b => `- ${b.text}${mark(b)}`).join('\n')}` : 'Earlier bullets: none')

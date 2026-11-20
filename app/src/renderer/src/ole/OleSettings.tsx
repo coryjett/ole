@@ -327,7 +327,7 @@ export function ModelSelect({ id, label, hint, role, value, options, note, disab
 
 
 const MAX_WARMUP = 8000
-const WARMUP_PLACEHOLDER = "How should Ole prepare? e.g. Look up the account for the meeting's company, its open deals and their stage, open support issues, and the last two calls. Lead with risks."
+const WARMUP_PLACEHOLDER = "How should Ole prepare? For example: Sales: the account, its open deals and the last two calls, risks first. Support: the customer's open tickets and recent incidents. Recruiting: the candidate's profile, feedback so far and the role's must-haves."
 
 function WarmupInstructions({ value, disabled, onSave }: { value: string; disabled: boolean; onSave: (v: string) => void }) {
   const [draft, setDraft] = useState(value)

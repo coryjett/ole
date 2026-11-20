@@ -14,7 +14,7 @@ vi.mock('../../src/main/ole/mcp', async (orig) => {
 })
 const openaiChat = vi.fn(async (req: { messages: Array<{ role: string; content: string }> }) => {
   const sys = req.messages[0].content
-  if (sys.includes('live customer call')) return { role: 'assistant', content: JSON.stringify({ bullets: [{ text: 'Renewal is in March', source: 'opportunity: Renewal' }] }) }
+  if (sys.includes('surfacing short context bullets')) return { role: 'assistant', content: JSON.stringify({ bullets: [{ text: 'Renewal is in March', source: 'opportunity: Renewal' }] }) }
   if (sys.includes('question the user typed')) return { role: 'assistant', content: JSON.stringify({ answer: 'March.', source: 'opportunity: Renewal' }) }
   return { role: 'assistant', content: '## Before you join\n- x' }
 })

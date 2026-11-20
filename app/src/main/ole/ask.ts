@@ -3,7 +3,7 @@
 import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
-import { hasCustomerAccount, NO_ACCOUNT_RULE, readableSource } from './bullets'
+import { hasMatchedRecord, NO_RECORD_RULE, readableSource } from './bullets'
 
 /** lookup rounds before the model must answer */
 const TOOL_ROUNDS = 2
@@ -18,8 +18,8 @@ export const ASK_SYSTEM = [
   '"answer": one to three short sentences, the fact first. No preamble, no advice unless asked.',
   '"source": the record the answer came from, named the way the briefing or the tool result names it. "url": its web address exactly as given there; leave it out when there is none. Never make one up.',
   'Answer from the briefing and the call first; call a tool only when they lack the answer.',
-  "Never put a customer's or person's name in a search of public documentation.",
-  'Anonymise other customers by industry and size. Never invent facts: when you cannot find the answer, say so in the answer and leave source out.',
+  "Never put an organisation's or person's name in a search of public documentation.",
+  'Other organisations and people stay anonymous unless they are part of this meeting. Never invent facts: when you cannot find the answer, say so in the answer and leave source out.',
 ].join('\n')
 
 const clock = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
@@ -32,7 +32,7 @@ export async function answerQuestion(o: {
     o.lines.length ? `The call so far (latest):\n${o.lines.slice(-RECENT_LINES).map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}` : 'Nothing said yet.',
     `Question: ${o.question}`,
   ]
-  if (!hasCustomerAccount(o.context)) parts.splice(2, 0, NO_ACCOUNT_RULE)
+  if (!hasMatchedRecord(o.context)) parts.splice(2, 0, NO_RECORD_RULE)
   const messages: ChatMessage[] = [{ role: 'system', content: ASK_SYSTEM }, { role: 'user', content: parts.join('\n\n') }]
   const allowed = new Set(o.tools.map(t => t.name))
   const tools = o.tools.length ? { tools: toOpenAiTools(o.tools) } : {}
