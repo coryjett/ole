@@ -9,4 +9,4 @@ You need a Mac (Apple Silicon), an **MCP server** address and key, and an **Open
 5. **Call.** Start recording when the call starts and tell people you're recording. Context pops up as you talk.
 6. **After.** Stop recording. The summary, transcript and context are saved with the meeting.
 
-Updates install themselves on restart. Stuck? Check the VPN, then press **Test** in Settings. Still stuck? [Open an issue](https://github.com/coryjett/ole/issues).
+Updates install themselves on restart. Stuck? Press **Test** next to the server in Settings. Still stuck? [Open an issue](https://github.com/coryjett/ole/issues).

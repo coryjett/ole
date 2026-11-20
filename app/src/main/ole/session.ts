@@ -151,7 +151,7 @@ export function hookOle(d: Deps): {
   }
 }
 
-/** Settings' Test button waits at most this long: a server behind a VPN that is off never answers */
+/** Settings' Test button waits at most this long: a server that can't be reached never answers */
 export const TEST_TIMEOUT_MS = 10_000
 
 /** Settings' Test button: how many read-only tools the server offers Ole, or why it can't be reached. */
@@ -164,7 +164,7 @@ export async function testServer(server: McpServerConfig, key: string | null, o:
   } catch (e) {
     const kind = e instanceof McpError ? e.kind : null
     if (kind === 'auth') return { ok: false, tools: 0, error: key ? 'The server rejected the key' : 'The server needs a key: paste it and Save, then Test' }
-    if (kind === 'timeout' || kind === 'unreachable') return { ok: false, tools: 0, error: `Couldn't reach the server in ${TEST_TIMEOUT_MS / 1000} s. VPN on?` }
+    if (kind === 'timeout' || kind === 'unreachable') return { ok: false, tools: 0, error: `Couldn't reach the server in ${TEST_TIMEOUT_MS / 1000} s. Check its address.` }
     return { ok: false, tools: 0, error: e instanceof Error ? e.message : String(e) }
   }
 }

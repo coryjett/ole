@@ -77,7 +77,7 @@ export function createMcpClient({ key, url, version = '0.0.0', fetch = globalThi
     try {
       res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', ...payload }), signal })
     } catch {
-      throw aborted() ?? new McpError('MCP server unreachable (VPN?)', 'unreachable')
+      throw aborted() ?? new McpError('MCP server unreachable', 'unreachable')
     }
     if (res.status === 401 || res.status === 403) throw new McpError('The MCP server rejected the key', 'auth')
     if (res.status === 404 && sentSession) throw new StaleSession()
@@ -90,7 +90,7 @@ export function createMcpClient({ key, url, version = '0.0.0', fetch = globalThi
 
     let body: string
     try { body = await res.text() } catch {
-      throw aborted() ?? new McpError('MCP server unreachable (VPN?)', 'unreachable')
+      throw aborted() ?? new McpError('MCP server unreachable', 'unreachable')
     }
     let messages: unknown[]
     if ((res.headers.get('content-type') ?? '').includes('text/event-stream')) messages = parseSse(body)
