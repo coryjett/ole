@@ -1,0 +1,36 @@
+# Changes to Yogurt's own code
+
+A running ledger of every change Ole makes to Yogurt-owned files: anything outside `app/src/main/ole/`, `app/src/renderer/src/ole/` and `app/test/ole/`. It has two purposes:
+
+- **Upstream candidates**: general fixes or features Yogurt would likely want. Each can become a PR to [FrigadeHQ/yogurt](https://github.com/FrigadeHQ/yogurt), which also removes a conflict point from future upstream merges.
+- **Ole-only changes**: hooks and branding that exist only because Ole is built on Yogurt. They stay in the fork and are where upstream merges can conflict.
+
+**Rule:** a PR that touches a Yogurt-owned file adds or updates its entry here in the same PR. The baseline is the last upstream merge (Yogurt `b9a03dd`, Ole #69); `git diff b9a03dd origin/main -- app/src ':!app/src/main/ole' ':!app/src/renderer/src/ole'` lists the current changes.
+
+## Upstream candidates
+
+| Change | Ole issue / PR | Yogurt files | Pitch for upstream | State |
+|---|---|---|---|---|
+| Name the speaker when the call has exactly one other attendee and the call app doesn't say who is talking; stay "Them" with two or more | #129 | `main/callNames/attribute.ts`, `main/callNames/index.ts` | Better names in 1:1 calls where the call app hides the active speaker | Not submitted. Tidy first: the new `onlyOther` function sits between `nameFor`'s doc comment and `nameFor`, so the comment now labels the wrong function; add a test for the one-attendee case if it isn't already covered upstream |
+| Read the AM/PM marker the way it appears in a written time (6:00 and 18:00 with minutes) instead of midnight and noon with hour12 forced | #129 | `shared/audioUpload.ts` | Fixes time parsing in uploads for locales whose marker differs in a full time (e.g. Thai "น.") | Not submitted. Needs a test showing the locale it fixes |
+| Keep checking for updates after one is ready, so a newer release replaces the waiting one; check on wake from sleep; never hide the ready state on a later check, "no update" or an error | #101 | `main/updates.ts` | A downloaded update that's been superseded is installed today; a Mac that slept misses releases | Not submitted. Leave out the Ole-only part (15-minute checks for pre-release builds) or offer it as an option |
+| During a recording, the update popover's second button reads "After the call" and keeps the pill instead of hiding the version for the session | #105 | `renderer/src/components/UpdateReady.tsx`, `shared/locales/*.json` (32 translations) | "Later" during a call currently hides the update until Settings | Not submitted |
+| Make the "Update ready" pill stand out (filled accent pill with a dot, reduced-motion safe) | #101 | `renderer/src/components/UpdateReady.tsx`, `renderer/src/styles.css` | The grey label is easy to miss | Not submitted; a design call for upstream |
+| Spelling to American English in comments and messages | #129 | `main/store.ts`, `main/permissions.ts`, `main/tray.ts`, `main/trayMenu.ts`, `main/windowChrome.ts`, `renderer/src/App.tsx`, `shared/onboarding.ts`, `shared/transcriptFind.ts`, `main/callNames/parse.ts` | Consistency only | Probably not worth submitting: it touches many files for no behavior change. Consider reverting these comment-only edits to cut merge conflicts |
+
+## Ole-only changes
+
+| Change | Ole issue / PR | Yogurt files |
+|---|---|---|
+| Ole's IPC, settings fields and live-state types | many (#33, #52, #89, #101, #118/#122, …) | `preload/index.ts`, `shared/types.ts`, `main/settings.ts` |
+| Wiring Ole into the app: session, providers, servers, keys, per-meeting files, notes, calendar, capture protection | many | `main/index.ts` |
+| OpenAI transcription (chunked and streaming) behind the Transcribe seam | #85, #89 | `main/asr/index.ts` |
+| Ole tabs, quick-note bar and docked Ask on the note page | #108, #122 | `renderer/src/screens/Note.tsx` |
+| Ask button hands over to Ole's docked Ask during a call (one line) | #122 | `renderer/src/components/Chat.tsx` |
+| Ole panel on Home | #35 | `renderer/src/screens/Home.tsx` |
+| Ole settings section | #10 and later | `renderer/src/screens/Settings.tsx` |
+| Onboarding steps for the OpenAI key and MCP servers | #18 | `renderer/src/screens/Onboarding.tsx` |
+| Live bullets in the floating widget; widget links open in the browser | #42 | `renderer/src/windows/Widget.tsx`, `main/widget.ts` |
+| Branding: product name, logo, app id, data folder, export credit | brand | `shared/brand.ts`, `shared/i18n.ts`, `shared/logo.ts`, `renderer/src/components/Logo.tsx`, `renderer/index.html`, `renderer/src/assets/ole-mark.png`, `main/paths.ts`, `shared/exportNotes.ts`, `resources/tray*.png` |
+| Releases from Ole's own feed with the "Ole Local" certificate | release | `scripts/release-mac.sh` (plus Ole's own `ole-release.sh`, `release-check.mjs`, `ole-update-check.sh`) |
+| 15-minute update checks for pre-release builds | #101 | `main/updates.ts` |
