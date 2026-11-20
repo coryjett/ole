@@ -18,9 +18,9 @@ if (!files.length) {
 
 // the engine is TypeScript; vite's module runner loads it as the tests do
 const load = async (rel) => (await runnerImport(fileURLToPath(new URL(rel, import.meta.url)), { configFile: false, logLevel: 'silent' })).module
-const { replayCall, summarise } = await load('../src/main/ole/replay.ts')
+const { replayCall, summarise, scrub, liveChat } = await load('../src/main/ole/replay.ts')
 
-let chat
+let chat, liveKey
 if (live) {
   const { openaiChat, OPENAI_BASE_URL } = await load('../src/main/ole/openaiModel.ts')
   const key = process.env.OLE_REPLAY_API_KEY?.trim()
@@ -32,13 +32,15 @@ if (live) {
   }
   const model = process.env.OLE_REPLAY_MODEL?.trim() || 'gpt-5.6-luna'
   console.error(`--live: the fixture transcript and briefing are sent to ${host}`)
-  chat = (req) => openaiChat({ key, model, baseUrl, ...req })
+  liveKey = key
+  // only the request fields the engine sends; the validated key, model and base URL always win
+  chat = liveChat(openaiChat, { key, model, baseUrl })
 }
 
 const reports = []
 for (const file of files) {
   const report = await replayCall(JSON.parse(readFileSync(file, 'utf8')), chat ? { chat } : {})
   reports.push(report)
-  if (!json) console.log(summarise(report) + '\n')
+  if (!json) console.log(scrub(summarise(report), [liveKey]) + '\n')
 }
-if (json) console.log(JSON.stringify(reports.length === 1 ? reports[0] : reports, null, 2))
+if (json) console.log(scrub(JSON.stringify(reports.length === 1 ? reports[0] : reports, null, 2), [liveKey]))

@@ -1,6 +1,6 @@
 // Ole: replay a saved call through the live bullets engine and measure what it shows (#66).
 // Dev only: scripts/ole-replay.mjs and the tests import this; nothing in the app does (a test pins that).
-import { callKey, createBulletsEngine, generalTools, hasCustomerAccount, parseBullets, type CallToolFn, type ChatFn, type ToolCall, type TranscriptLine } from './bullets'
+import { callKey, createBulletsEngine, generalTools, hasCustomerAccount, parseBullets, type CallToolFn, type ChatFn, type ChatMessage, type ToolCall, type TranscriptLine } from './bullets'
 import { isLiveTool } from './tools'
 import type { OleBullet, OleTool, PreparedContext } from './types'
 
@@ -28,7 +28,7 @@ export type ReplayFixture = {
   settings?: { minIntervalMs?: number; windowMs?: number; maxLookupsPerMinute?: number }
 }
 
-export type TurnReport = { atMs: number; back: number; shown: number; withoutSource: number; repeated: number; lookups: number; failed?: string }
+export type TurnReport = { atMs: number; back: number; shown: number; withoutSource: number; repeated: number; lookups: number; failed?: FailureKind }
 export type ShownBullet = { atMs: number; text: string; source: string; words: number; heard: boolean; quote: boolean; url: boolean }
 export type ReplayReport = {
   call: string
@@ -55,18 +55,36 @@ export function parseTurnLog(line: string): Omit<TurnReport, 'atMs'> | null {
     return { back, shown, withoutSource, repeated, lookups }
   }
   const failed = line.match(/^ole bullets: turn failed: (.*)$/)
-  return failed ? { back: 0, shown: 0, withoutSource: 0, repeated: 0, lookups: 0, failed: redactReason(failed[1]) } : null
+  return failed ? { back: 0, shown: 0, withoutSource: 0, repeated: 0, lookups: 0, failed: classifyFailure(failed[1]) } : null
 }
 
-/** a failure reason short enough to share: no URLs, nothing key-shaped, at most 120 chars */
-export function redactReason(reason: string): string {
-  const out = reason
-    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url]')
-    .replace(/\b(?:sk|pk|rk|key|tok|ghp|gho|xox[a-z]?)[-_][A-Za-z0-9_*-]{6,}/gi, '[key]')
-    .replace(/\bBearer\s+\S+/gi, 'Bearer [key]')
-    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[key]')
-    .replace(/\s+/g, ' ').trim()
-  return out.length > 120 ? `${out.slice(0, 119)}…` : out
+export type FailureKind = `http ${number}` | 'timeout' | 'network' | 'parse' | 'error'
+
+/**
+ * A failed turn as a coarse kind, never its text: the engine's error message can carry a server's words, a URL or
+ * part of a key, so the report keeps only an HTTP status or one of timeout, network, parse, error.
+ */
+export function classifyFailure(reason: string): FailureKind {
+  const status = reason.match(/\((\d{3})\)/)?.[1] ?? reason.match(/(?:^|\b(?:status|http|code)\s*:?\s*)([45]\d\d)\b/i)?.[1]
+  if (status) return `http ${Number(status)}`
+  if (/rejected the api key|unauthori[sz]ed/i.test(reason)) return 'http 401'
+  if (/time[d ]?\s?out|abort/i.test(reason)) return 'timeout'
+  if (/fetch failed|network|socket|ECONN\w*|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|getaddrinfo/i.test(reason)) return /ETIMEDOUT/.test(reason) ? 'timeout' : 'network'
+  if (/json|parse|unexpected token/i.test(reason)) return 'parse'
+  return 'error'
+}
+
+/**
+ * The --live ChatFn: only the request fields the engine sends go through, and the validated key, model and base URL
+ * are pinned last, so nothing in a request can redirect it or swap the key.
+ */
+export function liveChat(send: (o: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; key: string; model: string; baseUrl: string }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>, pinned: { key: string; model: string; baseUrl: string }): ChatFn {
+  return (req) => send({ messages: req.messages, tools: req.tools, response_format: req.response_format, key: pinned.key, model: pinned.model, baseUrl: pinned.baseUrl })
+}
+
+/** every exact occurrence of each secret (an API key, say) taken out of text that is about to be printed */
+export function scrub(text: string, secrets: Array<string | null | undefined>): string {
+  return secrets.filter((x): x is string => !!x && x.length >= 4).reduce((t, x) => t.split(x).join('[key]'), text)
 }
 
 /** the tools the app would offer this call (#57): lookup-style only, and no customer records on a call without an account */

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { liveToolsFor, parseTurnLog, redactReason, replayCall, replaySettings, summarise, virtualClock, type ReplayFixture } from '../../src/main/ole/replay'
+import { liveToolsFor, parseTurnLog, classifyFailure, liveChat, replayCall, scrub, replaySettings, summarise, virtualClock, type ReplayFixture } from '../../src/main/ole/replay'
 import type { ChatFn } from '../../src/main/ole/bullets'
 
 const dir = join(__dirname, 'fixtures', 'replay')
@@ -39,7 +39,7 @@ describe('replaying saved calls (#66)', () => {
       '  headlines: 8 to 9 words (median 8.5), longest 63 chars, 0 over ten words, 0 cut',
       '  quiet: longest 2:42 with nothing new (2:23 to 5:05); first bullet at 0:53',
     ].join('\n'))
-    expect(r.timeline[2]).toEqual({ atMs: 90_000, back: 0, shown: 0, withoutSource: 0, repeated: 0, lookups: 0, failed: '429 rate limited' })
+    expect(r.timeline[2]).toEqual({ atMs: 90_000, back: 0, shown: 0, withoutSource: 0, repeated: 0, lookups: 0, failed: 'http 429' })
     // two model replies of 4 s each: the bullet lands 8 s after its turn started
     expect(r.shown.map(s => s.atMs)).toEqual([53_000, 143_000])
     expect(r.lookups).toEqual({ asked: 3, made: 2, refused: 1, unrecorded: 0 })
@@ -111,20 +111,40 @@ describe('replay matches the app (security review)', () => {
     expect(summarise(await replayCall(f))).toBe(summarise(await replayCall(fixture('steady-call'))))
   })
 
-  it('a failure reason in the report is short, with no URLs or keys', async () => {
-    expect(redactReason('OpenAI request failed (401): bad key sk-proj-abcdEFGH1234567890 at https://llm.example.com/v1/chat?k=1')).toBe('OpenAI request failed (401): bad key [key] at [url]')
-    expect(redactReason('Authorization: Bearer abc.def.ghi')).toBe('Authorization: Bearer [key]')
-    expect(redactReason('token 0123456789abcdef0123456789abcdef0123 leaked')).toBe('token [key] leaked')
-    expect(redactReason('word '.repeat(60))).toHaveLength(120)
+  it('a failed turn is reported as a coarse kind, never its text', async () => {
+    expect(classifyFailure('OpenAI request failed (401): bad key sk-proj-abcd at https://llm.example.com/v1')).toBe('http 401')
+    expect(classifyFailure('429 rate limited')).toBe('http 429')
+    expect(classifyFailure('status: 503 upstream')).toBe('http 503')
+    expect(classifyFailure('OpenAI rejected the API key')).toBe('http 401')
+    expect(classifyFailure('The operation was aborted due to timeout')).toBe('timeout')
+    expect(classifyFailure('fetch failed')).toBe('network')
+    expect(classifyFailure('connect ECONNREFUSED 10.0.0.1:443')).toBe('network')
+    expect(classifyFailure('Unexpected token < in JSON at position 0')).toBe('parse')
+    expect(classifyFailure('boom, see https://example.com/x for 1234 details')).toBe('error')
     const f: ReplayFixture = { name: 'fail', briefing: { text: '' }, transcript: [{ speaker: 'A', text: 'hello', startMs: 0 }], turns: [{ replies: [{ error: 'denied for sk-live-0123456789abcdef by https://api.example.com/v1' }] }] }
-    expect((await replayCall(f)).timeline[0].failed).toBe('denied for [key] by [url]')
+    const r = await replayCall(f)
+    expect(r.timeline[0].failed).toBe('error')
+    expect(JSON.stringify(r)).not.toMatch(/sk-live|api\.example\.com/)
+  })
+
+  it('a live request carries only the engine fields, with the pinned key, model and base URL', async () => {
+    const send = vi.fn().mockResolvedValue({ content: '{"bullets":[]}' })
+    const chat = liveChat(send, { key: 'k1', model: 'm1', baseUrl: 'https://llm.example.com/v1' })
+    const messages = [{ role: 'user' as const, content: 'hi' }]
+    await chat({ messages, tools: [], response_format: { type: 'json_object' }, key: 'evil', baseUrl: 'https://evil.example.com', model: 'x', fetch: () => {} } as unknown as Parameters<ChatFn>[0])
+    expect(send).toHaveBeenCalledWith({ messages, tools: [], response_format: { type: 'json_object' }, key: 'k1', model: 'm1', baseUrl: 'https://llm.example.com/v1' })
+  })
+
+  it('a live key is scrubbed from printed output wherever it appears', () => {
+    expect(scrub('a sk-test-123456 b sk-test-123456', ['sk-test-123456'])).toBe('a [key] b [key]')
+    expect(scrub('nothing here', [undefined, null, '', 'abc'])).toBe('nothing here')
   })
 })
 
 describe('replay pieces', () => {
   it('parses the engine log line, and only that', () => {
     expect(parseTurnLog('ole bullets: 3 back, 1 shown, 1 without a source, 1 repeated, 2 lookups')).toEqual({ back: 3, shown: 1, withoutSource: 1, repeated: 1, lookups: 2 })
-    expect(parseTurnLog('ole bullets: turn failed: boom')).toMatchObject({ failed: 'boom' })
+    expect(parseTurnLog('ole bullets: turn failed: boom')).toMatchObject({ failed: 'error' })
     expect(parseTurnLog('something else')).toBeNull()
   })
 
