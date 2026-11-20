@@ -104,12 +104,8 @@ export function resultNames(result: string, name: string): boolean {
   let v: unknown
   try { v = JSON.parse(text) } catch { return false }
   if (!v || typeof v !== 'object') return false
-  if (namesRecord(v, name)) return true
-  if (!Array.isArray(v)) {
-    const matched = Object.entries(v as Record<string, unknown>).some(([k, x]) => MATCH_KEY.test(k) && x !== null && x !== false && x !== '' && typeof x !== 'object')
-    if (matched && mentions(text, name) > 0) return true
-  }
-  return false
+  // only a record field naming it counts; a match flag with the name in free text is an echo (#135)
+  return namesRecord(v, name)
 }
 
 export type Candidate = { name: string; resolved: true }

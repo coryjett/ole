@@ -571,11 +571,12 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
           reuse = (sameEvent(event, autoEvent) && (!named || named === autoEvent.title)) || (!event && !!named && named === autoEvent.title && startedAt < autoEvent.end)
           if (reuse) callStartsAt = autoEvent.start
           else if (prepared === before) { prepared = null; send() }
-        } else if (manualFresh && before?.focus) {
+        } else if (manualFresh && (before?.focus || before?.meetingTitle)) {
           // prepared by hand just before: the call's, unless a calendar event on now is clearly about someone else
           event = await calendarEvent(); looked = true
           if (meetingId !== m.id) return
-          if (event && mentions(event.title, before.focus) === 0) {
+          // the briefing's subject: its focus, else the title it was prepared for (#135)
+          if (event && mentions(event.title, (before.focus || before.meetingTitle)!) === 0) {
             reuse = false
             fromEvent = true
             if (prepared === before) { prepared = null; send() }
@@ -591,7 +592,8 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
         // "Meeting", "Zoom call", "Untitled": a default title says nothing, so the calendar event on now names it (#44, #56)
         if (!named && !looked) event = await calendarEvent()
         if (meetingId !== m.id) return
-        const useEvent = named && !fromEvent ? null : event
+        // a call with its own title never takes another event's start or note (#135)
+        const useEvent = named ? null : event
         const title = named ?? useEvent?.title ?? null
         callStartsAt = useEvent?.start ?? null
         preparedFromDefault = !title
