@@ -9,11 +9,11 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() },
 }))
 const openaiChat = vi.fn()
-vi.mock('../../src/main/ole/openaiModel', () => ({ openaiChat }))
-const { hookOle } = await import('../../src/main/ole/session')
-const { writeSecret } = await import('../../src/main/ole/secrets')
-const { setProviders } = await import('../../src/main/ole/providers')
-const { setServers } = await import('../../src/main/ole/servers')
+vi.mock('../../src/main/ole/core/openai', () => ({ openaiChat }))
+const { hookOle } = await import('../../src/main/ole/yogurt/session')
+const { writeSecret } = await import('../../src/main/ole/yogurt/secrets')
+const { setProviders } = await import('../../src/main/ole/yogurt/providers')
+const { setServers } = await import('../../src/main/ole/yogurt/servers')
 
 describe('Assistant on Local turns Prepare and live context off (#11)', () => {
   it('refuses to prepare and says why, even with an OpenAI key and a server saved', async () => {

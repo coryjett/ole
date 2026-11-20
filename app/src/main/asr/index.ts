@@ -15,8 +15,8 @@ import { createTranscriber, type Line, type Transcribe } from './transcribe'
 import { meetingWords, respell, whisperPrompt } from '../vocab'
 import type { TranscriptPartial } from '../../shared/types'
 import type { Chunk } from './chunker'
-import { createOpenAITranscriber } from '../ole/openaiTranscribe'
-import { createOpenAIStreaming, type Streaming, type WsFactory } from '../ole/openaiStream'
+import { createOpenAITranscriber } from '../ole/yogurt/openaiTranscribe'
+import { createOpenAIStreaming, type Streaming, type WsFactory } from '../ole/yogurt/openaiStream'
 
 /**
  * Live transcription of the meeting being recorded: the capture's audio goes through a pipeline (chunks, whisper-server,

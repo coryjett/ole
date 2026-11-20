@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() }, safeStorage: { isEncryptionAvailable: () => false } }))
-const { adoptOpenAI, revertOpenAI, setProviders, providersOf } = await import('../../src/main/ole/providers')
+const { adoptOpenAI, revertOpenAI, setProviders, providersOf } = await import('../../src/main/ole/yogurt/providers')
 const { loadSettings } = await import('../../src/main/settings')
 
 let file = ''

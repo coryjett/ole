@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { collectTools, collectWarmupPrompts, createToolRunner, WARMUP_PROMPT, isReadOnly, MAX_TOOLS, RESULT_CAP, toolName, toOpenAiTools, type ToolServer } from '../../src/main/ole/tools'
-import { McpError, type McpClient, type McpPrompt, type McpTool } from '../../src/main/ole/mcp'
-import type { McpServerConfig } from '../../src/main/ole/types'
+import { collectTools, collectWarmupPrompts, createToolRunner, WARMUP_PROMPT, isReadOnly, MAX_TOOLS, RESULT_CAP, toolName, toOpenAiTools, type ToolServer } from '../../src/main/ole/core/tools'
+import { McpError, type McpClient, type McpPrompt, type McpTool } from '../../src/main/ole/core/mcp'
+import type { McpServerConfig } from '../../src/main/ole/core/types'
 
 const cfg = (id: string, name = id, enabled = true): McpServerConfig => ({ id, name, url: `https://${id}.test/mcp`, enabled })
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createMcpClient, McpError, parseSse, PROTOCOL_VERSION } from '../../src/main/ole/mcp'
+import { createMcpClient, McpError, parseSse, PROTOCOL_VERSION } from '../../src/main/ole/core/mcp'
 
 const url = 'https://mcp.test/mcp'
 const key = 'super-secret-key'

@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { liveToolsFor, parseTurnLog, classifyFailure, liveChat, replayCall, scrub, replaySettings, summarise, virtualClock, type ReplayFixture } from '../../src/main/ole/replay'
-import type { ChatFn } from '../../src/main/ole/bullets'
+import { liveToolsFor, parseTurnLog, classifyFailure, liveChat, replayCall, scrub, replaySettings, summarise, virtualClock, type ReplayFixture } from '../../src/main/ole/core/replay'
+import type { ChatFn } from '../../src/main/ole/core/bullets'
 
 const dir = join(__dirname, 'fixtures', 'replay')
 const fixture = (name: string): ReplayFixture => JSON.parse(readFileSync(join(dir, `${name}.json`), 'utf8'))

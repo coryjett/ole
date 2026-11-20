@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { createBulletsEngine, type ChatFn, type ChatMessage } from '../../src/main/ole/bullets'
-import { createTurnRecorder, parseRecordedCall, TURNS_MAX, type RecordedTurn } from '../../src/main/ole/turnRecorder'
-import { accountFromTitle, anonymiser, buildReplayFixture, exportFileName, type ExportSegment } from '../../src/main/ole/replayExport'
-import { replayCall, virtualClock } from '../../src/main/ole/replay'
-import { RESULT_CAP } from '../../src/main/ole/tools'
-import type { OleBullet, OleTool, PreparedContext } from '../../src/main/ole/types'
+import { createBulletsEngine, type ChatFn, type ChatMessage } from '../../src/main/ole/core/bullets'
+import { createTurnRecorder, parseRecordedCall, TURNS_MAX, type RecordedTurn } from '../../src/main/ole/core/turnRecorder'
+import { accountFromTitle, anonymiser, buildReplayFixture, exportFileName, type ExportSegment } from '../../src/main/ole/core/replayExport'
+import { replayCall, virtualClock } from '../../src/main/ole/core/replay'
+import { RESULT_CAP } from '../../src/main/ole/core/tools'
+import type { OleBullet, OleTool, PreparedContext } from '../../src/main/ole/core/types'
 import { exportMessage, OleExportReplayView } from '../../src/renderer/src/ole/OleSavedBullets'
 
 const user = (content = 'Now: …'): ChatMessage[] => [{ role: 'system', content: 'sys' }, { role: 'user', content }]

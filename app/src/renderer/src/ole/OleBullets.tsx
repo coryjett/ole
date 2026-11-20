@@ -1,7 +1,7 @@
 // Ole: the live context bullets, newest first, each with its source. The list has a fixed height and scrolls, and only
 // the newest few are open; older ones fold behind "Show N earlier", so a long call never pushes the notes away (#38).
 import { useState } from 'react'
-import type { OleBullet } from '../../../main/ole/types'
+import type { OleBullet } from '../../../main/ole/core/types'
 
 export type OlePrepared = { meetingTitle: string | null; focus: string | null }
 

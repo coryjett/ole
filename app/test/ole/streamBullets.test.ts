@@ -2,11 +2,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { createBulletStream } from '../../src/main/ole/bulletStream'
-import { createBulletsEngine, type ChatFn, type ChatMessage } from '../../src/main/ole/bullets'
-import { openaiChat } from '../../src/main/ole/openaiModel'
-import { replayCall, type ReplayFixture } from '../../src/main/ole/replay'
-import type { OleBullet } from '../../src/main/ole/types'
+import { createBulletStream } from '../../src/main/ole/core/bulletStream'
+import { createBulletsEngine, type ChatFn, type ChatMessage } from '../../src/main/ole/core/bullets'
+import { openaiChat } from '../../src/main/ole/core/openai'
+import { replayCall, type ReplayFixture } from '../../src/main/ole/core/replay'
+import type { OleBullet } from '../../src/main/ole/core/types'
 
 const collect = (pieces: string[]) => {
   const items: unknown[] = []

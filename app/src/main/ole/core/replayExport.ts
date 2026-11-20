@@ -2,7 +2,7 @@
 // Pure: the session reads the meeting, the briefing and the recorded turns, this builds the file's content.
 import type { ReplayFixture, ReplayReply, ReplayToolCall } from './replayFormat'
 import type { RecordedTurn } from './turnRecorder'
-import { genericTitle } from '../titles'
+import { englishGenericTitle, type GenericTitle } from './titles'
 
 /** a transcript line as Yogurt's store keeps it */
 export type ExportSegment = { track: 'me' | 'them'; speaker?: string | null; text: string; startMs: number; endMs?: number }
@@ -20,6 +20,8 @@ export type ExportInput = {
   /** the recorded bullets turns; none for a call recorded before they were kept (the fixture is then for --live) */
   turns?: RecordedTurn[]
   anonymise?: boolean
+  /** the host's default-title check (OleHost.genericTitle); English by default */
+  genericTitle?: GenericTitle
 }
 
 /** labels the live engine itself gives a line with no name; they name nobody, so anonymising keeps them */
@@ -46,7 +48,7 @@ export function accountFromTitle(title: string): string | null {
  * every link becomes https://example.com/link-N (the same link, the same N) and every email address "[email]";
  * the meeting title (unless it is a default one like "Meeting") and the account before its separator become "Account".
  */
-export function anonymiser(o: { meetingTitle: string; briefingTitle?: string | null; speakers: string[]; attendees: string[] }): {
+export function anonymiser(o: { meetingTitle: string; briefingTitle?: string | null; speakers: string[]; attendees: string[]; genericTitle?: GenericTitle }): {
   speaker(name: string): string
   text(s: string): string
 } {
@@ -71,7 +73,7 @@ export function anonymiser(o: { meetingTitle: string; briefingTitle?: string | n
   }
   for (const t of [o.meetingTitle, o.briefingTitle ?? '']) {
     // "Meeting", "Zoom call": a default title names nothing, and replacing it would rewrite ordinary words
-    if (!t.trim() || genericTitle(t)) continue
+    if (!t.trim() || (o.genericTitle ?? englishGenericTitle)(t)) continue
     add(t, 'Account', 'gi')
     const account = accountFromTitle(t)
     if (account) add(account, 'Account', 'gi')
@@ -113,7 +115,7 @@ const mapStrings = (v: unknown, f: (s: string) => string): unknown =>
 export function buildReplayFixture(i: ExportInput): ReplayFixture {
   const lines = i.segments.filter(s => s.text.trim()).sort((a, b) => a.startMs - b.startMs)
   const speakers = [...new Set(lines.map(lineSpeaker))]
-  const anon = i.anonymise ? anonymiser({ meetingTitle: i.meetingTitle, briefingTitle: i.briefing.meetingTitle, speakers, attendees: (i.attendees ?? []).map(a => a.name) }) : null
+  const anon = i.anonymise ? anonymiser({ meetingTitle: i.meetingTitle, briefingTitle: i.briefing.meetingTitle, speakers, attendees: (i.attendees ?? []).map(a => a.name), genericTitle: i.genericTitle }) : null
   const text = anon ? anon.text : (s: string) => s
   const ends = lines.map(s => s.endMs ?? s.startMs)
   const endMs = ends.length ? Math.max(...ends) : undefined

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { openaiChat } from '../../src/main/ole/openaiModel'
+import { openaiChat } from '../../src/main/ole/core/openai'
 
 const ok = () => new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'hi' } }] }), { status: 200 })
 const bodyOf = (f: ReturnType<typeof vi.fn<typeof fetch>>, i = 0) => JSON.parse(String(f.mock.calls[i][1]?.body))

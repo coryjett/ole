@@ -1,10 +1,7 @@
-import type { Llm } from '../notes/enhance'
-import type { NotesModel } from '../notes/model'
-
 /**
- * Ole: OpenAI as the notes model, behind the same surface as Yogurt's local one (createNotesModel), so the notes,
- * chat and title jobs need no change. The key and model are read on every job, so a Settings change applies to the
- * next one without a restart. The key never goes into an error message or a log.
+ * Ole: the OpenAI chat client (OpenAI or any OpenAI-compatible server, #17). Host-agnostic: plain fetch. The host's
+ * notes-model wrapper (yogurt/openaiModel.ts) streams text through openaiText. The key never goes into an error
+ * message or a log.
  */
 
 export const OPENAI_BASE_URL = 'https://api.openai.com/v1'
@@ -29,7 +26,7 @@ export class OpenAIError extends Error {
 export const OLE_USER_AGENT = 'Ole (+https://github.com/coryjett/ole)'
 
 /** OpenAI needs a key; a custom server (another baseUrl) may run without one (#17) */
-const needKey = (key: string | null | undefined, baseUrl?: string): string => {
+export const needKey = (key: string | null | undefined, baseUrl?: string): string => {
   if (key?.trim()) return key.trim()
   if (baseUrl && baseUrl.replace(/\/+$/, '') !== OPENAI_BASE_URL) return ''
   throw new OpenAIError('Add an OpenAI key in Settings')
@@ -124,31 +121,17 @@ async function readStream(res: Response, onToken: (text: string) => void, signal
   return text
 }
 
-/** Yogurt's notes model surface, answered by OpenAI. Embeddings stay local. */
-export function createOpenAIModel(o: { key: () => string | null; model: () => string; fetch?: typeof fetch; baseUrl?: string | (() => string) }): NotesModel {
-  const baseUrl = () => typeof o.baseUrl === 'function' ? o.baseUrl() : o.baseUrl
-  return {
-    async llm(signal?: AbortSignal): Promise<Llm> {
-      needKey(o.key(), baseUrl())
-      return {
-        contextSize: OPENAI_CONTEXT,
-        count: async (texts) => texts.map((t) => Math.ceil(t.length / 4)),
-        chat: async (prompt, onToken, opts) => {
-          const key = needKey(o.key(), baseUrl())
-          // before: an earlier prompt and its answer, in that order (summary is a local-model hint, not needed here)
-          const messages: OpenAIMessage[] = [
-            ...(opts?.before ?? []).map((content, i): OpenAIMessage => ({ role: i % 2 ? 'assistant' : 'user', content })),
-            { role: 'user', content: prompt },
-          ]
-          const res = await postSampled({ key, model: o.model(), baseUrl: baseUrl(), fetch: o.fetch, signal, messages, stream: true, maxTokens: opts?.maxTokens, temperature: opts?.temperature })
-          return readStream(res, onToken, signal)
-        },
-      }
-    },
-    unload: async () => {},
-    loaded: () => (o.key()?.trim() ? o.model() : undefined),
-    needsLoad: () => false,
-  }
+/**
+ * One streamed text answer to plain messages (no tools), each piece to onToken; resolves with the whole text. What a
+ * host's notes model needs; the temperature and reasoning fallbacks of postSampled apply.
+ */
+export async function openaiText(o: {
+  key: string; model: string; baseUrl?: string; fetch?: typeof fetch; signal?: AbortSignal
+  messages: OpenAIMessage[]; maxTokens?: number; temperature?: number; onToken: (text: string) => void
+}): Promise<string> {
+  const { onToken, ...rest } = o
+  const res = await postSampled({ ...rest, stream: true })
+  return readStream(res, onToken, o.signal)
 }
 
 /** the first choice's message of a non-streamed answer */

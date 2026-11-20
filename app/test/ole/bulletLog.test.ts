@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createBulletsEngine } from '../../src/main/ole/bullets'
-import type { ChatFn } from '../../src/main/ole/bullets'
+import { createBulletsEngine } from '../../src/main/ole/core/bullets'
+import type { ChatFn } from '../../src/main/ole/core/bullets'
 
 const ctx = { meetingTitle: 'Acme', focus: null, text: '## Deals\n- 120k (opportunity: Expansion)', preparedAt: 1 }
 

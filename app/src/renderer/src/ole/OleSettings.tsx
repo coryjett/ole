@@ -2,7 +2,7 @@
 import { MODEL_ADVICE, isRecommended, type ModelRole } from './modelAdvice'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
-import type { AssistantChoice, McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/types'
+import type { AssistantChoice, McpServerConfig, OleProviders, ProviderChoice, SecretName } from '../../../main/ole/core/types'
 
 export type SecretStatus = Partial<Record<SecretName, { set: boolean; masked: string }>>
 export type ServerTestResult = { ok: boolean; tools: number; error?: string; toolList?: Array<{ name: string; description: string }> }
@@ -16,13 +16,13 @@ export type OleSettingsApi = {
   setServers(list: Array<Partial<McpServerConfig> & { name: string; url: string }>): Promise<McpServerConfig[]>
   testServer(id: string): Promise<ServerTestResult>
   /** the saved OpenAI key against OpenAI's model list (#2) */
-  testOpenAI(): Promise<import('../../../main/ole/openaiTest').OpenAITestResult>
+  testOpenAI(): Promise<import('../../../main/ole/core/openaiTest').OpenAITestResult>
   /** the models the saved key can use (#8) */
-  openaiModels(): Promise<import('../../../main/ole/openaiTest').OpenAIModels>
+  openaiModels(): Promise<import('../../../main/ole/core/openaiTest').OpenAIModels>
   /** after a working key is saved: Local providers the person never chose become OpenAI (#10) */
   /** the Custom server's models and a reachability and key check (#17) */
-  customModels(): Promise<import('../../../main/ole/openaiTest').OpenAIModels>
-  testCustom(): Promise<import('../../../main/ole/openaiTest').OpenAITestResult>
+  customModels(): Promise<import('../../../main/ole/core/openaiTest').OpenAIModels>
+  testCustom(): Promise<import('../../../main/ole/core/openaiTest').OpenAITestResult>
   adoptOpenAI(): Promise<{ switched: Array<'transcription' | 'assistant'>; providers: OleProviders }>
   /** undo the switch (undo: true also keeps Local as the person's choice), or put it back when the key is removed */
   revertOpenAI(undo: boolean): Promise<{ reverted: Array<'transcription' | 'assistant'>; providers: OleProviders }>

@@ -1,5 +1,5 @@
-import type { Chunk } from '../asr/chunker'
-import { wavBytes, type Line, type Transcribe } from '../asr/transcribe'
+import type { Chunk } from '../../asr/chunker'
+import { wavBytes, type Line, type Transcribe } from '../../asr/transcribe'
 
 /** 0.3 s at 16 kHz */
 const MIN_SAMPLES = 4800

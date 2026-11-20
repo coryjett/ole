@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { answerQuestion, ASK_SYSTEM, NO_ANSWER } from '../../src/main/ole/ask'
-import { eventNow, pickAutoPrepare, NOW_WINDOW_MS } from '../../src/main/ole/calendarMatch'
-import { protectFromCapture } from '../../src/main/ole/capture'
-import type { ChatFn } from '../../src/main/ole/bullets'
-import type { OleTool } from '../../src/main/ole/types'
+import { answerQuestion, ASK_SYSTEM, NO_ANSWER } from '../../src/main/ole/core/ask'
+import { eventNow, pickAutoPrepare, NOW_WINDOW_MS } from '../../src/main/ole/core/calendarMatch'
+import { protectFromCapture } from '../../src/main/ole/yogurt/capture'
+import type { ChatFn } from '../../src/main/ole/core/bullets'
+import type { OleTool } from '../../src/main/ole/core/types'
 
 const ctx = { meetingTitle: 'Acme', focus: null, text: 'Renewal is 1 March (opportunity: Renewal, https://crm.example/o/9)', preparedAt: 1 }
 const tool: OleTool = { name: 's__search_calls', serverId: 's', serverName: 'S', tool: 'search_calls', description: 'calls', parameters: { type: 'object' } }

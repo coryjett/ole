@@ -1,8 +1,8 @@
 // #83: when the call ends, one compact "From Ole" section joins the meeting's notes.
 import { describe, expect, it } from 'vitest'
-import { EMPTY_MEMORY, fromOleNotes, NOTE_ANSWER_MAX, NOTE_QUESTION_MAX, noteItem } from '../../src/main/ole/callSummary'
-import { NO_ANSWER } from '../../src/main/ole/ask'
-import type { OleAnswer } from '../../src/main/ole/types'
+import { EMPTY_MEMORY, fromOleNotes, NOTE_ANSWER_MAX, NOTE_QUESTION_MAX, noteItem } from '../../src/main/ole/core/callSummary'
+import { NO_ANSWER } from '../../src/main/ole/core/ask'
+import type { OleAnswer } from '../../src/main/ole/core/types'
 
 const memory = { summary: 'They want rate limits for the morning burst.\nPilot starts in January.', openQuestions: ['Is there a free tier?'], commitments: [{ who: 'Me', what: 'Send the benchmark plan' }, { who: '', what: 'Book the security review' }] }
 const answer = (id: string, at: number, question: string, text: string, extra: Partial<OleAnswer> = {}): OleAnswer => ({ id, at, question, text, ...extra })

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { prepareContext, PREPARE_SYSTEM, NO_MATCH_PREFIX } from '../../src/main/ole/prepare'
-import type { OleTool } from '../../src/main/ole/types'
+import { prepareContext, PREPARE_SYSTEM, NO_MATCH_PREFIX } from '../../src/main/ole/core/prepare'
+import type { OleTool } from '../../src/main/ole/core/types'
 
 const tool = (name: string): OleTool => ({ name: `s__${name}`, serverId: 's', serverName: 'S', tool: name, description: name, parameters: { type: 'object' } })
 const TOOLS = [tool('get_upcoming_meetings'), tool('search_accounts')]

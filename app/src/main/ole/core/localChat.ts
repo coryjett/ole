@@ -1,7 +1,6 @@
 // Ole: Prepare on the Mac's own model (#5). Yogurt's local model takes text and gives text, with no native tool calls,
 // so this adapter speaks the same ChatFn as OpenAI: it lists the tools in the prompt, asks for one JSON object back
 // ({"tool": ..., "arguments": ...} to call a tool, {"final": ...} for the briefing), and turns that into tool calls.
-import type { Llm } from '../notes/enhance'
 import type { ChatFn, ChatMessage, ToolCall } from './bullets'
 
 /** a tool result longer than this is cut before it reaches a small local context */
@@ -64,8 +63,14 @@ export function firstJson(text: string): Record<string, unknown> | null {
   return null
 }
 
-/** Runs one exclusive turn of the local model (the notes queue, so it never overlaps a summary). */
-export type LocalRun = <T>(job: (llm: Llm, signal: AbortSignal) => Promise<T>) => Promise<T>
+/** what Prepare needs of the host's own model: its context size and a text-in, text-out chat (Yogurt's Llm fits) */
+export type LocalLlm = {
+  contextSize: number
+  chat(prompt: string, onToken: (text: string) => void, opts?: { maxTokens?: number; temperature?: number }): Promise<string>
+}
+
+/** Runs one exclusive turn of the local model (in Yogurt, the notes queue, so it never overlaps a summary). */
+export type LocalRun = <T>(job: (llm: LocalLlm, signal: AbortSignal) => Promise<T>) => Promise<T>
 
 export function createLocalChat(run: LocalRun): ChatFn {
   let n = 0

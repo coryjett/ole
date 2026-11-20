@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mayGetNames } from '../../src/main/ole/enrich'
+import { mayGetNames } from '../../src/main/ole/core/enrich'
 
 const t = (tool: string, o: { openWorld?: boolean; description?: string; serverName?: string } = {}) =>
   ({ tool, description: o.description ?? '', serverName: o.serverName ?? 'CRM', openWorld: o.openWorld })

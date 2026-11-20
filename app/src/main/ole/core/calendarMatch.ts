@@ -1,5 +1,5 @@
 // Ole: which calendar event a call or a briefing belongs to (#52, #56).
-import { genericTitle } from '../titles'
+import { englishGenericTitle, type GenericTitle } from './titles'
 
 export type Upcoming = { id: string; title: string; start: number; end: number }
 
@@ -18,7 +18,8 @@ export function eventNow(events: Upcoming[], now: number, windowMs = NOW_WINDOW_
 }
 
 /** the soonest meeting starting within the lead time that has a real title and was not prepared yet */
-export function pickAutoPrepare(events: Upcoming[], now: number, leadMs: number, done: Set<string>): Upcoming | null {
+/** genericTitle: the host's own check (its interface language), English by default */
+export function pickAutoPrepare(events: Upcoming[], now: number, leadMs: number, done: Set<string>, genericTitle: GenericTitle = englishGenericTitle): Upcoming | null {
   const due = events.filter(e => isMeeting(e) && e.start > now && e.start <= now + leadMs && !done.has(e.id) && !genericTitle(e.title))
   due.sort((a, b) => a.start - b.start)
   return due[0] ?? null

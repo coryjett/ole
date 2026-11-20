@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createOpenAIStreaming, pcm16Base64, REALTIME_URL, STREAM_MODEL, Upsampler, type WsLike } from '../../src/main/ole/openaiStream'
+import { createOpenAIStreaming, pcm16Base64, REALTIME_URL, STREAM_MODEL, Upsampler, type WsLike } from '../../src/main/ole/yogurt/openaiStream'
 import { chunker, type Chunk } from '../../src/main/asr/chunker'
 import type { Transcribe } from '../../src/main/asr/transcribe'
 import type { Track } from '../../src/main/capture'

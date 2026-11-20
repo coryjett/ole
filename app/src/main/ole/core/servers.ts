@@ -1,7 +1,7 @@
-// Ole: the MCP servers the person added in Settings. Each server's key is the sealed secret `mcp:<id>`.
-import { ipcMain } from 'electron'
-import { loadSettings, updateSettings, type Settings } from '../settings'
-import { readSecret, removeSecret, SERVER_ID } from './secrets'
+// Ole: the MCP servers the person added in Settings. Each server's key is the sealed secret `mcp:<id>`. Pure: reads and
+// patches the host's settings through a SettingsStore.
+import type { OleSettings, SettingsStore } from './host'
+import { SERVER_ID } from './secrets'
 import type { McpServerConfig, SecretName } from './types'
 
 export const MAX_SERVERS = 10
@@ -67,45 +67,23 @@ function cleanList(list: unknown, requireId = false): McpServerConfig[] {
 }
 
 /** the saved servers; a hand-edited file with bad entries keeps only the valid ones */
-export function serversOf(settings: Settings): McpServerConfig[] {
+export function serversOf(settings: OleSettings): McpServerConfig[] {
   // a saved entry always has an id; one without is not used (its key could not be found)
   return cleanList(settings.oleMcpServers, true)
 }
 
 /** replaces the list. Throws on a list that is not an array or holds more than 10; drops the key of any removed server */
-export function setServers(file: string, list: unknown): McpServerConfig[] {
+export function setServers(store: SettingsStore, removeSecret: (name: SecretName) => void, list: unknown): McpServerConfig[] {
   if (!Array.isArray(list)) throw new Error('Invalid server list')
   if (list.length > MAX_SERVERS) throw new Error(`At most ${MAX_SERVERS} servers`)
   const next = cleanList(list)
-  const before = serversOf(loadSettings(file))
-  updateSettings(file, { oleMcpServers: next.length ? next : undefined })
+  const before = serversOf(store.get())
+  store.patch({ oleMcpServers: next.length ? next : undefined })
   // a key belongs to the address it was saved for: a removed server, or one pointed at a new origin, loses it
   const originOf = (url: string) => { try { return new URL(url).origin } catch { return url } }
   for (const old of before) {
     const now = next.find((s) => s.id === old.id)
-    if (!now || originOf(now.url) !== originOf(old.url)) removeSecret(file, `mcp:${old.id}` as SecretName)
+    if (!now || originOf(now.url) !== originOf(old.url)) removeSecret(`mcp:${old.id}` as SecretName)
   }
   return next
-}
-
-export function hookOleServers(d: { file: string; test: ServerTest }): void {
-  ipcMain.handle('ole:servers:get', () => serversOf(loadSettings(d.file)))
-
-  ipcMain.handle('ole:servers:set', (_e, list: unknown) => setServers(d.file, list))
-
-  ipcMain.handle('ole:servers:test', async (_e, id: unknown) => {
-    if (typeof id !== 'string' || !SERVER_ID.test(id)) throw new Error('Invalid server')
-    const server = serversOf(loadSettings(d.file)).find((s) => s.id === id)
-    if (!server) return { ok: false, tools: 0, error: 'No such server' }
-    try {
-      const r = await d.test(server, readSecret(d.file, `mcp:${id}` as SecretName))
-      // the list crosses IPC: capped, and every string bounded
-      const toolList = Array.isArray(r.toolList)
-        ? r.toolList.slice(0, 200).map(t => ({ name: String(t.name).slice(0, 100), description: String(t.description ?? '').slice(0, 300) }))
-        : undefined
-      return { ok: !!r.ok, tools: Number.isFinite(r.tools) ? r.tools : 0, ...(r.error ? { error: String(r.error).slice(0, 300) } : {}), ...(toolList ? { toolList } : {}) }
-    } catch (err) {
-      return { ok: false, tools: 0, error: err instanceof Error ? err.message.slice(0, 300) : 'Test failed' }
-    }
-  })
 }

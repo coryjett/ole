@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createOpenAIModel, openaiChat } from '../../src/main/ole/openaiModel'
+import { createOpenAIModel } from '../../src/main/ole/yogurt/openaiModel'
+import { openaiChat } from '../../src/main/ole/core/openai'
 
 function sse(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()

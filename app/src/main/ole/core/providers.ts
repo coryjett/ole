@@ -1,11 +1,10 @@
-// Ole: which engine transcribes and which writes notes and answers (Local or OpenAI), with the OpenAI model names and the warm-up instructions.
-import { ipcMain } from 'electron'
-import { loadSettings, updateSettings, type Settings } from '../settings'
+// Ole: which engine transcribes and which writes notes and answers (Local or OpenAI), with the OpenAI model names and the
+// warm-up instructions. Pure: reads and patches the host's settings through a SettingsStore.
+import type { OleSettings, SettingsStore } from './host'
 import type { AssistantChoice, OleProviders, ProviderChoice } from './types'
-import { readSecret } from './secrets'
-import { listOpenAIModels, testOpenAI } from './openaiTest'
 
-type OleProviderSettings = Settings & {
+/** as read from a file that may have been edited by hand: any string */
+type OleProviderSettings = Omit<OleSettings, 'oleTranscription' | 'oleAssistant' | 'olePrepareOn'> & {
   oleTranscription?: string
   oleAssistant?: string
   oleTranscribeModel?: string
@@ -54,7 +53,7 @@ function isValidModelName(v: string): boolean {
   return /^[A-Za-z0-9._:-]+$/.test(v)
 }
 
-export function providersOf(s: Settings): OleProviders {
+export function providersOf(s: OleSettings): OleProviders {
   const settings = s as OleProviderSettings
   const transcription = isProviderChoice(settings.oleTranscription) ? settings.oleTranscription : PROVIDER_DEFAULTS.transcription
   const assistant = isAssistantChoice(settings.oleAssistant) ? settings.oleAssistant : PROVIDER_DEFAULTS.assistant
@@ -90,14 +89,14 @@ export function providersOf(s: Settings): OleProviders {
   return { transcription, assistant, openaiTranscribeModel, openaiStreaming, openaiChatModel, openaiPrepareModel, warmupInstructions, customBaseUrl, customModel, prepareOn, hideWhileSharing, autoPrepare, autoPrepareLead }
 }
 
-export function setProviders(file: string, patch: unknown): OleProviders {
-  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return providersOf(loadSettings(file))
+export function setProviders(store: SettingsStore, patch: unknown): OleProviders {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return providersOf(store.get())
 
   const p = patch as Partial<OleProviders>
   const settingsPatch: Partial<OleProviderSettings> = {}
 
   // a dropdown the person changed is their choice: the OpenAI key never switches it again (#10)
-  const auto = new Set(loadSettings(file).oleAutoSwitched ?? [])
+  const auto = new Set(store.get().oleAutoSwitched ?? [])
   if ('transcription' in p && isProviderChoice(p.transcription)) {
     settingsPatch.oleTranscription = p.transcription
     settingsPatch.oleTranscriptionChosen = true
@@ -142,13 +141,8 @@ export function setProviders(file: string, patch: unknown): OleProviders {
     settingsPatch.oleWarmupInstructions = text === '' ? undefined : text
   }
 
-  const next = providersOf(updateSettings(file, settingsPatch as Partial<Settings>))
-  changed?.(next)
-  return next
+  return providersOf(store.patch(settingsPatch as Partial<OleSettings>))
 }
-
-/** told after Settings change the providers, so the windows follow "hide while sharing" at once (#51) */
-let changed: ((p: OleProviders) => void) | undefined
 
 type Kind = 'transcription' | 'assistant'
 const KINDS: Kind[] = ['transcription', 'assistant']
@@ -156,47 +150,21 @@ const keyOf = (k: Kind) => k === 'transcription' ? 'oleTranscription' : 'oleAssi
 const chosenOf = (k: Kind) => k === 'transcription' ? 'oleTranscriptionChosen' : 'oleAssistantChosen'
 
 /** a working OpenAI key was saved: Local providers the person never chose become OpenAI (#10) */
-export function adoptOpenAI(file: string): { switched: Kind[]; providers: OleProviders } {
-  const s = loadSettings(file)
+export function adoptOpenAI(store: SettingsStore): { switched: Kind[]; providers: OleProviders } {
+  const s = store.get()
   const now = providersOf(s)
   const switched = KINDS.filter(k => now[k] === 'local' && !s[chosenOf(k)])
   if (!switched.length) return { switched, providers: now }
-  const patch: Partial<Settings> = { oleAutoSwitched: [...new Set([...(s.oleAutoSwitched ?? []), ...switched])] }
+  const patch: Partial<OleSettings> = { oleAutoSwitched: [...new Set([...(s.oleAutoSwitched ?? []), ...switched])] }
   for (const k of switched) patch[keyOf(k)] = 'openai'
-  return { switched, providers: providersOf(updateSettings(file, patch)) }
+  return { switched, providers: providersOf(store.patch(patch)) }
 }
 
 /** what the key switched goes back to Local; undo also records Local as the person's choice */
-export function revertOpenAI(file: string, o: { undo: boolean }): { reverted: Kind[]; providers: OleProviders } {
-  const s = loadSettings(file)
+export function revertOpenAI(store: SettingsStore, o: { undo: boolean }): { reverted: Kind[]; providers: OleProviders } {
+  const s = store.get()
   const reverted = (s.oleAutoSwitched ?? []).filter(k => providersOf(s)[k] === 'openai')
-  const patch: Partial<Settings> = { oleAutoSwitched: undefined }
+  const patch: Partial<OleSettings> = { oleAutoSwitched: undefined }
   for (const k of reverted) { patch[keyOf(k)] = 'local'; if (o.undo) patch[chosenOf(k)] = true }
-  return { reverted, providers: providersOf(updateSettings(file, patch)) }
-}
-
-export function hookOleProviders(d: { file: string; onChange?: (p: OleProviders) => void }): void {
-  changed = d.onChange
-  ipcMain.handle('ole:providers:get', () => providersOf(loadSettings(d.file)))
-
-  ipcMain.handle('ole:providers:set', (_e, patch: unknown) => setProviders(d.file, patch))
-
-  ipcMain.handle('ole:openai:test', () => {
-    const p = providersOf(loadSettings(d.file))
-    return testOpenAI({ key: readSecret(d.file, 'openai'), chatModel: p.openaiChatModel, transcribeModel: p.openaiTranscribeModel })
-  })
-  ipcMain.handle('ole:openai:adopt', () => adoptOpenAI(d.file))
-  ipcMain.handle('ole:openai:revert', (_e, undo: unknown) => revertOpenAI(d.file, { undo: undo === true }))
-  ipcMain.handle('ole:openai:models', () => listOpenAIModels({ key: readSecret(d.file, 'openai') }))
-  // the Custom server (#17): its models, and a reachability and key check
-  ipcMain.handle('ole:custom:models', () => {
-    const p = providersOf(loadSettings(d.file))
-    if (!p.customBaseUrl) return { ok: false, error: 'Add the server address first', chat: [], transcribe: [] }
-    return listOpenAIModels({ key: readSecret(d.file, 'custom'), baseUrl: p.customBaseUrl })
-  })
-  ipcMain.handle('ole:custom:test', () => {
-    const p = providersOf(loadSettings(d.file))
-    if (!p.customBaseUrl) return { ok: false, error: 'Add the server address first' }
-    return testOpenAI({ key: readSecret(d.file, 'custom'), baseUrl: p.customBaseUrl, chatModel: p.customModel, transcribeModel: '' })
-  })
+  return { reverted, providers: providersOf(store.patch(patch)) }
 }

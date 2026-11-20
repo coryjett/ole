@@ -1,5 +1,5 @@
 // Ole: the call's open questions and commitments (#82), compact, under the live bullets and on the saved meeting.
-import type { OleCommitment } from '../../../main/ole/types'
+import type { OleCommitment } from '../../../main/ole/core/types'
 
 export function OleCallLists({ openQuestions = [], commitments = [] }: { openQuestions?: string[]; commitments?: OleCommitment[] }) {
   if (!openQuestions.length && !commitments.length) return null

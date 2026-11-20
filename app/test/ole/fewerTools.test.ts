@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isLiveTool, MORE_TOOLS, narrowForPrepare } from '../../src/main/ole/tools'
-import { prepareContext, type PrepareChatFn } from '../../src/main/ole/prepare'
-import type { OleTool } from '../../src/main/ole/types'
+import { isLiveTool, MORE_TOOLS, narrowForPrepare } from '../../src/main/ole/core/tools'
+import { prepareContext, type PrepareChatFn } from '../../src/main/ole/core/prepare'
+import type { OleTool } from '../../src/main/ole/core/types'
 
 const tool = (serverId: string, name: string): OleTool => ({ name: `${serverId}__${name}`, serverId, serverName: serverId.toUpperCase(), tool: name, description: '', parameters: { type: 'object', properties: {} } })
 const crm = ['get_account_details', 'get_opportunities', 'search_calls', 'get_fire_score'].map(n => tool('crm', n))

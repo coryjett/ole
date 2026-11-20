@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import { describe, expect, it } from 'vitest'
-import type { OleBullet } from '../../src/main/ole/types'
+import type { OleBullet } from '../../src/main/ole/core/types'
 import { OleBullets } from '../../src/renderer/src/ole/OleBullets'
 
 const bullet = (id: string, text: string, source: string, at: number): OleBullet => ({ id, text, source, at })

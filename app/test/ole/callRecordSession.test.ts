@@ -10,8 +10,8 @@ vi.mock('electron', () => ({
   ipcMain: { handle: (n: string, f: (...a: unknown[]) => unknown) => handlers.set(n, f) },
   safeStorage: { isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() },
 }))
-vi.mock('../../src/main/ole/mcp', async (orig) => {
-  const real = await orig<typeof import('../../src/main/ole/mcp')>()
+vi.mock('../../src/main/ole/core/mcp', async (orig) => {
+  const real = await orig<typeof import('../../src/main/ole/core/mcp')>()
   return { ...real, createMcpClient: () => ({ listTools: async () => [{ name: 'get_upcoming_meetings', inputSchema: { type: 'object' } }], listPrompts: async () => [], getPrompt: async () => '', callTool: async () => '[]' }) }
 })
 const record = { summary: 'They want rate limits for the morning burst.', openQuestions: ['Is there a free tier?'], commitments: [{ who: 'Me', what: 'Send the benchmark plan' }] }
@@ -23,15 +23,15 @@ const usual = async (req: { messages: Array<{ role: string; content: string }> }
   return { role: 'assistant', content: '## Before you join\n- x' }
 }
 const openaiChat = vi.fn(usual)
-vi.mock('../../src/main/ole/openaiModel', () => ({ openaiChat }))
+vi.mock('../../src/main/ole/core/openai', () => ({ openaiChat }))
 
 const ID = '00000000-0000-4000-8000-000000000002'
 
 async function setup(extra: Record<string, unknown> = {}) {
-  const { hookOle } = await import('../../src/main/ole/session')
-  const { writeSecret } = await import('../../src/main/ole/secrets')
-  const { setProviders } = await import('../../src/main/ole/providers')
-  const { setServers } = await import('../../src/main/ole/servers')
+  const { hookOle } = await import('../../src/main/ole/yogurt/session')
+  const { writeSecret } = await import('../../src/main/ole/yogurt/secrets')
+  const { setProviders } = await import('../../src/main/ole/yogurt/providers')
+  const { setServers } = await import('../../src/main/ole/yogurt/servers')
   const file = join(mkdtempSync(join(tmpdir(), 'ole-record-')), 'settings.json')
   writeSecret(file, 'openai', 'sk-test-123456')
   setProviders(file, { assistant: 'openai' })

@@ -2,16 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { RecordedCall } from '../../src/main/ole/turnRecorder'
-import type { ReplayFixture } from '../../src/main/ole/replayFormat'
+import type { RecordedCall } from '../../src/main/ole/core/turnRecorder'
+import type { ReplayFixture } from '../../src/main/ole/core/replayFormat'
 
 const handlers = new Map<string, (...a: unknown[]) => unknown>()
 vi.mock('electron', () => ({
   ipcMain: { handle: (n: string, f: (...a: unknown[]) => unknown) => handlers.set(n, f) },
   safeStorage: { isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(s), decryptString: (b: Buffer) => b.toString() },
 }))
-vi.mock('../../src/main/ole/mcp', async (orig) => {
-  const real = await orig<typeof import('../../src/main/ole/mcp')>()
+vi.mock('../../src/main/ole/core/mcp', async (orig) => {
+  const real = await orig<typeof import('../../src/main/ole/core/mcp')>()
   return { ...real, createMcpClient: () => ({ listTools: async () => [{ name: 'search_docs', inputSchema: { type: 'object' } }], listPrompts: async () => [], getPrompt: async () => '', callTool: async () => 'Rotates daily, see https://docs.example.com/a' }) }
 })
 const openaiChat = vi.fn(async (req: { messages: Array<{ role: string; content: string }> }) => {
@@ -19,16 +19,16 @@ const openaiChat = vi.fn(async (req: { messages: Array<{ role: string; content: 
   if (sys.includes('surfacing short context bullets')) return { role: 'assistant', content: JSON.stringify({ bullets: [{ text: 'Renewal is in March', source: 'opportunity: Renewal' }] }) }
   return { role: 'assistant', content: '## Before you join\n- Dana Reyes owns the renewal' }
 })
-vi.mock('../../src/main/ole/openaiModel', () => ({ openaiChat }))
+vi.mock('../../src/main/ole/core/openai', () => ({ openaiChat }))
 
 const ID = '00000000-0000-4000-8000-0000000000aa'
 const OLD = '00000000-0000-4000-8000-0000000000bb'
 
 async function setup() {
-  const { hookOle } = await import('../../src/main/ole/session')
-  const { writeSecret } = await import('../../src/main/ole/secrets')
-  const { setProviders } = await import('../../src/main/ole/providers')
-  const { setServers } = await import('../../src/main/ole/servers')
+  const { hookOle } = await import('../../src/main/ole/yogurt/session')
+  const { writeSecret } = await import('../../src/main/ole/yogurt/secrets')
+  const { setProviders } = await import('../../src/main/ole/yogurt/providers')
+  const { setServers } = await import('../../src/main/ole/yogurt/servers')
   const file = join(mkdtempSync(join(tmpdir(), 'ole-export-')), 'settings.json')
   writeSecret(file, 'openai', 'sk-test-123456')
   setProviders(file, { assistant: 'openai' })

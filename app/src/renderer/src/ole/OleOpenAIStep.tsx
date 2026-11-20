@@ -2,7 +2,7 @@
 // set up yet, and each offers the same checks as Settings: the OpenAI key's Test (key works, models on the account),
 // and for servers the very component Settings uses (Test with its badge, Show tools).
 import { useState, type ReactNode } from 'react'
-import type { OpenAITestResult } from '../../../main/ole/openaiTest'
+import type { OpenAITestResult } from '../../../main/ole/core/openaiTest'
 import { OleServers, type OleSettingsApi } from './OleSettings'
 
 export type OleOpenAIStepApi = {
