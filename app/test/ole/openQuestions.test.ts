@@ -109,12 +109,12 @@ describe('the structured summarizer (#82)', () => {
 })
 
 describe('open questions and commitments in the panel (#82)', () => {
-  it('a compact list of each, hidden when empty', () => {
+  it('a list of each, hidden when empty', () => {
     const html = renderToStaticMarkup(createElement(OleCallLists, { openQuestions: ['Is there a free tier?'], commitments: [{ who: 'Dana', what: 'Share the numbers' }, { who: '', what: 'Book the pilot' }] }))
     expect(html).toContain('data-testid="ole-open-questions"')
     expect(html).toContain('Is there a free tier?')
     expect(html).toContain('data-testid="ole-commitments"')
-    expect(html).toContain('<span class="font-semibold">Dana: </span>Share the numbers')
+    expect(html).toContain('<span class="ole-who">Dana</span> Share the numbers')
     expect(html).toContain('Book the pilot')
     expect(renderToStaticMarkup(createElement(OleCallLists, { openQuestions: [], commitments: [] }))).toBe('')
     const onlyQ = renderToStaticMarkup(createElement(OleCallLists, { openQuestions: ['Q?'], commitments: [] }))
