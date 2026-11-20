@@ -58,6 +58,11 @@ export type Settings = { theme?: 'light' | 'dark'; language?: string; /** what t
   oleTranscribeModel?: string
   oleChatModel?: string
   olePrepareModel?: string
+  /** Ole: the person picked these providers themselves; the OpenAI key never changes them (#10) */
+  oleTranscriptionChosen?: boolean
+  oleAssistantChosen?: boolean
+  /** Ole: providers the OpenAI key switched to OpenAI, so Undo and removing the key put back only those */
+  oleAutoSwitched?: Array<'transcription' | 'assistant'>
   /** Ole: the person's own instructions for the pre-call warm-up (ole/providers.ts); at most 8000 characters */
   oleWarmupInstructions?: string
   /** Ole: the MCP servers the person added (ole/servers.ts); each key is the secret `mcp:<id>` */

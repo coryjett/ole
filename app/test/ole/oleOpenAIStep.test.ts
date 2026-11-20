@@ -3,28 +3,28 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { OleOpenAIStep, saveOpenAIKey, type OleOpenAIStepApi } from '../../src/renderer/src/ole/OleOpenAIStep'
 
-const api = (ok = true): OleOpenAIStepApi & { setSecret: ReturnType<typeof vi.fn>; setProviders: ReturnType<typeof vi.fn> } => ({
+const api = (ok = true): OleOpenAIStepApi & { setSecret: ReturnType<typeof vi.fn>; adoptOpenAI: ReturnType<typeof vi.fn> } => ({
   setSecret: vi.fn(async () => ({})),
   testOpenAI: vi.fn(async () => ok ? { ok: true } : { ok: false, error: 'OpenAI rejected the key' }),
-  setProviders: vi.fn(async () => ({})),
+  adoptOpenAI: vi.fn(async () => ({})),
 })
 
 describe('first-run OpenAI step', () => {
-  it('saves and tests the key, then switches both providers to OpenAI', async () => {
+  it('saves and tests the key, then switches Local providers to OpenAI', async () => {
     const a = api()
     expect(await saveOpenAIKey(a, '  sk-test-123456 ', true)).toEqual({ ok: true })
     expect(a.setSecret).toHaveBeenCalledWith('openai', 'sk-test-123456')
-    expect(a.setProviders).toHaveBeenCalledWith({ transcription: 'openai', assistant: 'openai' })
+    expect(a.adoptOpenAI).toHaveBeenCalled()
   })
   it('leaves the providers alone when the box is unticked', async () => {
     const a = api()
     await saveOpenAIKey(a, 'sk-test-123456', false)
-    expect(a.setProviders).not.toHaveBeenCalled()
+    expect(a.adoptOpenAI).not.toHaveBeenCalled()
   })
   it('a key that fails the test stops there, with the reason', async () => {
     const a = api(false)
     expect(await saveOpenAIKey(a, 'sk-bad', true)).toEqual({ ok: false, error: 'OpenAI rejected the key' })
-    expect(a.setProviders).not.toHaveBeenCalled()
+    expect(a.adoptOpenAI).not.toHaveBeenCalled()
   })
   it('an empty key asks for one and saves nothing', async () => {
     const a = api()

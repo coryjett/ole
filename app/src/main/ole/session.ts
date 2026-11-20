@@ -39,8 +39,14 @@ export function hookOle(d: Deps): {
   let prepareSeq = 0
   const finished = new Map<string, OleBullet[]>()
 
+  /** why Prepare and live context are off, or null when they can run: they need the Assistant on OpenAI and a key (#11) */
+  const blocked = (): string | null => {
+    if (providersOf(loadSettings(d.file)).assistant !== 'openai') return 'Prepare and live context use OpenAI and your MCP servers. Set Assistant to OpenAI in Settings > Ole.'
+    if (!openaiKey()) return 'Add an OpenAI key in Settings > Ole to prepare for calls.'
+    return null
+  }
   const state = (): OleLiveState => ({
-    meetingId, preparing, error, bullets,
+    meetingId, preparing, error, bullets, blocked: blocked(),
     prepared: prepared ? { meetingTitle: prepared.meetingTitle, focus: prepared.focus, preparedAt: prepared.preparedAt } : null,
   })
   const send = () => d.send(state())
@@ -61,7 +67,8 @@ export function hookOle(d: Deps): {
   }
 
   async function prepare(o: { focus?: string | null; meetingTitle?: string | null; forMeeting?: string }): Promise<OleLiveState> {
-    if (!openaiKey()) { error = 'Add an OpenAI key in Settings'; send(); return state() }
+    // enforced here, not only in the panel: Assistant = Local never reaches OpenAI or an MCP server
+    if (blocked()) { error = null; send(); return state() }
     if (!serversOf(loadSettings(d.file)).some(s => s.enabled)) { error = 'Add an MCP server in Settings'; send(); return state() }
     const seq = ++prepareSeq
     preparing = true; error = null; send()
@@ -106,7 +113,7 @@ export function hookOle(d: Deps): {
       if (!prepared || Date.now() - prepared.preparedAt > STALE_MS) void prepare({ meetingTitle: m.title, forMeeting: m.id })
       else void loadTools().catch(e => console.warn('loading the MCP tools failed', e))
       // bullets need the OpenAI key; without it the meeting records as Yogurt does
-      engine = openaiKey() ? createBulletsEngine({
+      engine = !blocked() ? createBulletsEngine({
         chat,
         tools: () => tools,
         callTool: (name, argsJson) => call(name, argsJson),

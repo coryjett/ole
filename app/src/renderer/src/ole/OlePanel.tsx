@@ -29,9 +29,10 @@ export function OlePanel({ compact = false }: { compact?: boolean }) {
           maxLength={200} onChange={e => setFocus(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !state.preparing) prepare() }} />
         {focus && <button aria-label="Clear" className="workspace-button" onClick={() => setFocus('')}>×</button>}
       </div>
-      <button data-testid="ole-prepare" className="workspace-button settings-action" disabled={state.preparing} onClick={prepare}>
+      <button data-testid="ole-prepare" className="workspace-button settings-action" disabled={state.preparing || !!state.blocked} onClick={prepare}>
         {state.preparing ? 'Preparing…' : state.prepared ? 'Prepare again' : 'Prepare for next call'}</button>
     </div>
+    {state.blocked && <p data-testid="ole-blocked" role="status" className="settings-description">{state.blocked}</p>}
     {state.error && <p data-testid="ole-error" role="status" className="settings-description" style={{ color: 'var(--color-danger, #d33)' }}>{state.error}</p>}
     {/* bullets belong to a call: shown while one records; a finished call keeps them on its note page */}
     {state.meetingId ? <div className="mt-2"><OleBullets bullets={state.bullets} prepared={state.prepared} /></div>
