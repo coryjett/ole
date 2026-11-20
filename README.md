@@ -5,7 +5,7 @@
 <h1 align="center">Ole</h1>
 
 <p align="center">
-  A live call companion. It listens to the call, and your MCP server whispers back.
+  Transcribes your calls and enriches them, live, with context from any MCP servers you connect.
 </p>
 
 <p align="center">
@@ -19,21 +19,30 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/how-ole-works-story.svg" width="900" alt="A call with Ole. Before: Ole pulls a sourced briefing from your MCP servers. On the call: bullets with sources pop in while the customer talks, and no bot joins. After: a summary with next steps and the context from the call.">
+  <img src="docs/assets/how-ole-works-story.svg" width="900" alt="A call with Ole. Before: Ole pulls a sourced briefing from your MCP servers. On the call: bullets with sources pop in while they talk, and no bot joins. After: a summary with next steps and the context from the call.">
 </p>
 
 ## What it does
 
-- **Ready before the call.** One click and the model works through your MCP servers' read-only tools to build a briefing for the meeting: the company, the people, open deals, open issues, recent conversations, whatever your servers offer. Add an optional **Focus** (a company, person or topic) to steer it.
-- **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. When the briefing doesn't cover something, Ole looks it up with the same tools, a few times a minute at most. Other customers' names are kept anonymous.
+Ole brings the right context to a call, from whatever systems know your world. You connect them as MCP servers; Ole only ever reads from them.
+
+| Your calls | Connect | Ole surfaces |
+|---|---|---|
+| Sales and solutions | a CRM, call recordings, product docs | where the deal stands, what was promised, the answer to a technical question |
+| Support and success | a ticketing system, status pages, docs | open tickets, recent incidents, the known fix |
+| Recruiting | an applicant tracking system | the candidate's background, feedback so far, what the role needs |
+| Engineering and projects | issue trackers, docs, runbooks | the open issue, the design decision, the doc that answers it |
+| Research and 1:1s | notes, a wiki, past meetings | what you discussed last time, open questions |
+
+- **Ready before the call.** Ole asks your MCP servers about the meeting, its people and its topic, and writes a short, sourced briefing: the 3 things that matter most, then a few short sections. Add an optional **Focus** (a name or topic) to steer it.
 - **Prepared before you remember to.** Ole writes the briefing 5 to 15 minutes before each calendar meeting and tells you when it's ready. A call with a default title ("Meeting") is matched to the calendar event happening now, never a later one.
+- **Context while you talk.** Short bullets appear as the conversation moves, newest first, each naming its source. When the briefing doesn't cover something, Ole looks it up with the same tools, a few times a minute at most.
 - **Pin, rate and ask.** Pin a bullet and it lands in your notes and the summary. Thumbs up or down tunes what Ole surfaces on later calls. Type a question mid-call and Ole answers from the briefing, the call and your servers.
-- **Docs during the call.** Add a documentation MCP server (for example Context7 at `https://mcp.context7.com/mcp`, no key) and Ole looks up open-source docs for technical questions in Prepare, live bullets and Ask. It sends that server short technical phrases, never customer names.
-- **Calls without a customer.** When a call has no customer account, bullets stay general: docs, known issues and anonymised patterns across customers, never one customer's records.
-- **Hidden while you share, if you like.** Turn it on and, while a call records, Ole's windows stay out of screen sharing (and screenshots; macOS can't tell them apart). A few apps may still show them.
-- **Any MCP server, several at once.** CRM, support, docs, internal tools: add each one in Settings. Ole only uses tools that read.
-- **Servers can teach Ole how to prepare.** A server that publishes an MCP prompt named `prepare_for_meeting` tells Ole which tools to call and how to write the briefing. Your own warm-up instructions in Settings refine it.
+- **Docs during the call.** Add a documentation MCP server (for example Context7 at `https://mcp.context7.com/mcp`, no key) and Ole looks up open-source docs in Prepare, live bullets and Ask.
+- **Your servers set the role.** A server that publishes an MCP prompt named `prepare_for_meeting` tells Ole which tools to call and what a good briefing looks like for its world. Your own warm-up instructions in Settings refine it. Ole's own rules only cover format, sources and privacy.
+- **Careful with names.** Organisations and people your servers mention stay anonymous unless they're part of this meeting, and names never go to a public docs search. When nothing matches the call, bullets stay general.
 - **Never caught out by a broken server.** Ole checks your MCP servers in the background and tells you (on Home and with a notification) when one can't be reached or rejects its key, before the call.
+- **Hidden while you share, if you like.** Turn it on and, while a call records, Ole's windows stay out of screen sharing (and screenshots; macOS can't tell them apart). A few apps may still show them.
 - **Prepare on your Mac if you like.** The briefing can run on the local model instead; live context stays on OpenAI or your own server.
 - **Who said what.** Speaker names from Zoom, Teams and Meet.
 - **A summary when you hang up.** Discussion, decisions, next steps and open questions, from the transcript and your own notes.
@@ -44,12 +53,12 @@
 ## How it works
 
 <p align="center">
-  <img src="docs/assets/how-ole-works-arch.svg" width="900" alt="You and Ole on your Mac take the customer's call audio, ask the AI model you chose (OpenAI or your own server), and look things up read-only on your MCP servers. Updates come from GitHub releases.">
+  <img src="docs/assets/how-ole-works-arch.svg" width="900" alt="You and Ole on your Mac take the call audio, ask the AI model you chose (OpenAI or your own server), and look things up read-only on your MCP servers. Updates come from GitHub releases.">
 </p>
 
 1. **Prepare.** Before the call, Ole lists your MCP servers' read-only tools, reads each server's `prepare_for_meeting` prompt if it has one, adds your instructions, and lets the model gather a sourced briefing (up to 10 tool calls).
 2. **Listen.** Your microphone and the call audio are recorded as two tracks and transcribed live.
-3. **Surface.** Every ~20 seconds of new conversation, the transcript is checked against the briefing. The tools are only called again when something isn't there.
+3. **Surface.** About every 45 seconds of new conversation, the transcript is checked against the briefing. The tools are only called again when something isn't there.
 4. **Wrap up.** Recording stops, the summary is written, and the meeting lands in your library with its transcript, bullets and notes.
 
 ## Install
@@ -69,7 +78,7 @@ In **Settings > Ole**:
 |---|---|
 | **OpenAI key** | A platform key from platform.openai.com. Needed for the briefing and live bullets, and for OpenAI transcription or summaries. |
 | **MCP servers** | Add each server's name, URL (https, usually ending in `/mcp`) and key, then **Test** to see how many read-only tools Ole can use. |
-| **Warm-up instructions** | Optional. How you want Ole to prepare, e.g. "Look up the account, its open deals and stage, open support issues and the last two calls. Lead with risks." |
+| **Warm-up instructions** | Optional. How you want Ole to prepare, e.g. "Look up the customer's open tickets and last incident; lead with anything overdue." or "Pull the candidate's profile and interview feedback; list what's still unknown." |
 | **Transcription** | *Local* (whisper.cpp on your Mac) or *OpenAI*. |
 | **Assistant** | *Local* (a model on your Mac, summaries only), *OpenAI*, or *Custom server*: any OpenAI-compatible server you run (address ending at `/v1`, optional key, model). Prepare and live context need OpenAI or a Custom server. |
 
@@ -111,4 +120,4 @@ Releasing, the fork rules and how Yogurt's updates are merged in: [OLE.md](OLE.m
 
 ## License
 
-[MIT](LICENSE). Ole is built on [Yogurt](https://github.com/FrigadeHQ/yogurt), copyright 2026 Frigade. Ole's changes copyright 2026 Cory Jett.
+[MIT](LICENSE). Ole is built on [Yogurt](https://github.com/FrigadeHQ/yogurt), copyright 2026 Frigade. Ole's changes copyright 2026 the Ole contributors.

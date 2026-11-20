@@ -47,7 +47,7 @@ describe('a briefing readable in 30 seconds (#46)', () => {
     expect(PREPARE_SYSTEM).toContain('## Before you join')
     expect(PREPARE_SYSTEM).toContain('About 150 words')
     expect(PREPARE_SYSTEM).toContain('never square-bracket citations')
-    expect(PREPARE_SYSTEM).toContain("Couldn't match this call to a meeting or account.")
+    expect(PREPARE_SYSTEM).toContain("Couldn't match this call to a meeting or record.")
     expect(serverGuidance([{ serverName: 'CRM', text: 'Use long sections.' }])).toContain("the system rules decide the briefing's format and length")
   })
 })

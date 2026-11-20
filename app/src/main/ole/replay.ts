@@ -1,6 +1,6 @@
 // Ole: replay a saved call through the live bullets engine and measure what it shows (#66).
 // Dev only: scripts/ole-replay.mjs and the tests import this; nothing in the app does (a test pins that).
-import { callKey, createBulletsEngine, generalTools, hasCustomerAccount, parseBullets, type CallToolFn, type ChatFn, type ChatMessage, type ToolCall, type TranscriptLine } from './bullets'
+import { callKey, createBulletsEngine, generalTools, hasMatchedRecord, parseBullets, type CallToolFn, type ChatFn, type ChatMessage, type ToolCall, type TranscriptLine } from './bullets'
 import { isLiveTool } from './tools'
 import type { OleBullet, OleTool, PreparedContext } from './types'
 
@@ -87,10 +87,10 @@ export function scrub(text: string, secrets: Array<string | null | undefined>): 
   return secrets.filter((x): x is string => !!x && x.length >= 4).reduce((t, x) => t.split(x).join('[key]'), text)
 }
 
-/** the tools the app would offer this call (#57): lookup-style only, and no customer records on a call without an account */
+/** the tools the app would offer this call (#57): lookup-style only, and no single-record lookups on a call with no matching record */
 export function liveToolsFor(tools: OleTool[], context: PreparedContext | null): OleTool[] {
   const live = tools.filter(isLiveTool)
-  return hasCustomerAccount(context) ? live : generalTools(live)
+  return hasMatchedRecord(context) ? live : generalTools(live)
 }
 
 /** engine settings a fixture may set, clamped to sane ranges; anything else in the fixture is ignored */

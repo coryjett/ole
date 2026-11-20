@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="680" viewBox="0 0 1200 680" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
   <title id="t">How Ole fits together</title>
-  <desc id="d">You and Ole on your Mac take the customer's call audio, ask the AI model you chose (OpenAI or your own server), and look things up read-only on your MCP servers. Updates come from GitHub releases.</desc>
+  <desc id="d">You and Ole on your Mac take the call audio, ask the AI model you chose (OpenAI or your own server), and look things up read-only on your MCP servers. Updates come from GitHub releases.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0a1830"/><stop offset=".55" stop-color="#101a3d"/><stop offset="1" stop-color="#1c1240"/></linearGradient>
     <radialGradient id="halo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#5aa652" stop-opacity=".18"/><stop offset="1" stop-color="#5aa652" stop-opacity="0"/></radialGradient>
@@ -48,7 +48,7 @@
   <rect x="40" y="262" width="192" height="156" rx="22" fill="#ffffff" fill-opacity=".06" stroke="#ff8a6b" stroke-opacity=".5"/>
   <circle cx="136" cy="302" r="18" fill="#ff6b5b" fill-opacity=".16" stroke="#ff8a6b"/>
   <path d="M128 306 a8 8 0 0 1 16 0 M126 306 v6 M146 306 v6" stroke="#ffb36b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-  <text x="136" y="346" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">Customer</text>
+  <text x="136" y="346" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">Them</text>
   <text x="136" y="370" text-anchor="middle" font-size="13" fill="#c8cfe0">Zoom · Teams · Meet</text>
   <text x="136" y="396" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="1" fill="#ff8a6b">NO BOT JOINS</text>
   <rect x="372" y="150" width="376" height="370" rx="30" fill="url(#hero)" stroke="#9be15d" stroke-opacity=".4" stroke-width="1.5"/>
@@ -77,7 +77,7 @@
   <rect x="880" y="372" width="290" height="188" rx="24" fill="#ffffff" fill-opacity=".06" stroke="#4fd18b" stroke-opacity=".55"/>
   <text x="1025" y="410" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="2" fill="#9be15d">THE CONTEXT</text>
   <text x="1025" y="438" text-anchor="middle" font-size="20" font-weight="800" fill="#fff">Your MCP servers</text>
-  <text x="1025" y="466" text-anchor="middle" font-size="13" fill="#c8cfe0">accounts · deals · issues</text>
+  <text x="1025" y="466" text-anchor="middle" font-size="13" fill="#c8cfe0">people · records · issues</text>
   <text x="1025" y="488" text-anchor="middle" font-size="13" fill="#c8cfe0">past calls · notes</text>
   <rect x="915" y="506" width="220" height="28" rx="14" fill="#4fd18b" fill-opacity=".12"/>
   <text x="1025" y="525" text-anchor="middle" font-size="11" font-weight="700" letter-spacing=".5" fill="#9be15d">READ ONLY · UP TO 10</text>

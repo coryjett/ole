@@ -12,7 +12,7 @@ describe('docs servers during a call (#64)', () => {
     for (const t of ['describe_schema', 'summarize_week', 'queryable', 'update-doc']) expect(isLiveTool({ tool: t })).toBe(false)
   })
   it('names never go to a public documentation search', () => {
-    const rule = "Never put a customer's or person's name in a search of public documentation."
+    const rule = "Never put an organisation's or person's name in a search of public documentation."
     expect(BULLETS_SYSTEM).toContain(rule)
     expect(ASK_SYSTEM).toContain(rule)
   })

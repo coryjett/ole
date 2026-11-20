@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="640" viewBox="0 0 1200 640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
   <title id="t">A call with Ole</title>
-  <desc id="d">Before the call Ole gathers a briefing from your MCP servers; on the call it pops in sourced context while the customer talks; after the call you get a summary with next steps and the context from the call.</desc>
+  <desc id="d">Before the call Ole gathers a briefing from your MCP servers; on the call it pops in sourced context while they talk; after the call you get a summary with next steps and the context from the call.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1b36"/><stop offset="1" stop-color="#1d1442"/></linearGradient>
     <linearGradient id="p1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1f4d3a"/><stop offset="1" stop-color="#14302a"/></linearGradient>
@@ -30,7 +30,7 @@
   <path d="M132 168 h208 a14 14 0 0 1 14 14 v20 a14 14 0 0 1 -14 14 h-200 l-10 10 v-10 a12 12 0 0 1 -12 -12" fill="#ffffff" fill-opacity=".1"/>
   <text x="146" y="197" font-size="14" fill="#e8f5e4">Pulling your briefing… ☕</text>
   <g font-size="14">
-    <rect x="56" y="250" width="304" height="62" rx="16" fill="#fff"/><text x="76" y="276" font-weight="700" fill="#0b2240">🔁 Renewal in 30 days</text><text x="76" y="297" font-size="12" fill="#5b6475">from: the deal record</text>
+    <rect x="56" y="250" width="304" height="62" rx="16" fill="#fff"/><text x="76" y="276" font-weight="700" fill="#0b2240">🔁 Plan ends in 30 days</text><text x="76" y="297" font-size="12" fill="#5b6475">from: your records</text>
     <rect x="56" y="324" width="304" height="62" rx="16" fill="#fff" transform="rotate(-1.5 208 355)"/><text x="76" y="350" font-weight="700" fill="#0b2240" transform="rotate(-1.5 208 355)">🐛 Issue <tspan fill="#2f6fd0" text-decoration="underline">#412</tspan>: 429s on bursts</text><text x="76" y="371" font-size="12" fill="#5b6475" transform="rotate(-1.5 208 355)">from: the ticket tracker</text>
     <rect x="56" y="398" width="304" height="62" rx="16" fill="#fff" transform="rotate(1 208 429)"/><text x="76" y="424" font-weight="700" fill="#0b2240" transform="rotate(1 208 429)">🗣️ Last call: asked about SSO</text><text x="76" y="445" font-size="12" fill="#5b6475" transform="rotate(1 208 429)">from: call notes, 3 Nov</text>
   </g>
@@ -49,7 +49,7 @@
   <rect x="446" y="180" width="164" height="142" rx="12" fill="#2a2440"/>
   <circle cx="528" cy="236" r="26" fill="#f2c9a0"/><path d="M502 236 a26 26 0 0 1 52 0 q-10 -20 -26 -16 q-16 -4 -26 16z" fill="#5a3b2e"/>
   <path d="M496 322 a32 30 0 0 1 64 0z" fill="#ff8a6b"/>
-  <text x="528" y="312" text-anchor="middle" font-size="11" fill="#fff" fill-opacity=".8">Customer</text>
+  <text x="528" y="312" text-anchor="middle" font-size="11" fill="#fff" fill-opacity=".8">Them</text>
   <rect x="622" y="180" width="164" height="142" rx="12" fill="#1d2b44"/>
   <circle cx="704" cy="236" r="26" fill="#c99a76"/><path d="M678 230 a26 26 0 0 1 52 0 q-26 -12 -52 0z" fill="#2b2b2b"/>
   <path d="M672 322 a32 30 0 0 1 64 0z" fill="#5aa652"/>
@@ -82,7 +82,7 @@
   <g font-size="13" fill="#0b2240">
     <rect x="892" y="282" width="16" height="16" rx="4" fill="#5aa652"/><path d="M896 290 l3 3 l6 -7" stroke="#fff" stroke-width="2" fill="none"/><text x="916" y="295">Send the 2.3 upgrade notes</text>
     <rect x="892" y="308" width="16" height="16" rx="4" fill="#5aa652"/><path d="M896 316 l3 3 l6 -7" stroke="#fff" stroke-width="2" fill="none"/><text x="916" y="321">Book SSO deep dive</text>
-    <rect x="892" y="334" width="16" height="16" rx="4" fill="none" stroke="#c4c9d4" stroke-width="1.5"/><text x="916" y="347">Renewal check-in</text>
+    <rect x="892" y="334" width="16" height="16" rx="4" fill="none" stroke="#c4c9d4" stroke-width="1.5"/><text x="916" y="347">Quarterly check-in</text>
   </g>
   <text x="892" y="384" font-size="11" font-weight="800" letter-spacing="1.5" fill="#5b6475">CONTEXT FROM THE CALL</text>
   <rect x="892" y="394" width="232" height="26" rx="8" fill="#eef7ec"/><text x="902" y="412" font-size="12" fill="#2f6b2a">💡 A fintech hit this, fixed in 2.3</text>
