@@ -184,7 +184,9 @@ export function onlyHeadings(source: string, headings: Set<string>): boolean {
   const vague = (p: string) => {
     const rest = p.replace(/^prepared context\s*(?:[-—:–]\s*)?/, '').trim()
     // a bare tool name says nothing; "get_account_details: Acme" names a record, so it's a real source (#48)
+    // "About extProc", "Re: SSO", "Topic: pricing" name a subject, not a record anyone can look up (#119)
     return !rest || headings.has(rest) || /^transcript\b/.test(rest) || /^(get|list|search|find|lookup|read|query|fetch|describe)_[a-z0-9_]+\s*:?\s*$/.test(rest)
+      || /^(?:about|re|regarding|topic|subject)\b\s*:?\s*\S/.test(rest)
   }
   return !parts.length || parts.every(vague)
 }
