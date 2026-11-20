@@ -34,14 +34,15 @@ export const OUTWARD = /web|internet|http|url|fetch|browse|google|bing|brave|tav
 const OUTWARD_DESCRIPTION = /\b(?:web|internet|online|documentation|docs)\b/i
 
 /**
- * Whether a name may go to this tool (#86). An allowlist: the server marked it closed-world (openWorldHint false), or,
- * with no hint, it is named like a record lookup (#57) and nothing in its name or description suggests the web or a
- * documentation search. A tool marked open-world, or of unknown kind, never gets a name.
+ * Whether a name may go to this tool (#86, #91). An allowlist where the server's hint is necessary, never sufficient:
+ * a tool marked open-world never gets a name; every tool must pass the local checks (nothing in its name, its
+ * description or its server's name suggests the web or a documentation search); then it needs the closed-world hint
+ * (openWorldHint false) or a record-lookup name (#57). Unknown kinds get nothing.
  */
-export function mayGetNames(t: Pick<OleTool, 'tool' | 'description' | 'openWorld'>): boolean {
-  if (t.openWorld === false) return true
+export function mayGetNames(t: Pick<OleTool, 'tool' | 'description' | 'openWorld'> & { serverName?: string }): boolean {
   if (t.openWorld === true) return false
-  return isRecordTool(t) && !OUTWARD.test(t.tool) && !OUTWARD_DESCRIPTION.test(t.description)
+  if (OUTWARD.test(t.tool) || OUTWARD_DESCRIPTION.test(t.description) || OUTWARD_DESCRIPTION.test(t.serverName ?? '')) return false
+  return t.openWorld === false || isRecordTool(t)
 }
 
 /** the tools a name may be looked up with: lookup-style (#15) and allowed to get names */
