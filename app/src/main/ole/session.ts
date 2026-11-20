@@ -16,7 +16,11 @@ import { createBulletsEngine, type BulletsEngine, type ChatFn } from './bullets'
 /** a prepared briefing older than this is gathered again when a meeting starts */
 const STALE_MS = 2 * 60 * 60_000
 
-type Deps = { file: string; send: (s: OleLiveState) => void; save?: (meetingId: string, bullets: OleBullet[]) => void }
+type Deps = {
+  file: string; send: (s: OleLiveState) => void; save?: (meetingId: string, bullets: OleBullet[]) => void
+  /** a finished meeting's bullets from disk (Ole was restarted since) */
+  load?: (meetingId: string) => OleBullet[]
+}
 
 export function hookOle(d: Deps): {
   meetingStarted(m: { id: string; title: string }): void
@@ -81,6 +85,13 @@ export function hookOle(d: Deps): {
 
   const text = (v: unknown, max: number) => typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null
   ipcMain.handle('ole:state', () => state())
+  // a saved meeting's context bullets, newest first; ids are Yogurt's meeting UUIDs
+  ipcMain.handle('ole:bullets', (_e, id: unknown) => {
+    if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) return []
+    const found = finished.get(id) ?? (id === meetingId ? bullets : null)
+    if (found) return found
+    try { return d.load?.(id) ?? [] } catch { return [] }
+  })
   ipcMain.handle('ole:prepare', (_e, o: unknown) => {
     const input = (o && typeof o === 'object' ? o : {}) as Record<string, unknown>
     return prepare({ focus: text(input.focus, 200), meetingTitle: text(input.meetingTitle, 300) })

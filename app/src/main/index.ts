@@ -556,6 +556,13 @@ app.whenReady().then(() => {
     file: settingsFile,
     send: (s) => { win?.webContents.send('ole:state', s); sendWidgetTranscript('ole:state', s) },
     save: (id, bullets) => writeFileSync(join(userDataDir(), 'meetings', id, 'ole-bullets.json'), JSON.stringify(bullets, null, 2)),
+    load: (id) => {
+      const path = join(userDataDir(), 'meetings', id, 'ole-bullets.json')
+      if (!existsSync(path)) return []
+      const list: unknown = JSON.parse(readFileSync(path, 'utf8'))
+      return Array.isArray(list) ? list.slice(0, 500).filter((b): b is { id: string; text: string; source: string; at: number } =>
+        !!b && typeof b === 'object' && typeof b.id === 'string' && typeof b.text === 'string' && typeof b.source === 'string' && typeof b.at === 'number') : []
+    },
   })
   onMeetingStart((m) => ole.meetingStarted({ id: m.id, title: m.title }))
   onMeetingStop((m) => ole.meetingStopped(m.id))
