@@ -9,7 +9,7 @@
 // - upcomingMeetings: the first server, in order, whose get_upcoming_meetings succeeds supplies the list; with none,
 //   the host calendar. Cached for a few minutes.
 import type { OleTool } from './types'
-import type { Upcoming } from './calendarMatch'
+import { eventNow, type Upcoming } from './calendarMatch'
 import { MEETING_CONTEXT_TOOL } from './tools'
 
 /** a meeting in the list, as the host calendar or a server gives it; the optional fields come from a server only */
@@ -34,6 +34,11 @@ export type MeetingQuery = { title: string | null; focus: string | null; startsA
 export type MeetingSource = {
   /** meetings overlapping [fromMs, toMs]; [] when there are none or nothing can be read */
   upcomingMeetings(fromMs: number, toMs: number): Promise<Meeting[]>
+  /**
+   * the meeting on now (started or starting within the window, or in progress): from the meetings list, and when a
+   * server's list has none, from the host calendar too, since a server's list may leave out meetings already started
+   */
+  meetingNow(atMs: number): Promise<Meeting | null>
   /** the first server's matched context for this meeting, or null when none matched */
   meetingContext(q: MeetingQuery): Promise<MeetingContext | null>
 }
@@ -49,7 +54,25 @@ const AHEAD_MS = 24 * 60 * 60_000
 export const NOTE_MAX = 200
 export const NOTE_PREFIX = 'Note about this meeting from'
 /** the one line a meeting's note becomes in Prepare's request and the bullets prompt */
-export const noteLine = (n: { text: string; source?: string }) => `${NOTE_PREFIX} ${n.source || 'the calendar'}: ${n.text.slice(0, NOTE_MAX)}`
+export const noteLine = (n: { text: string; source?: string }) => `${NOTE_PREFIX} ${n.source || 'the calendar'}: ${cleanNote(n.text)}`
+
+/**
+ * A server's note made safe to put in a prompt: one line, markdown links and images reduced to their text, bare URLs
+ * dropped, no leading markdown control (#, >, -, *) on any line, no "**", at most NOTE_MAX chars
+ */
+export function cleanNote(raw: string): string {
+  const text = raw
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\b(?:https?:\/\/|www\.)\S+/gi, '')
+    .split(/\r?\n/)
+    .map(l => l.replace(/^\s*(?:[#>*+-]+\s*)+/, ''))
+    .join(' ')
+    .replace(/\*\*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.length > NOTE_MAX ? `${text.slice(0, NOTE_MAX - 1)}…` : text
+}
 const DEFAULT_LENGTH_MS = 30 * 60_000
 
 export type SourceCall = (name: string, argsJson: string, opts?: { timeoutMs?: number }) => Promise<string>
@@ -103,6 +126,14 @@ export function createMeetingSource(o: {
       if (servers) return servers.filter(m => m.end > fromMs && m.start < toMs)
       if (!o.calendar) return []
       return o.calendar.upcoming(fromMs, toMs)
+    },
+
+    async meetingNow(atMs) {
+      const from = atMs - 12 * 60 * 60_000, to = atMs + 60 * 60_000
+      const servers = await fromServers(from, to)
+      const found = eventNow((servers ?? []).filter(m => m.end > from && m.start < to), atMs)
+      if (found || !o.calendar) return found
+      return eventNow(await o.calendar.upcoming(from, to), atMs)
     },
 
     async meetingContext(q) {
@@ -209,7 +240,7 @@ export function toMeeting(v: unknown, serverId: string, serverName: string): Mee
   if (recordId) m.recordId = recordId.slice(0, 100)
   // `summary` is the note only when something else gave the title (calendar APIs use `summary` for the title)
   const noteRaw = str(first(v, ['aiSummary', 'ai_summary', 'note', 'notes', 'brief'])) ?? (titleField ? str(v.summary) : null)
-  if (noteRaw) m.note = oneLine(noteRaw, NOTE_MAX)
+  if (noteRaw) { const note = cleanNote(noteRaw); if (note) m.note = note }
   return m
 }
 

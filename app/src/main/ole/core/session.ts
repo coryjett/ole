@@ -12,7 +12,7 @@ import { createLocalChat, type LocalRun } from './localChat'
 import { createBulletsEngine, generalTools, hasMatchedRecord, pinnedNotes, stripMentioned, type BulletsEngine, type ChatFn } from './bullets'
 import { answerQuestion } from './ask'
 import { createEnricher, type Enricher } from './enrich'
-import { eventNow, pickAutoPrepare } from './calendarMatch'
+import { pickAutoPrepare } from './calendarMatch'
 import { createMeetingSource, type Meeting, type SourceCall } from './meetingSource'
 import { feedbackOf, recordRating } from './feedback'
 import { createTurnRecorder, type RecordedCall } from './turnRecorder'
@@ -248,7 +248,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
 
   /** the meeting on now, for a call with a default title (#56); its start goes to a meeting-context tool (#93) */
   async function calendarEvent(): Promise<Meeting | null> {
-    try { const now = host.clock.now(); return eventNow(await meetings.upcomingMeetings(now - 12 * 60 * 60_000, now + 60 * 60_000), now) }
+    try { return await meetings.meetingNow(host.clock.now()) }
     catch (e) { host.log.warn('reading the calendar failed', e); return null }
   }
 

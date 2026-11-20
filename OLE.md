@@ -108,6 +108,7 @@ Match signal: a result that is a non-empty JSON object with `matchedBy` set (not
 ```ts
 type MeetingSource = {
   upcomingMeetings(fromMs: number, toMs: number): Promise<Meeting[]>  // [] when nothing can be read
+  meetingNow(atMs: number): Promise<Meeting | null>  // the meeting on now, for a default-titled call (#56)
   meetingContext(q: { title: string | null; focus: string | null; startsAt: number | null }): Promise<MeetingContext | null>
 }
 type Meeting = { id; title; start; end; attendees?; link?; recordId?; note?; source? }   // source: the server's name
@@ -118,7 +119,8 @@ Today's design, `createMeetingSource({ tools, call, calendar, now, log, warn })`
 
 - `meetingContext`: `get_meeting_context` on each enabled server offering it, in order (8 s each); the first result with `matchedBy` set wins, and an error, timeout or no-match moves on. No match anywhere: `null`, and Prepare runs its normal tool loop.
 - `upcomingMeetings`: the first server, in order, whose read-only `get_upcoming_meetings` succeeds supplies the list (a server that answers with no meetings still counts); with none, the host calendar (`OleHost.calendar`). Arguments: only the window names the tool's schema declares (`days`, `from`/`to`, `start`/`end`, `time_min`/`time_max`), none when it declares none. The result is read tolerantly: a JSON array, or an object holding one under `meetings`, `events`, `items`, `upcoming`, `results` or `data`; title from `title`/`subject`/`name`/`summary`; start and end from `start`/`startTime`/`starts_at` and `end`/`endTime`/`ends_at` (ISO, epoch ms or `{ dateTime }`; no end means 30 minutes); attendee count, an https meeting link, the matched record id and a short note (`aiSummary`, `note`, `brief`, or `summary` when something else gave the title). A server's list is cached for 3 minutes and asked for at least 24 hours ahead, so auto-prepare and the meeting on now share one call.
-- A meeting's note goes to Prepare and to the live bullets as one line, `Note about this meeting from <server>: …`, capped at 200 chars (`PreparedContext.note`).
+- `meetingNow`: the meeting on now from the same list; when a server's list has none (a server may leave out meetings already started), the host calendar is checked too. Auto-prepare uses `upcomingMeetings` only.
+- A meeting's note goes to Prepare and to the live bullets as one line, `Note about this meeting from <server>: …` (`PreparedContext.note`), cleaned first by `cleanNote`: flattened to one line, markdown links and images reduced to their text, bare URLs dropped, leading `#`, `>`, `-`, `*` removed from each line, `**` dropped, capped at 200 chars.
 - The session hands the source its tools (gathered again when older than 10 minutes) and never lets it contact a server while the Assistant is on Local and Prepare is not on this Mac (#11); the host calendar is still read then.
 
 **Replacing it.** Another design (a dedicated meetings server, per-server roles, merged sources) is a new implementation of `MeetingSource` in this file: keep the interface and the types, change `createMeetingSource`. Nothing else picks a server, so Prepare, auto-prepare and the session need no change; `test/ole/meetingSource.test.ts` pins today's choices and is the test to rewrite.

@@ -72,6 +72,17 @@ describe('meetings from the MCP servers in the session (#98)', () => {
     s.meetingStopped(ID)
   })
 
+  it('a default-titled call: a server list without the meeting in progress falls back to the host calendar', async () => {
+    const later = Date.now() + 5 * 3600_000, started = Date.now() - 10 * 60_000
+    upcomingResult = () => JSON.stringify([{ title: 'Later', start: iso(later), end: iso(later + 1800_000) }])
+    const { createOleSession } = await import('../../src/main/ole/core/session')
+    const s = createOleSession(host({ upcoming: async () => [{ id: 'h', title: 'Epsilon sync', start: started, end: started + 3600_000 }] }), { checkEveryMs: 0, autoEveryMs: 0, summaryEveryMs: 0 })
+    s.meetingStarted({ id: ID, title: 'Meeting' })
+    await vi.waitFor(() => expect(s.handlers.state().prepared?.meetingTitle).toBe('Epsilon sync'), { timeout: 3000 })
+    expect(callTool).toHaveBeenCalledWith('get_meeting_context', { meeting_title: 'Epsilon sync', starts_at: iso(started) }, expect.anything())
+    s.meetingStopped(ID)
+  })
+
   it('with the Assistant on Local the servers are never asked for meetings; the host calendar is used', async () => {
     const start = Date.now() + 6 * 60_000
     const calendar = { upcoming: vi.fn(async () => [{ id: 'h', title: 'Host meeting', start, end: start + 1800_000 }]) }

@@ -3,10 +3,10 @@
 import type { OleTool, PreparedContext } from './types'
 import type { ChatMessage, ToolCall } from './bullets'
 import { MEETING_CONTEXT_TOOL, MORE_TOOLS, MORE_TOOLS_DEF, narrowForPrepare, toOpenAiTools, type WarmupPrompt } from './tools'
-import { createMeetingSource, failureKind as failureKindOf, NOTE_MAX, noteLine, type MeetingContext, type MeetingSource } from './meetingSource'
+import { createMeetingSource, cleanNote, failureKind as failureKindOf, noteLine, type MeetingContext, type MeetingSource } from './meetingSource'
 
 // moved to meetingSource.ts (#98); re-exported for callers of the #93 helpers
-export { failureKind, meetingContextArgs, NOTE_PREFIX, noteLine, serverMatched } from './meetingSource'
+export { cleanNote, failureKind, meetingContextArgs, NOTE_PREFIX, noteLine, serverMatched } from './meetingSource'
 
 export const TOTAL_CAP = 24_000
 export const INSTRUCTIONS_CAP = 8000
@@ -84,7 +84,7 @@ export async function prepareContext(opts: {
   const now = opts.now ?? Date.now()
   const meetingTitle = opts.meetingTitle?.trim() || null
   const focus = opts.focus?.trim() || null
-  const noteText = opts.note?.text?.replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX) || null
+  const noteText = opts.note?.text ? cleanNote(opts.note.text) || null : null
   const note = noteText ? { text: noteText, ...(opts.note?.source?.trim() ? { source: opts.note.source.trim().slice(0, 60) } : {}) } : null
   const maxToolCalls = opts.maxToolCalls ?? 10
   const maxRounds = opts.maxRounds ?? 6
