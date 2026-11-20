@@ -421,6 +421,7 @@ export function createOleSession(host: OleHost, o: OleSessionOptions = {}): OleS
         callTool: (name, argsJson) => call(name, argsJson),
         context: () => prepared,
         busy: () => preparing || !!engine?.busy(),
+        material: () => engine?.lookedUp() ?? '',
         onSection: md => {
           if (meetingId !== m.id) return
           sections.push(md)

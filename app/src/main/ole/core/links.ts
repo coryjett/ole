@@ -21,12 +21,17 @@ export function receivedUrls(material: string): Set<string> {
   return out
 }
 
+/** characters a kept link never contains: they could end a markdown link or an attribute early (#111) */
+const BREAKS_MARKUP = /[()[\]<>"']/
+
 /**
  * A link is kept only if Ole received that exact address (not a longer or shorter one), it is https, it carries no
- * username or password, and it isn't absurdly long (#42, #107).
+ * username or password, it holds nothing that could break the markdown it is written into (parentheses, square or
+ * angle brackets, quotes), and it isn't absurdly long (#42, #107, #111).
  */
 export function keepLink(url: string | undefined, received: ReadonlySet<string>): url is string {
   if (typeof url !== 'string' || !url || url.length > LINK_MAX || !received.has(url)) return false
+  if (BREAKS_MARKUP.test(url)) return false
   if (url.slice(0, 8).toLowerCase() !== 'https://') return false
   try {
     const u = new URL(url)
@@ -65,13 +70,31 @@ export function urlSource(source: string, received: ReadonlySet<string>): { sour
 /**
  * The link and label a bullet or answer ends up with (#107): the model's own link if Ole received it, else the source
  * when that is a received address. A source that was an address is labelled from the link actually used; a text
- * source is kept as the model wrote it.
+ * source keeps the model's words, cleaned and capped like every label (#111).
  */
 export function linkAndLabel(given: string | undefined, source: string | undefined, received: ReadonlySet<string>): { source?: string; url?: string } {
   const g = typeof given === 'string' ? given.trim() : undefined
   const kept = keepLink(g, received) ? g : undefined
   const asAddress = source ? urlSource(source, received) : null
   const url = kept ?? asAddress?.url
-  const label = asAddress ? (url ? sourceLabel(url) : asAddress.source) : source
+  const label = asAddress ? (url ? sourceLabel(url) : asAddress.source) : source ? cleanLabel(source) : undefined
   return { ...(label ? { source: label } : {}), ...(url ? { url } : {}) }
+}
+
+/**
+ * The address a UI may put in an href, checked again where it is shown (#111): https only, else undefined. The core
+ * already kept only received https links; this also covers saved meetings written by older versions.
+ */
+export function httpsHref(url: string | undefined): string | undefined {
+  if (typeof url !== 'string' || !url) return undefined
+  try { return new URL(url).protocol === 'https:' ? url : undefined } catch { return undefined }
+}
+
+/**
+ * A source as a UI shows it (#102, #111): a bare web address reads as "site › page", anything else is cleaned and
+ * capped. The same functions the core labels with, so a saved source and a live one read alike.
+ */
+export function shownSource(source: string): string {
+  const t = source.trim()
+  return /^https?:\/\/\S+$/i.test(t) ? sourceLabel(t) : cleanLabel(t)
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createOpenAITranscriber } from '../../src/main/ole/yogurt/openaiTranscribe'
+import { createOpenAITranscriber, modelUnsupported } from '../../src/main/ole/yogurt/openaiTranscribe'
 import type { Chunk } from '../../src/main/asr/chunker'
 
 function chunk(samples: number, startMs = 0): Chunk {
@@ -131,9 +131,11 @@ describe('openaiTranscribe', () => {
 
   describe('gpt-transcribe safety net (#89)', () => {
     const modelOf = (init: unknown) => ((init as RequestInit).body as FormData).get('model')
-    /** answers status for gpt-transcribe, a transcript for anything else */
-    const refusing = (status: number) => vi.fn<typeof fetch>(async (_u, init) => modelOf(init) === 'gpt-transcribe'
-      ? new Response('{"error":{"message":"secret detail"}}', { status })
+    /** the body OpenAI sends for a model the account can't use (#111) */
+    const notFound = '{"error":{"message":"secret detail","type":"invalid_request_error","param":null,"code":"model_not_found"}}'
+    /** answers status (with body) for gpt-transcribe, a transcript for anything else */
+    const refusing = (status: number, body = notFound) => vi.fn<typeof fetch>(async (_u, init) => modelOf(init) === 'gpt-transcribe'
+      ? new Response(body, { status })
       : new Response(JSON.stringify({ text: 'hallo zusammen' }), { status: 200 }))
 
     for (const status of [400, 404]) {
@@ -174,8 +176,68 @@ describe('openaiTranscribe', () => {
       expect(log).not.toHaveBeenCalled()
     })
 
+    it('only an error body saying the model or a parameter is unsupported counts (#111)', () => {
+      expect(modelUnsupported(notFound)).toBe(true)
+      expect(modelUnsupported('{"error":{"code":"unsupported_value","param":"language"}}')).toBe(true)
+      expect(modelUnsupported('{"error":{"code":"unsupported_parameter"}}')).toBe(true)
+      expect(modelUnsupported('{"error":{"code":null,"param":"model"}}')).toBe(true)
+      expect(modelUnsupported('{"error":{"code":"invalid_value","param":"response_format"}}')).toBe(true)
+      expect(modelUnsupported('{"error":{"code":"invalid_value","param":"file"}}')).toBe(false)
+      expect(modelUnsupported('{"error":{"message":"Audio file is too short"}}')).toBe(false)
+      expect(modelUnsupported('<html>Not Found</html>')).toBe(false)
+      expect(modelUnsupported('')).toBe(false)
+      expect(modelUnsupported('null')).toBe(false)
+    })
+
+    for (const status of [400, 404]) {
+      it(`a ${status} about something else (the audio, a bad file) is surfaced as before: no retry, no fallback (#111)`, async () => {
+        const f = refusing(status, '{"error":{"message":"Invalid file format.","param":"file","code":"invalid_value"}}')
+        const log = vi.fn()
+        const t = createOpenAITranscriber({ key: () => 'sk-test', model: () => 'gpt-transcribe', fetch: f, log })
+        await expect(t(chunk(8000))).rejects.toThrow(`OpenAI transcription answered ${status}`)
+        expect(f).toHaveBeenCalledTimes(1)
+        expect(log).not.toHaveBeenCalled()
+        // and the next chunk still asks for the chosen model
+        await expect(t(chunk(8000))).rejects.toThrow()
+        expect(f.mock.calls.map(c => modelOf(c[1]))).toEqual(['gpt-transcribe', 'gpt-transcribe'])
+      })
+    }
+
+    it('a 404 that is not JSON is not a model problem (#111)', async () => {
+      const f = refusing(404, 'Not Found')
+      const t = createOpenAITranscriber({ key: () => 'sk-test', model: () => 'gpt-transcribe', fetch: f, log: vi.fn() })
+      await expect(t(chunk(8000))).rejects.toThrow('OpenAI transcription answered 404')
+      expect(f).toHaveBeenCalledTimes(1)
+    })
+
+    it('the refused body is read before the retry (#111)', async () => {
+      const refused = new Response(notFound, { status: 400 })
+      const f = vi.fn<typeof fetch>(async (_u, init) => modelOf(init) === 'gpt-transcribe' ? refused : new Response('{"text":"ok"}', { status: 200 }))
+      const t = createOpenAITranscriber({ key: () => 'sk-test', model: () => 'gpt-transcribe', fetch: f, log: vi.fn() })
+      await t(chunk(8000))
+      expect(refused.bodyUsed).toBe(true)
+    })
+
+    it('the retry reads the key again (#111)', async () => {
+      const keys = ['sk-old', 'sk-new']
+      const key = vi.fn(() => keys.shift() ?? null)
+      const f = refusing(400)
+      const t = createOpenAITranscriber({ key, model: () => 'gpt-transcribe', fetch: f, log: vi.fn() })
+      await t(chunk(8000))
+      const auth = (i: number) => ((f.mock.calls[i][1] as RequestInit).headers as Record<string, string>).Authorization
+      expect([auth(0), auth(1)]).toEqual(['Bearer sk-old', 'Bearer sk-new'])
+    })
+
+    it('a key removed before the retry stops it (#111)', async () => {
+      const keys: Array<string | null> = ['sk-old', null]
+      const f = refusing(400)
+      const t = createOpenAITranscriber({ key: () => keys.shift() ?? null, model: () => 'gpt-transcribe', fetch: f, log: vi.fn() })
+      await expect(t(chunk(8000))).rejects.toThrow('Add an OpenAI key to transcribe with OpenAI')
+      expect(f).toHaveBeenCalledTimes(1)
+    })
+
     it('a failing retry reports its own status', async () => {
-      const f = vi.fn<typeof fetch>(async () => new Response('{}', { status: 404 }))
+      const f = vi.fn<typeof fetch>(async () => new Response('{"error":{"code":"model_not_found"}}', { status: 404 }))
       const t = createOpenAITranscriber({ key: () => 'sk-test', model: () => 'gpt-transcribe', fetch: f, log: vi.fn() })
       await expect(t(chunk(8000))).rejects.toThrow('OpenAI transcription answered 404')
       expect(f).toHaveBeenCalledTimes(2)

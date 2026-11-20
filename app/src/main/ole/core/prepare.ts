@@ -3,12 +3,16 @@
 import type { OleTool, PreparedContext } from './types'
 import type { ChatMessage, ToolCall } from './bullets'
 import { MEETING_CONTEXT_TOOL, MORE_TOOLS, MORE_TOOLS_DEF, narrowForPrepare, toOpenAiTools, type WarmupPrompt } from './tools'
+import { knownOrganisations, recordNames } from './anonymise'
+import { hasMatchedRecord } from './bullets'
 import { createMeetingSource, cleanNote, failureKind as failureKindOf, noteLine, type MeetingContext, type MeetingSource } from './meetingSource'
 
 // moved to meetingSource.ts (#98); re-exported for callers of the #93 helpers
 export { cleanNote, failureKind, meetingContextArgs, NOTE_PREFIX, noteLine, serverMatched } from './meetingSource'
 
 export const TOTAL_CAP = 24_000
+/** organisations kept from Prepare's results for anonymising sources during the call (#109) */
+export const ORGS_KEPT = 200
 export const INSTRUCTIONS_CAP = 8000
 export const NO_TOOLS_TEXT = 'No MCP tools are available. Add an MCP server in Settings to prepare from its data.'
 
@@ -94,11 +98,18 @@ export async function prepareContext(opts: {
   let fastPath = false
   let matchedOn: string | null = null
   const toolOf = (name: string) => opts.tools.find(t => t.name === name)?.tool ?? name
+  /** what the tools returned, for the organisations Ole can identify in it (#109); set once the loop has messages */
+  let toolResults: () => string[] = () => []
+  let fastResult: string | null = null
   const done = (text: string): PreparedContext => {
     const total = [...counts.values()].reduce((a, b) => a + b, 0)
     const list = [...counts].map(([n, c]) => `${n} ${c}`).join(', ')
     log(`ole prepare: ${total} tool calls${list ? ` (${list})` : ''}${nudged ? ', searched again once' : ''}${fastPath ? ', fast path' : ''}${matchedOn ? `, matched on ${matchedOn}` : ''}`)
-    return { meetingTitle, focus, text: cap(text.trim()), preparedAt: now, ...(note ? { note } : {}) }
+    const briefing = cap(text.trim())
+    // sources name only the matched record (#109): the organisations the tools named, and which of them it is
+    const orgs = knownOrganisations(toolResults()).slice(0, ORGS_KEPT)
+    const records = hasMatchedRecord({ meetingTitle, focus, text: briefing, preparedAt: now }) ? recordNames({ fastResult, briefing, known: orgs }) : []
+    return { meetingTitle, focus, text: briefing, preparedAt: now, ...(note ? { note } : {}), ...(orgs.length ? { orgs } : {}), ...(records.length ? { records } : {}) }
   }
 
   if (!opts.tools.length) return done(NO_TOOLS_TEXT)
@@ -142,11 +153,13 @@ export async function prepareContext(opts: {
   const toolsNow = () => [...toOpenAiTools(offered), ...(widened ? [] : [MORE_TOOLS_DEF])]
   const seen = new Map<string, Promise<string>>()
   let used = 0
+  toolResults = () => messages.filter(m => m.role === 'tool').map(m => m.content ?? '')
 
   // the fast path's results read as if the model had called the tools itself, before its first turn (#93)
   if (fast) {
     fastPath = true
     matchedOn = fast.serverName
+    fastResult = fast.result
     const f = { ...fast, id: 'fast_path_0' }
     messages.push({ role: 'assistant', content: null, tool_calls: [{ id: f.id, type: 'function' as const, function: { name: f.tool.name, arguments: f.argsJson } }] })
     messages.push({ role: 'tool', tool_call_id: f.id, content: f.result })
