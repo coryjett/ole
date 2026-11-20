@@ -40,7 +40,8 @@ export type McpServerConfig = { id: string; name: string; url: string; enabled: 
 export type OleBullet = { id: string; text: string; source: string; at: number; heard?: string; quote?: string; url?: string; pinned?: boolean; rating?: 'up' | 'down' };
 
 /** a question asked during the call and Ole's answer (#53); pending while it is being answered */
-export type OleAnswer = { id: string; question: string; text: string; source?: string; url?: string; at: number; pending?: boolean };
+/** ok: true only for a real answer, false for "couldn't find it" or a failure; absent on answers saved before it existed */
+export type OleAnswer = { id: string; question: string; text: string; source?: string; url?: string; at: number; pending?: boolean; ok?: boolean };
 
 /** someone on the call said they will do something (#82); who: as the call names them, '' when unclear */
 export type OleCommitment = { who: string; what: string };
@@ -49,7 +50,8 @@ export type OleCommitment = { who: string; what: string };
 export type OleCallMemory = { summary: string; openQuestions: string[]; commitments: OleCommitment[] };
 
 /** a tool offered to the model: name is the OpenAI function name (`<serverId>__<tool>`, [A-Za-z0-9_-], max 64) */
-export type OleTool = { name: string; serverId: string; serverName: string; tool: string; description: string; parameters: Record<string, unknown> };
+/** openWorld: the server's openWorldHint, when it gave one (#86: names only go to tools marked closed-world, or record lookups) */
+export type OleTool = { name: string; serverId: string; serverName: string; tool: string; description: string; parameters: Record<string, unknown>; openWorld?: boolean };
 
 export type PreparedContext = {
   meetingTitle: string | null;

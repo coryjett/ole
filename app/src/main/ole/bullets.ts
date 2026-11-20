@@ -1,11 +1,16 @@
 // Ole: live context bullets. Throttled model calls over the recent transcript and the prepared context.
 import type { OleBullet, OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
+import { createBulletStream } from './bulletStream'
 
 export type TranscriptLine = { speaker: string; text: string; startMs: number }
 export type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 export type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string }
-export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
+/**
+ * onDelta (#84): stream the answer, each content piece as it arrives. A ChatFn may ignore it and answer whole; the
+ * reply it resolves with is the whole message either way.
+ */
+export type ChatFn = (req: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; onDelta?: (text: string) => void }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>
 export type CallToolFn = (name: string, argsJson: string) => Promise<string>
 export type BulletsEngine = {
   push(line: TranscriptLine): void; stop(): void; bullets(): OleBullet[]
@@ -13,6 +18,8 @@ export type BulletsEngine = {
   update(id: string, patch: { pinned?: boolean; rating?: 'up' | 'down' | null }): OleBullet | null
   /** the last part of the call, for Ask (#53) */
   recent(): TranscriptLine[]
+  /** a bullets turn is running now (#86: background lookups wait for it) */
+  busy(): boolean
 }
 /** what the person rated on earlier calls (#55) */
 export type BulletFeedback = { useful: string[]; notUseful: string[] }
@@ -55,16 +62,40 @@ export const BULLETS_SYSTEM = [
 /** what a briefing says when nothing in the tools matches the call (#57, #71); prepare.ts writes these lines (older wording kept) */
 const NO_RECORD_LINES = [/^no (?:matching record|customer account) for this call\b/i, /^couldn['’]t match this call to a meeting or (?:record|account)\b/i]
 
-/** the call matched a record: a briefing exists and did not say it found none (#57) */
+/** the heading of a section added to the briefing during the call (#86) */
+export const MENTIONED_HEADING = '## Mentioned during the call:'
+
+/** the briefing as Prepare wrote it, without the sections added during the call (#86) */
+export function preparedPart(text: string): string {
+  const at = text.indexOf(MENTIONED_HEADING)
+  return at === -1 ? text : text.slice(0, at)
+}
+
+/** the call matched a record: a briefing exists and did not say it found none (#57); sections added mid-call don't count (#86) */
 export function hasMatchedRecord(context: PreparedContext | null): boolean {
-  const first = context?.text?.trim().split('\n')[0]?.trim() ?? ''
+  const first = preparedPart(context?.text ?? '').trim().split('\n')[0]?.trim() ?? ''
   return !!first && !NO_RECORD_LINES.some(r => r.test(first))
 }
 
 export const NO_RECORD_RULE = 'Nothing in the tools matches this call. Give general facts only: documentation, known issues, how something works, and patterns seen across many records, generalised and anonymised (for example "a common pattern among fintech startups"). Never details from one organisation\'s or person\'s records.'
+/** on such a call, the sections looked up for names the other side said (#86) may still be used */
+export const MENTIONED_RULE = 'Exception: a briefing section headed "Mentioned during the call" was looked up for a name said on this call; its facts may be used, with their sources.'
+/**
+ * The rule for a call with no matching record. The exception comes only from trusted state: the session says the
+ * enricher added sections (#86), never because the briefing's text happens to contain the heading.
+ */
+export function noRecordRule(mentioned = false): string {
+  return mentioned ? `${NO_RECORD_RULE}\n${MENTIONED_RULE}` : NO_RECORD_RULE
+}
+/** Prepare's output with any text posing as a mid-call section taken out of heading form, before it is stored (#86) */
+export function stripMentioned(text: string): string {
+  return text.replace(/#+[ \t]*Mentioned during the call:/gi, 'Mentioned during the call:')
+}
 
 /** tools that fetch one organisation's or person's records (CRM-style names): left out of a call with no matching record (#57) */
 const SINGLE_RECORD = /account|opportunit|deal|contact|action_item|interaction|customer|pipeline|poc|tracker|call_brief|transcript|note/i
+/** a tool named like a lookup of one organisation's or person's records (#57, #86) */
+export const isRecordTool = (t: Pick<OleTool, 'tool'>) => SINGLE_RECORD.test(t.tool)
 export function generalTools(tools: OleTool[]): OleTool[] {
   return tools.filter(t => !SINGLE_RECORD.test(t.tool))
 }
@@ -86,14 +117,16 @@ export function latestNotes(notes: string, max = NOTES_IN_PROMPT): string {
  * past-call feedback) so prompt caching covers it; then what changes: the running summary (#75), the user's notes
  * (#77), earlier bullets and the recent transcript.
  */
-export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[]; feedback?: BulletFeedback; summary?: string; notes?: string }): ChatMessage[] {
+export function buildBulletsPrompt(args: { context: PreparedContext | null; lines: TranscriptLine[]; previous: OleBullet[]; feedback?: BulletFeedback; summary?: string; notes?: string
+  /** the enricher added sections to the briefing this call (#86); from the session, never from the text */
+  mentioned?: boolean }): ChatMessage[] {
   const { context, lines, previous, feedback, summary, notes } = args
   const parts: string[] = []
   if (context?.text) {
     const about = [context.meetingTitle ? `meeting: ${context.meetingTitle}` : null, context.focus ? `focus: ${context.focus}` : null].filter(Boolean).join(', ')
     parts.push(`Prepared context${about ? ` (${about})` : ''}:\n${context.text}`)
   } else parts.push(`No context prepared.${context?.meetingTitle ? ` Meeting: ${context.meetingTitle}` : ''}${context?.focus ? ` Focus: ${context.focus}` : ''}`)
-  if (!hasMatchedRecord(context)) parts.push(NO_RECORD_RULE)
+  if (!hasMatchedRecord(context)) parts.push(noRecordRule(args.mentioned))
   // the person's thumbs from earlier calls tune what is worth surfacing (#55)
   if (feedback?.useful.length) parts.push(`Bullets the user found useful on earlier calls:\n${feedback.useful.map(t => `- ${t}`).join('\n')}`)
   if (feedback?.notUseful.length) parts.push(`Bullets the user found not useful on earlier calls (give none like these):\n${feedback.notUseful.map(t => `- ${t}`).join('\n')}`)
@@ -157,24 +190,36 @@ export function readableSource(source: string): string {
   return source.split(/\s*;\s*/).map(p => p.replace(/^\[|\]$/g, '').replace(/^(?:get|list|search|find|lookup|read|query|fetch|describe)_([a-z0-9_]+)\s*:/i, (_m, rest: string) => `${rest.replace(/_/g, ' ')}:`).trim()).filter(Boolean).join('; ')
 }
 
-export function parseBullets(content: string | null): Array<{ text: string; source: string; heard?: string; quote?: string; url?: string }> {
+export type ParsedBullet = { text: string; source: string; heard?: string; quote?: string; url?: string }
+/** bullets read from one reply at most (whole or streamed) */
+const BULLETS_PER_REPLY = 3
+
+/** one element of a reply's "bullets", or null when it lacks text or a source; never throws */
+export function parseBulletItem(item: unknown): ParsedBullet | null {
+  const o = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+  const text = typeof o.text === 'string' ? o.text.trim() : ''
+  const source = typeof o.source === 'string' ? o.source.trim() : ''
+  if (!text || !source) return null
+  // backstop for a wordy model: a bullet is a headline (#40)
+  const short = clip(text.replace(/\s+/g, ' '), BULLET_MAX)
+  const heard = typeof o.heard === 'string' ? clip(o.heard.trim().replace(/^["“]|["”]$/g, ''), 100) : ''
+  const quote = typeof o.quote === 'string' ? clip(o.quote.trim().replace(/^["“]|["”]$/g, ''), 160) : ''
+  const url = typeof o.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(o.url.trim()) ? o.url.trim() : ''
+  return { text: short, source: readableSource(source), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) }
+}
+
+export function parseBullets(content: string | null): ParsedBullet[] {
   if (!content) return []
   const body = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   let parsed: unknown
   try { parsed = JSON.parse(body) } catch { return [] }
   const list = (parsed as { bullets?: unknown })?.bullets
   if (!Array.isArray(list)) return []
-  const out: Array<{ text: string; source: string; heard?: string; quote?: string; url?: string }> = []
+  const out: ParsedBullet[] = []
   for (const item of list) {
-    const text = typeof item?.text === 'string' ? item.text.trim() : ''
-    const source = typeof item?.source === 'string' ? item.source.trim() : ''
-    // backstop for a wordy model: a bullet is a headline (#40)
-    const short = clip(text.replace(/\s+/g, ' '), BULLET_MAX)
-    const heard = typeof item?.heard === 'string' ? clip(item.heard.trim().replace(/^["“]|["”]$/g, ''), 100) : ''
-    const quote = typeof item?.quote === 'string' ? clip(item.quote.trim().replace(/^["“]|["”]$/g, ''), 160) : ''
-    const url = typeof item?.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(item.url.trim()) ? item.url.trim() : ''
-    if (text && source) out.push({ text: short, source: readableSource(source), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
-    if (out.length === 3) break
+    const b = parseBulletItem(item)
+    if (b) out.push(b)
+    if (out.length === BULLETS_PER_REPLY) break
   }
   return out
 }
@@ -287,6 +332,33 @@ export function candidateTerms(text: string): string[] {
   return out
 }
 
+/** a capitalised word that can be part of a name: Acme, O'Neil, Smith-Jones; not CamelCase, ALLCAPS or digits */
+const NAME_WORD = /^[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)*$/
+/** words in a name looked up during the call (#86) */
+const NAME_WORDS_MAX = 4
+
+/**
+ * Names in a line (#86): a capitalised word that doesn't start a sentence, with the capitalised words straight after
+ * it ("Northwind Traders", "Dana Whitfield"), as #79's trigger finds them. Product and version tokens (CamelCase,
+ * ALLCAPS, anything with a digit) are never names. Punctuation after a word ends the name. In the order they appear.
+ */
+export function nameTerms(text: string): string[] {
+  const out: string[] = []
+  let run: string[] = []
+  const flush = () => { if (run.length) out.push(run.join(' ')); run = [] }
+  const tokens = text.split(/\s+/)
+  tokens.forEach((raw, i) => {
+    const tok = raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9+#]+$/g, '').replace(/[’']s$/, '')
+    const startsSentence = i === 0 || /[.!?:]["')\]]*$/.test(tokens[i - 1])
+    const name = tok.length >= 3 && NAME_WORD.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
+    if (name && (run.length || !startsSentence) && run.length < NAME_WORDS_MAX) run.push(tok)
+    else { flush(); if (name && !startsSentence) run.push(tok) }
+    if (/[^A-Za-z0-9'’]$/.test(raw)) flush()
+  })
+  flush()
+  return out
+}
+
 /**
  * Whether a line from the other side should bring the next bullets turn forward (#79): a question, or a term the
  * briefing and the bullets so far never mention and that hasn't already done so. Pure string work, no model call.
@@ -321,6 +393,8 @@ export function createBulletsEngine(opts: {
   /** the running summary of the call (#75) and the user's notes (#77), read at each turn */
   summary?: () => string
   notes?: () => string
+  /** the enricher added sections to the briefing (#86), from the session's own state */
+  mentioned?: () => boolean
   /** one line per turn, counts only, never transcript or bullet text (#59) */
   log?: (line: string) => void
   now?: () => number
@@ -404,35 +478,23 @@ export function createBulletsEngine(opts: {
     const fast = urgent && now() - lastRun < minIntervalMs
     running = true; dirty = false; urgent = false; lastRun = now()
     try {
-      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.() })
+      const messages = buildBulletsPrompt({ context: opts.context(), lines: recentWindow(lines, windowMs), previous: list, feedback: opts.feedback?.(), summary: opts.summary?.(), notes: opts.notes?.(), mentioned: opts.mentioned?.() })
       const offered = opts.tools()
       const allowed = new Set(offered.map(t => t.name))
       const tools = offered.length ? { tools: toOpenAiTools(offered) } : {}
-      let reply = await opts.chat({ messages, ...tools, response_format: { type: 'json_object' } })
-      for (let round = 1; reply.tool_calls?.length; round++) {
-        if (stopped) return
-        messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
-        // a round's lookups are independent: they run together, answered in the order they were asked (#80)
-        const calls = reply.tool_calls
-        const answered = await Promise.all(calls.map(call => lookup(call, allowed)))
-        calls.forEach((call, i) => messages.push({ role: 'tool', tool_call_id: call.id, content: answered[i] }))
-        // The last round offers no tools, so the model has to answer.
-        reply = await opts.chat({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
-        if (round >= TOOL_ROUNDS) break
-      }
-      if (stopped) return
       const seen = new Set(list.map(b => normalise(b.text)))
       const shownTexts = list.map(b => b.text)
       const fresh: OleBullet[] = []
-      const headings = briefingHeadings(opts.context()?.text ?? '')
-      let dropped = 0, repeated = 0
-      const back = parseBullets(reply.content)
-      for (const b of back) {
+      let dropped = 0, repeated = 0, shownCount = 0
+      /** the bullets taken from the stream this turn, as parsed (#84) */
+      const streamed: string[] = []
+      /** each bullet gets exactly the same checks, streamed or not */
+      const consider = (b: ParsedBullet) => {
         // a briefing heading isn't a source you can check (#37)
-        if (onlyHeadings(b.source, headings)) { dropped++; continue }
+        if (onlyHeadings(b.source, briefingHeadings(opts.context()?.text ?? ''))) { dropped++; return }
         const key = normalise(b.text)
-        // the same words, or the same fact in other words, as a bullet already shown (#81)
-        if (seen.has(key) || nearDuplicate(b.text, shownTexts)) { repeated++; continue }
+        // the same words, or the same fact in other words, as a bullet already shown or earlier in this turn (#81)
+        if (seen.has(key) || nearDuplicate(b.text, shownTexts)) { repeated++; return }
         seen.add(key)
         shownTexts.push(b.text)
         // the excerpts are checked against what Ole actually has; one that doesn't match is left out, never shown (#39)
@@ -444,10 +506,53 @@ export function createBulletsEngine(opts: {
         const url = b.url && sources.includes(b.url) ? b.url : undefined
         fresh.push({ id: `b${++seq}`, text: b.text, source: b.source, at: now(), ...(heard ? { heard } : {}), ...(quote ? { quote } : {}), ...(url ? { url } : {}) })
       }
+      /** this turn's bullets on top, in the model's order; a pin or rating made meanwhile is kept */
+      const show = () => {
+        const ids = new Set(fresh.map(b => b.id))
+        list = [...fresh, ...list.filter(b => !ids.has(b.id))]
+        shownCount = fresh.length
+        opts.onBullets([...list])
+      }
+      /** a model request whose answer streams (#84): each complete bullet is checked and shown as it arrives */
+      const ask = (req: Parameters<ChatFn>[0]) => {
+        let taken = 0
+        const reader = createBulletStream(item => {
+          if (stopped || taken >= BULLETS_PER_REPLY) return
+          const b = parseBulletItem(item)
+          if (!b) return
+          taken++
+          streamed.push(JSON.stringify(b))
+          consider(b)
+          if (fresh.length > shownCount) show()
+        })
+        return opts.chat({ ...req, onDelta: text => reader.push(text) })
+      }
+      let reply = await ask({ messages, ...tools, response_format: { type: 'json_object' } })
+      for (let round = 1; reply.tool_calls?.length; round++) {
+        if (stopped) return
+        messages.push({ role: 'assistant', content: reply.content, tool_calls: reply.tool_calls })
+        // a round's lookups are independent: they run together, answered in the order they were asked (#80)
+        const calls = reply.tool_calls
+        const answered = await Promise.all(calls.map(call => lookup(call, allowed)))
+        calls.forEach((call, i) => messages.push({ role: 'tool', tool_call_id: call.id, content: answered[i] }))
+        // The last round offers no tools, so the model has to answer.
+        reply = await ask({ messages, ...(round < TOOL_ROUNDS ? tools : {}), response_format: { type: 'json_object' } })
+        if (round >= TOOL_ROUNDS) break
+      }
+      if (stopped) return
+      // what is left of the reply: the whole-reply parse is the authority (#84); a bullet already taken from the
+      // stream is not taken again, and one the stream gave that the whole reply lacks still counts as back
+      const back = parseBullets(reply.content)
+      const left = [...streamed]
+      for (const b of back) {
+        const i = left.indexOf(JSON.stringify(b))
+        if (i > -1) left.splice(i, 1)
+        else consider(b)
+      }
       // never silent (#48, #59): every turn says what happened to its bullets
       const lookupsMade = messages.filter(m => m.role === 'tool').length
-      log(`ole bullets: ${back.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups${fast ? ', fast' : ''}`)
-      if (fresh.length) { list = [...fresh, ...list]; opts.onBullets([...list]) }
+      log(`ole bullets: ${back.length + left.length} back, ${fresh.length} shown, ${dropped} without a source, ${repeated} repeated, ${lookupsMade} lookups${fast ? ', fast' : ''}`)
+      if (fresh.length > shownCount) show()
     } catch (e) {
       // the panel stays quiet and the next interval tries again; the log says why (#59)
       log(`ole bullets: turn failed: ${e instanceof Error ? e.message.slice(0, 200) : 'unknown error'}`)
@@ -493,5 +598,6 @@ export function createBulletsEngine(opts: {
       return next
     },
     recent: () => recentWindow(lines, windowMs),
+    busy: () => running,
   }
 }

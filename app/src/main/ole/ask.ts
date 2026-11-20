@@ -3,7 +3,7 @@
 import type { OleTool, PreparedContext } from './types'
 import { toOpenAiTools } from './tools'
 import type { CallToolFn, ChatFn, ChatMessage, TranscriptLine } from './bullets'
-import { callKey, hasMatchedRecord, latestNotes, NO_RECORD_RULE, readableSource } from './bullets'
+import { callKey, hasMatchedRecord, latestNotes, noRecordRule, readableSource } from './bullets'
 
 /** lookup rounds before the model must answer */
 const TOOL_ROUNDS = 2
@@ -30,10 +30,12 @@ export async function answerQuestion(o: {
   chat: ChatFn; question: string; context: PreparedContext | null; lines: TranscriptLine[]; tools: OleTool[]; call: CallToolFn
   /** the running summary (#75), the user's notes (#77) and earlier questions in this call, oldest first (#76) */
   summary?: string; notes?: string; earlier?: Array<{ question: string; text: string }>
-}): Promise<{ text: string; source?: string; url?: string }> {
+  /** the enricher added sections to the briefing this call (#86), from the session's state */
+  mentioned?: boolean
+}): Promise<{ text: string; source?: string; url?: string; ok: boolean }> {
   // what doesn't change during the call first, so prompt caching covers it (#77)
   const parts = [o.context?.text ? `Briefing:\n${o.context.text}` : 'No briefing.']
-  if (!hasMatchedRecord(o.context)) parts.push(NO_RECORD_RULE)
+  if (!hasMatchedRecord(o.context)) parts.push(noRecordRule(o.mentioned))
   if (o.summary?.trim()) parts.push(`The call so far (summary):\n${o.summary.trim()}`)
   if (o.notes?.trim()) parts.push(`The user's notes so far:\n${latestNotes(o.notes)}`)
   parts.push(o.lines.length ? `Recent lines (latest):\n${o.lines.slice(-RECENT_LINES).map(l => `[${clock(l.startMs)}] ${l.speaker}: ${l.text}`).join('\n')}` : 'Nothing said yet.')
@@ -69,10 +71,10 @@ export async function answerQuestion(o: {
   let parsed: { answer?: unknown; source?: unknown; url?: unknown } = {}
   try { parsed = JSON.parse((reply.content ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')) } catch { /* plain text or nothing: no answer */ }
   const text = typeof parsed.answer === 'string' && parsed.answer.trim() ? parsed.answer.trim().slice(0, ANSWER_MAX) : ''
-  if (!text) return { text: NO_ANSWER }
+  if (!text) return { text: NO_ANSWER, ok: false }
   const source = typeof parsed.source === 'string' && parsed.source.trim() ? readableSource(parsed.source.trim()).slice(0, 120) : undefined
   // a link is kept only if Ole has it: models invent plausible URLs (#42)
   const material = `${o.context?.text ?? ''}\n${messages.filter(m => m.role === 'tool').map(m => m.content ?? '').join('\n')}`
   const url = typeof parsed.url === 'string' && /^https:\/\/[^\s"<>]{3,500}$/.test(parsed.url.trim()) && material.includes(parsed.url.trim()) ? parsed.url.trim() : undefined
-  return { text, ...(source ? { source } : {}), ...(url ? { url } : {}) }
+  return { text, ...(source ? { source } : {}), ...(url ? { url } : {}), ok: true }
 }

@@ -45,8 +45,9 @@ export function parseTurnLog(line: string): Omit<TurnReport, 'atMs'> | null {
  * The --live ChatFn: only the request fields the engine sends go through, and the validated key, model and base URL
  * are pinned last, so nothing in a request can redirect it or swap the key.
  */
-export function liveChat(send: (o: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; key: string; model: string; baseUrl: string }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>, pinned: { key: string; model: string; baseUrl: string }): ChatFn {
-  return (req) => send({ messages: req.messages, tools: req.tools, response_format: req.response_format, key: pinned.key, model: pinned.model, baseUrl: pinned.baseUrl })
+export function liveChat(send: (o: { messages: ChatMessage[]; tools?: unknown[]; response_format?: unknown; onDelta?: (text: string) => void; key: string; model: string; baseUrl: string }) => Promise<{ content: string | null; tool_calls?: ToolCall[] }>, pinned: { key: string; model: string; baseUrl: string }): ChatFn {
+  // onDelta streams the answer as the app does (#84); it only receives text, so it can redirect nothing
+  return (req) => send({ messages: req.messages, tools: req.tools, response_format: req.response_format, ...(req.onDelta ? { onDelta: req.onDelta } : {}), key: pinned.key, model: pinned.model, baseUrl: pinned.baseUrl })
 }
 
 /** every exact occurrence of each secret (an API key, say) taken out of text that is about to be printed */
@@ -154,6 +155,8 @@ export async function replayCall(fixture: ReplayFixture, opts: { chat?: ChatFn }
         ? reply.toolCalls.map(c => ({ id: `call_${++callSeq}`, type: 'function' as const, function: { name: c.name, arguments: JSON.stringify(c.arguments ?? {}) } }))
         : undefined
       const content = reply.bullets ? JSON.stringify({ bullets: reply.bullets }) : reply.content ?? (tool_calls ? null : '{"bullets":[]}')
+      // a recorded reply is a whole message: streamed, it arrives as one piece (#84), so a replay stays deterministic
+      if (req.onDelta && content && !tool_calls) req.onDelta(content)
       return { content, ...(tool_calls ? { tool_calls } : {}) }
     }
     const latency = reply.latencyMs ?? fixture.latencyMs ?? 0

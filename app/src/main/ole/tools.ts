@@ -101,6 +101,7 @@ export async function collectTools(servers: ToolServer[], onUnavailable?: (u: Un
         tool: t.name,
         description,
         parameters,
+        ...(typeof t.annotations?.openWorldHint === 'boolean' ? { openWorld: t.annotations.openWorldHint } : {}),
       })
     }
   })
