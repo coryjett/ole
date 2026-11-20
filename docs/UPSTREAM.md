@@ -22,7 +22,7 @@ A running ledger of every change Ole makes to Yogurt-owned files: anything outsi
 
 | Change | Ole issue / PR | Yogurt files |
 |---|---|---|
-| Ole's IPC, settings fields and live-state types | many (#33, #52, #89, #101, #118/#122, …) | `preload/index.ts`, `shared/types.ts`, `main/settings.ts` |
+| Ole's IPC, settings fields and live-state types | many (#33, #52, #89, #101, #118/#122, #126, #128, …) | `preload/index.ts`, `shared/types.ts`, `main/settings.ts` |
 | Wiring Ole into the app: session, providers, servers, keys, per-meeting files, notes, calendar, capture protection | many | `main/index.ts` |
 | OpenAI transcription (chunked and streaming) behind the Transcribe seam | #85, #89 | `main/asr/index.ts` |
 | Ole tabs, quick-note bar and docked Ask on the note page | #108, #122 | `renderer/src/screens/Note.tsx` |

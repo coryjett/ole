@@ -91,6 +91,14 @@ export type OleLiveState = {
   blocked: string | null
   /** enabled MCP servers Ole couldn't use for this briefing or call, and why (#33) */
   unavailable: Array<{ name: string; reason: string }>
+  /** the briefing has a matched record (#126); absent from a state sent before it existed */
+  matched?: boolean
+  /** names the other side said that resolved to a record, in the order heard, while the call is unmatched (#126) */
+  subjectCandidates?: Array<{ name: string; resolved: true }>
+  /** who Ole prepared this call for from the conversation: a name the user chose, or one Ole picked itself (auto) (#126) */
+  subject?: { name: string; auto: boolean } | null
+  /** before a call: the next calendar meeting and the state of its briefing, for Home (#126) */
+  nextMeeting?: { title: string; start: number; briefing: 'ready' | 'preparing' | 'none' } | null
 }
 
 /** how an Export for replay went; turns: the recorded bullets turns in the file (0 for a call from before they were kept) */

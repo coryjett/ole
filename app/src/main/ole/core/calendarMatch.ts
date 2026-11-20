@@ -24,3 +24,16 @@ export function pickAutoPrepare<T extends Upcoming>(events: T[], now: number, le
   due.sort((a, b) => a.start - b.start)
   return due[0] ?? null
 }
+
+/** the next meeting for Home (#126): the one on now or the soonest coming up, any title */
+export function nextMeeting<T extends Upcoming>(events: T[], now: number): T | null {
+  const ahead = events.filter(e => isMeeting(e) && e.end > now)
+  ahead.sort((a, b) => a.start - b.start)
+  return ahead[0] ?? null
+}
+
+/** the same calendar event: the same id, or the same title and start (#128) */
+export function sameEvent(a: Upcoming | null | undefined, b: Upcoming | null | undefined): boolean {
+  if (!a || !b) return false
+  return a.id === b.id || (a.title === b.title && a.start === b.start)
+}

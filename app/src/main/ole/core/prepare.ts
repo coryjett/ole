@@ -37,7 +37,7 @@ export const PREPARE_SYSTEM = [
   'Leave out anything no tool returned. Never invent facts, names or numbers.',
   'If what the meeting is about (an organization, person or project) has no record in the tools, as with an internal call or a new contact, make the first line exactly "No matching record for this call." and brief only the meeting, its people and its topic: no details from other records. (#57, #71)',
   'When a focus is given or the meeting title names an organization, person or project, search for it with the tools before you may say there is no match; a meeting lookup alone is not enough. (#62)',
-  'If you cannot match the call to a meeting or an account, reply with exactly this one line and nothing else: "Couldn\'t match this call to a meeting or record. Type a name in Focus and press Refresh briefing." (#44)',
+  'If you cannot match the call to a meeting or an account, reply with exactly this one line and nothing else: "Couldn\'t match this call to a meeting or record. Ole will pick it up from the conversation, or type a name under Someone else." (#44, #126)',
 ].join('\n')
 
 // The rules and the person's own instructions are the system prompt. A server's prompt is remote content, so it never
