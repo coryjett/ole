@@ -121,6 +121,10 @@ Stop: the panel sends each question with a request id (`ole:ask`, question and i
 
 #118 put this inside the host's Ask (an `answerFirst` hook in `library/conversations.ts`, a `conversation_turns.ole_source` column, a source line in `AskConversation.tsx`). #122 took all of that out again; a database that already has the `ole_source` column keeps it, and nothing reads it.
 
+## The organization in generated titles (#154)
+
+When a call's briefing matched a record (the name in "Briefing for X", #138), the call stopping saves that organization with the meeting (`ole-org.json` beside the other per-meeting files, through `OleHost.files.saveOrg`): the record Prepare matched, else what was prepared for, never the meeting's own title; an unmatched call saves nothing. A title the app writes from the notes afterwards (Yogurt's `titleSource` `'auto'`, from a generic title or one it wrote before) goes through `session.generatedTitle(id, title)`, which puts it in front, "Example Corp: Agent Gateway POC with Clyde", unless the title already names it (any case, with or without a legal suffix: `titleWithOrg` in `core/orgTitle.ts`, using `anonymize.ts`'s `mentions()`). A title the person typed, or the calendar's, is never asked for and never changed. The organization is read back from the file after a restart, so a title written later (Write again, people changed) still gets it. The hook is one line in Yogurt's `notes/index.ts` (`hookNotes`'s `generatedTitle` option), the only place it writes a generated title.
+
 ## Meeting-context fast path (#93)
 
 A server can answer the whole "what is this meeting" question in one call. When an enabled server offers a tool whose MCP name is exactly `get_meeting_context` and that passes the read-only filter (`isReadOnly` in `tools.ts`; the `get_` prefix is enough unless the server marks it destructive), `prepareContext` calls it itself before the model's first turn, with no model involved. Arguments, all optional strings: `meeting_title`, `focus`, `starts_at` (ISO 8601). Only values Ole has are sent, and when the tool's input schema declares properties, only those it declares. `starts_at` comes from the meeting list (#98): auto-prepare passes the meeting's start, a default-titled call passes the start of the meeting on now (#56), and a manual Prepare or a named call passes none. Which servers are asked, and in what order, is the meeting source's choice (below): today the servers in Settings order, one at a time, stopping at the first match.
@@ -175,7 +179,7 @@ Ole is a host-agnostic core behind a host interface, so it can move to another h
 - `notify(title, body)` (optional): a system notification (a server stopped working, a briefing is ready).
 - `notes.read(meetingId)` / `notes.append(meetingId, md)` (optional): the meeting's own notes, read at each bullets turn and Ask, appended to when the call ends.
 - `calendar.upcoming(fromMs, toMs)` (optional): calendar events (`{ id, title, start, end }`), the fallback when no MCP server supplies meetings (#98); without it, and with no such server, Ole has no meeting list.
-- `files.save*/load*` (each optional): per-meeting files kept on this computer: bullets, briefing, answers, call memory, recorded turns.
+- `files.save*/load*` (each optional): per-meeting files kept on this computer: bullets, briefing, answers, call memory, recorded turns, the organization the call matched (`saveOrg`/`loadOrg`, #154).
 - `meetingForExport(meetingId)` / `saveExport(name, content)` (optional): a saved meeting's title, start, attendees and transcript, and a save panel, for Export for replay.
 - `genericTitle(title)`: whether a title says nothing ("Zoom call", "Meeting") in the host's interface language (`core/titles.ts` has the English one).
 - `clock.now()` / `clock.after(ms, fn)` / `clock.every(ms, fn)`: the clock and the session's background timers (server checks, auto-prepare, the next meeting for Home, the subject auto-pick); timers must not keep the process alive.
@@ -186,7 +190,7 @@ The host also hands over its own model with `session.setLocal(run)` once it has 
 ### What a new host provides
 
 1. An `OleHost` (above) and a call to `createOleSession(host)`.
-2. Meeting events into the session: `meetingStarted({ id, title })`, `meetingRenamed`, `segment({ meetingId, track, speaker, text, startMs })` per transcript line, `meetingStopped(id)`; `checkServers()` on wake.
+2. Meeting events into the session: `meetingStarted({ id, title })`, `meetingRenamed`, `segment({ meetingId, track, speaker, text, startMs })` per transcript line, `meetingStopped(id)`; `checkServers()` on wake. A title the host generates for a finished meeting (never one the person set) goes through `generatedTitle(id, title)` before it is saved (#154).
 3. Its UI's requests mapped to the handlers: `session.handlers` (`state`, `briefing`, `retryServers`, `bullets`, `pin`, `rate`, `ask`, `cancelAsk`, `call`, `answers`, `exportReplay`, `prepare`, `chooseSubject`, `clearPrepared`) and the Settings handlers in `core/settingsHandlers.ts` (`providerHandlers`, `serverHandlers`, `secretHandlers`, with `testServer` from `core/serverTest.ts`). Each handler takes the UI's input unchecked and validates it itself, so the host passes it straight through.
 4. Transcription, if it wants OpenAI's: its own wiring of `/audio/transcriptions` or the Realtime stream to its audio pipeline (Yogurt's is in `yogurt/openaiTranscribe.ts` and `openaiStream.ts`; `core/pcm.ts` converts the audio).
 
@@ -207,6 +211,7 @@ Every change to a Yogurt-owned file is also recorded in [docs/UPSTREAM.md](docs/
 - `app/src/main/paths.ts`: data folder `Ole`
 - `app/src/main/index.ts`: app name and id; Ole keys, providers and session hooks (from `ole/yogurt/`); OpenAI notes model wrapper; transcription options; `readCalendar` falls back to the meetings server when the Mac calendar has none (#149)
 - `app/src/renderer/src/components/CalendarSettings.tsx`: mounts `OleCalendarNote` under the Calendars summary (#149)
+- `app/src/main/notes/index.ts`: a title written from the notes goes through the optional `generatedTitle` hook before it is saved (#154)
 - `app/src/main/asr/index.ts`: OpenAI transcriber branch in `open()`, model gate in `recorded()`; the live recording's audio also goes to the OpenAI stream (`stream.push` before the pipeline's, `flush`/`close` in `finishSession`)
 - `app/src/main/settings.ts`: Ole settings fields
 - `app/src/main/trayMenu.ts`: tooltip name

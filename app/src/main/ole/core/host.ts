@@ -64,6 +64,9 @@ export type MeetingFiles = {
   loadCall?(meetingId: string): OleCallMemory | null
   saveTurns?(meetingId: string, call: RecordedCall): void
   loadTurns?(meetingId: string): RecordedCall | null
+  /** the organization the call's briefing matched (#154), saved when the call ends; null when none was saved */
+  saveOrg?(meetingId: string, org: string): void
+  loadOrg?(meetingId: string): string | null
 }
 
 export type OleHost = {

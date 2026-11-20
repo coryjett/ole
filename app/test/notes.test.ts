@@ -18,7 +18,7 @@ const wait = (ms = 5) => new Promise((r) => setTimeout(r, ms))
 /** waits for what an assertion needs, up to 5 s: a fixed sleep was too short on a slow Windows runner */
 const until = (check: () => void) => vi.waitFor(check, { timeout: 5000, interval: 10 })
 
-function setup(o: { source?: string; summaryLanguage?: () => string; me?: string; named?: () => Promise<void>; namesWaitMs?: number; reply?: string | ((prompt: string) => string); during?: () => void; load?: Promise<void>; title?: string; recording?: () => boolean; smallMac?: boolean; showLoading?: boolean } = {}) {
+function setup(o: { source?: string; summaryLanguage?: () => string; me?: string; named?: () => Promise<void>; namesWaitMs?: number; reply?: string | ((prompt: string) => string); during?: () => void; load?: Promise<void>; title?: string; recording?: () => boolean; smallMac?: boolean; showLoading?: boolean; generatedTitle?: (id: string, title: string) => string } = {}) {
   const d = mkdtempSync(join(tmpdir(), 'yogurt-notes-'))
   dirs.push(d)
   const store = openStore(join(d, 'yogurt.db'))
@@ -41,7 +41,7 @@ function setup(o: { source?: string; summaryLanguage?: () => string; me?: string
   const notes = hookNotes({
     store, queue, model: { llm: async (signal) => { if (signal) signals.push(signal); await o.load; return llm }, needsLoad: () => true }, showLoading: o.showLoading,
     transcribed: () => transcript, named: o.named, namesWaitMs: o.namesWaitMs, language: () => 'spanish', summaryLanguage: o.summaryLanguage,
-    onStop: (fn) => stops.push(fn), send: (v) => sent.push(v), changed: (id) => changed.push(id), peopleRewriteMs: 30, me: () => o.me ?? '',
+    onStop: (fn) => stops.push(fn), send: (v) => sent.push(v), changed: (id) => changed.push(id), peopleRewriteMs: 30, me: () => o.me ?? '', generatedTitle: o.generatedTitle,
   })
   return { store, m, notes, sent, prompts, changed, queue, llm, signals, stop: () => stops.forEach((f) => f(m)), transcribed }
 }
@@ -458,6 +458,29 @@ describe('a title from the notes', () => {
     recording = false; s.queue.recordingChanged(); await wait(30)
     expect(s.store.meeting(s.m.id)).toMatchObject({ title: 'Pricing with Dana', titleSource: 'auto' })
     expect(s.prompts.filter((p) => !/Now give this meeting a title/.test(p))).toHaveLength(1)
+  })
+  it('Ole: a generated title goes through the host hook, with the call\'s organization in front (#154)', async () => {
+    const asked: Array<[string, string]> = []
+    const generatedTitle = (id: string, t: string) => { asked.push([id, t]); return `Example Corp: ${t}` }
+    const s = setup({ title: 'Zoom call', reply, generatedTitle })
+    s.stop(); s.transcribed(); await wait(30)
+    expect(s.store.meeting(s.m.id)).toMatchObject({ title: 'Example Corp: Pricing with Dana', titleSource: 'auto' })
+    expect(asked).toEqual([[s.m.id, 'Pricing with Dana']])
+  })
+  it('Ole: an unmatched call\'s title is saved as generated (#154)', async () => {
+    const s = setup({ title: 'Zoom call', reply, generatedTitle: (_id, t) => t })
+    s.stop(); s.transcribed(); await wait(30)
+    expect(s.store.meeting(s.m.id)).toMatchObject({ title: 'Pricing with Dana', titleSource: 'auto' })
+  })
+  it('Ole: a title they set never reaches the hook (#154)', async () => {
+    const generatedTitle = vi.fn((_id: string, t: string) => `Example Corp: ${t}`)
+    for (const source of ['user', 'calendar'] as const) {
+      const s = setup({ title: 'Weekly sync', reply, generatedTitle })
+      s.store.updateMeeting(s.m.id, { titleSource: source })
+      s.stop(); s.transcribed(); await wait(30)
+      expect(s.store.meeting(s.m.id)).toMatchObject({ title: 'Weekly sync', titleSource: source })
+    }
+    expect(generatedTitle).not.toHaveBeenCalled()
   })
   it('writing the notes again refreshes a title it made', async () => {
     let n = 0

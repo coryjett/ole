@@ -42,6 +42,9 @@ type Deps = {
   /** the call's bullets turns (#70), saved with it on this Mac and read back for Export for replay */
   saveTurns?: (meetingId: string, call: RecordedCall) => void
   loadTurns?: (meetingId: string) => RecordedCall | null
+  /** the organization the call matched (#154), saved with it so the title written after the call (or a restart) has it */
+  saveOrg?: (meetingId: string, org: string) => void
+  loadOrg?: (meetingId: string) => string | null
   /** a saved meeting's title, start, attendees and transcript, for Export for replay (#70); null when it is gone */
   meetingForExport?: (meetingId: string) => { title: string; startedAt: number; attendees: Array<{ name: string; email?: string | null }>; segments: ExportSegment[] } | null
   /** shows the save panel with this file name and writes the content where the person picks */
@@ -59,7 +62,7 @@ export function hookOle(d: Deps): Omit<OleSession, 'handlers'> {
     files: {
       saveBullets: d.save, loadBullets: d.load, saveBriefing: d.saveBriefing, loadBriefing: d.loadBriefing,
       saveAnswers: d.saveAnswers, loadAnswers: d.loadAnswers, saveCall: d.saveCall, loadCall: d.loadCall,
-      saveTurns: d.saveTurns, loadTurns: d.loadTurns,
+      saveTurns: d.saveTurns, loadTurns: d.loadTurns, saveOrg: d.saveOrg, loadOrg: d.loadOrg,
     },
     meetingForExport: d.meetingForExport,
     saveExport: d.saveExport,

@@ -45,6 +45,8 @@ export function hookNotes(p: {
   peopleRewriteMs?: number
   /** the person's own name, so the invite's other person is known */
   me?: () => string
+  /** a title written from the notes, as it is saved (Ole: the call's organization in front, #154); as it is without */
+  generatedTitle?: (id: string, title: string) => string
 }) {
   const stopped = new Set<string>()
   const stopping = new Map<string, Promise<void>>()
@@ -203,7 +205,7 @@ export function hookNotes(p: {
         () => {}, { maxTokens: 40, temperature: 0.3 })), me)
       // renamed or people changed while it was asked for: discard the obsolete answer.
       if (!t || signal.aborted || !current()) return
-      p.store.updateMeeting(id, { title: t, titleSource: 'auto' })
+      p.store.updateMeeting(id, { title: p.generatedTitle?.(id, t) ?? t, titleSource: 'auto' })
       p.changed(id)
     }, 'enhance', id).catch(() => {})
   }
