@@ -12,7 +12,7 @@ describe('first run', () => {
     expect(plan.steps.map((s) => s.kind)).toEqual(['mic', 'systemAudio', 'calendar', 'notifications', 'accessibility'])
     expect(plan.steps.every((s) => s.status === 'unknown')).toBe(true)
   })
-  it('skips what is on, asked already or decided by an organisation; denied ones stay (System Settings)', () => {
+  it('skips what is on, asked already or decided by an organization; denied ones stay (System Settings)', () => {
     const plan = firstRunPlan({ ask: true, welcomed: false, introSeen: false, status: { mic: 'granted', systemAudio: 'denied', calendar: 'restricted', notifications: 'asked', accessibility: 'unknown' } })
     expect(plan.steps).toEqual([{ kind: 'systemAudio', status: 'denied' }, { kind: 'accessibility', status: 'unknown' }])
   })

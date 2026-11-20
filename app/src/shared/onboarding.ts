@@ -5,7 +5,7 @@ import type { Access, OnboardingPlan, OnboardingStep, PermissionKind, Permission
 export const ESSENTIAL: readonly PermissionKind[] = ['mic', 'systemAudio']
 export const isEssential = (k: PermissionKind) => ESSENTIAL.includes(k)
 
-/** still something the person can say yes to: not on, not asked already (notifications), not decided by an organisation */
+/** still something the person can say yes to: not on, not asked already (notifications), not decided by an organization */
 const open = (a: Access) => a === 'unknown' || a === 'denied'
 
 /**

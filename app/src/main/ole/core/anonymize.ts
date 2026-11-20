@@ -1,36 +1,36 @@
-// Ole: sources name only the meeting's own organisation (#109). The bullet text already keeps other organisations
+// Ole: sources name only the meeting's own organization (#109). The bullet text already keeps other organizations
 // anonymous (the prompts say so); a source line ("call records: <another company>") or a mid-call section's source
-// could still name one on a shared screen. This module finds the organisation names Ole can identify in what it
+// could still name one on a shared screen. This module finds the organization names Ole can identify in what it
 // received (tool results, "Kind: Name" sources) and replaces any that aren't the meeting's own with a description.
 // Host-agnostic and pure: no imports.
 
-/** an organisation Ole can identify, with a description when a result gave its industry or size */
+/** an organization Ole can identify, with a description when a result gave its industry or size */
 export type KnownOrg = { name: string; description?: string }
 
 /** what a source says instead of a name Ole knows nothing more about */
-export const ANOTHER_ORG = 'another organisation'
+export const ANOTHER_ORG = 'another organization'
 
-/** keys (lower case, without _ - . or spaces) whose string value is an organisation's name */
+/** keys (lower case, without _ - . or spaces) whose string value is an organization's name */
 const ORG_NAME_KEY = /^(?:account|company|organi[sz]ation|customer|client|partner|prospect|org|employer)(?:name)?$/
-/** keys whose object value is an organisation, so its "name" is one */
+/** keys whose object value is an organization, so its "name" is one */
 const ORG_OBJECT_KEY = /^(?:account|accounts|company|companies|organi[sz]ation|organi[sz]ations|customer|customers|client|clients|partner|partners|prospect|prospects|org|orgs)$/
 const INDUSTRY_KEY = /^(?:industry|sector|vertical|accountindustry|companyindustry)$/
 const SEGMENT_KEY = /^(?:segment|size|tier|companysize|accountsegment|marketsegment)$/
 const EMPLOYEES_KEY = /^(?:employees|employeecount|numberofemployees|headcount|companyemployees)$/
 
-/** the record kinds a "Kind: Name" source or line names an organisation with */
+/** the record kinds a "Kind: Name" source or line names an organization with */
 const ORG_KIND = String.raw`(?:account|customer|company|organi[sz]ation|org|client|partner|prospect|call records?|call notes)`
-/** a capitalised name after "Kind:", up to 5 words, stopping at punctuation that ends it */
+/** a capitalized name after "Kind:", up to 5 words, stopping at punctuation that ends it */
 const NAME_RUN = String.raw`([A-Z][\p{L}\p{N}&'’.-]*(?:[ \t]+(?:[A-Z0-9&][\p{L}\p{N}&'’.-]*|of|and|de|du|the|&)){0,4})`
-/** "account: ", "From call records: ", "Account Name = ": the kind in any case; the name after it must be capitalised */
+/** "account: ", "From call records: ", "Account Name = ": the kind in any case; the name after it must be capitalized */
 const KIND_AT = new RegExp(String.raw`(?:^|[\s;,(\[|"'])${ORG_KIND}(?:[ _]?name)?[ \t]*[:=][ \t]*`, 'giu')
 const NAME_AT = new RegExp(`^${NAME_RUN}`, 'u')
 /** "account_name": "Example Corp" in a result that isn't valid JSON (cut short by the tool runner, or embedded) */
 const QUOTED_NAME = /"((?:account|company|organi[sz]ation|customer|client|partner|prospect|org)[_ -]?name|accountName|companyName|organi[sz]ationName|customerName|clientName)"\s*:\s*"([^"\\]{1,80})"/gi
-/** "account": {"id": 7, "name": "Example Corp"} in a result that isn't valid JSON: a bare name under an organisation key (#116) */
+/** "account": {"id": 7, "name": "Example Corp"} in a result that isn't valid JSON: a bare name under an organization key (#116) */
 const BARE_NAME = /"(?:account|company|organi[sz]ation|customer|client|partner|prospect|org)s?"\s*:\s*\[?\s*\{\s*(?:"[^"\\]{1,40}"\s*:\s*(?:"[^"\\]{0,200}"|-?[\d.eE+-]+|true|false|null)\s*,\s*){0,12}"name"\s*:\s*"([^"\\]{1,80})"/gi
 
-/** capitalised words that start no organisation's name: months, days, and words a "Kind:" line starts with */
+/** capitalized words that start no organization's name: months, days, and words a "Kind:" line starts with */
 const NOT_A_NAME = new Set(('january february march april may june july august september october november december jan feb mar apr jun jul aug sep sept oct nov dec '
   + 'monday tuesday wednesday thursday friday saturday sunday today yesterday tomorrow none unknown yes no true false null n/a na tbd the a an').split(' '))
 /** legal and group suffixes: "Example Corp" is also known as "Example" */
@@ -44,13 +44,13 @@ function plausibleName(raw: string): string | null {
   const name = raw.replace(/\s+/g, ' ').replace(/^[\s"'“‘(]+|[\s"'”’),.;:]+$/g, '').trim()
   if (name.length < 3 || name.length > 80 || !/\p{L}/u.test(name)) return null
   const first = name.split(' ')[0]
-  // a month, a day, a filler word, or a first word with a digit (Q3, 2026) starts no organisation's name here
+  // a month, a day, a filler word, or a first word with a digit (Q3, 2026) starts no organization's name here
   if (NOT_A_NAME.has(name.toLowerCase()) || NOT_A_NAME.has(first.toLowerCase()) || /\d/.test(first)) return null
   return name
 }
 
 /**
- * A name from an explicit organisation-name field (#116): the server said it is one, so the free-text filter doesn't
+ * A name from an explicit organization-name field (#116): the server said it is one, so the free-text filter doesn't
  * apply (digits and short names such as "3M" count); only a placeholder ("none", "n/a", "unknown") or an empty value
  * is not a name.
  */
@@ -155,7 +155,7 @@ function parseJson(text: string): unknown {
   return repairJson(t.slice(start))
 }
 
-/** organisations in a JSON value, breadth first (the shallowest, most likely the record itself, first) */
+/** organizations in a JSON value, breadth first (the shallowest, most likely the record itself, first) */
 function orgsInJson(root: unknown, out: KnownOrg[]): void {
   const queue: Array<{ v: unknown; parentKey: string }> = [{ v: root, parentKey: '' }]
   for (let i = 0; i < queue.length && i < 5000; i++) {
@@ -175,7 +175,7 @@ function orgsInJson(root: unknown, out: KnownOrg[]): void {
   }
 }
 
-/** organisations named in "Kind: Name" form in a text (a source label, a briefing line, a plain-text result) */
+/** organizations named in "Kind: Name" form in a text (a source label, a briefing line, a plain-text result) */
 export function kindNames(text: string): string[] {
   const out: string[] = []
   for (const m of text.matchAll(KIND_AT)) {
@@ -187,8 +187,8 @@ export function kindNames(text: string): string[] {
 }
 
 /**
- * The organisations Ole can identify in what it received (#109): name fields of JSON results (account, company,
- * organisation, customer, client, partner names, or the name of an object under such a key), with a description
+ * The organizations Ole can identify in what it received (#109): name fields of JSON results (account, company,
+ * organization, customer, client, partner names, or the name of an object under such a key), with a description
  * when the same object gives an industry, segment or headcount; the same fields in a result that isn't valid JSON;
  * and "Kind: Name" lines. Deduplicated by name, a described entry winning.
  */
@@ -213,7 +213,7 @@ export function knownOrganisations(material: string | string[]): KnownOrg[] {
 
 /**
  * What a source is checked against (#109, #116). allowed: the matched record's name(s), plus the name a mid-call
- * section was looked up for; known: the organisations Ole can identify; truncated: Prepare found more organisations
+ * section was looked up for; known: the organizations Ole can identify; truncated: Prepare found more organizations
  * than it kept, so every "Kind: Name" a source carries is replaced unless it is an allowed name (fail closed).
  */
 export type AnonymityRules = { allowed: string[]; known: Array<string | KnownOrg>; truncated?: boolean }
@@ -266,7 +266,7 @@ const DATE_WORD = /^(?:\d{1,4}(?:st|nd|rd|th)?|\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4
 const LOOSE_END = /[;,()[\]|\n]|\s[-–—]\s/
 
 /**
- * The text after every "Kind:" in a label, capitalised or not (#116): used only when Prepare found more organisations
+ * The text after every "Kind:" in a label, capitalized or not (#116): used only when Prepare found more organizations
  * than it kept, so a name Ole couldn't keep is still replaced. Up to 5 words; a date, or a run starting with an
  * allowed name, is left alone.
  */
@@ -316,10 +316,10 @@ function applied(label: string, rs: Array<{ name: string; with: string }>, allow
 }
 
 /**
- * A source label with every organisation Ole can identify that isn't the meeting's own replaced by a description
+ * A source label with every organization Ole can identify that isn't the meeting's own replaced by a description
  * (#109): "a large financial services company" when a result gave its industry and size, else "another
- * organisation". allowed: the meeting's matched record name(s) (see bullets.ts anonymityFor), compared exactly once
- * case, spacing and legal suffixes are set aside (#116); known: the organisations from knownOrganisations, plus any
+ * organization". allowed: the meeting's matched record name(s) (see bullets.ts anonymityFor), compared exactly once
+ * case, spacing and legal suffixes are set aside (#116); known: the organizations from knownOrganisations, plus any
  * "Kind: Name" in the label itself, and when the cap was hit any text after a "Kind:" (#116). Longest names first,
  * whole words, any case; an address-style label ("crm.example.com › example-corp") is matched too.
  */
@@ -329,7 +329,7 @@ export function anonymizeSource(label: string, o: AnonymityRules): string {
 
 /**
  * A source and its link after anonymizing (#109, #116): the link is dropped when its address, decoded, names any
- * organisation Ole can identify that isn't allowed (whole words, any case, with or without a legal suffix), whether
+ * organization Ole can identify that isn't allowed (whole words, any case, with or without a legal suffix), whether
  * or not the label named one, since hovering it would show the name.
  */
 export function anonymizeSourceLink(source: string, url: string | undefined, o: AnonymityRules): { source: string; url?: string } {
@@ -348,11 +348,11 @@ export function anonymizeSourceLink(source: string, url: string | undefined, o: 
   return { source: shown, ...(named ? {} : { url }) }
 }
 
-/** whether a text names an organisation, with or without its legal suffix; how often */
+/** whether a text names an organization, with or without its legal suffix; how often */
 const mentions = (text: string, name: string) => Math.max(...formsOf(name).map(f => (text.match(nameRegex(f)) ?? []).length))
 
 /**
- * The organisations to keep when there are more than `cap` (#116): those the briefing (and the sources in it) names
+ * The organizations to keep when there are more than `cap` (#116): those the briefing (and the sources in it) names
  * first, then the rest in the order found.
  */
 export function rankOrgs(orgs: KnownOrg[], briefing: string, cap: number): KnownOrg[] {
@@ -372,8 +372,8 @@ const RECORD_OBJECT_KEY = /^(?:account|company|organi[sz]ation|customer|client|o
 
 /**
  * The record the server's own match names (#116): in the object that holds the match (the one with a `matchedBy` or
- * similar beside it, else the result itself), an explicit account, company or organisation name field, or the name of
- * an account, company or organisation object. null when the match names none.
+ * similar beside it, else the result itself), an explicit account, company or organization name field, or the name of
+ * an account, company or organization object. null when the match names none.
  */
 export function matchedRecordName(fastResult: string): string | null {
   const root = /[[{]/.test(fastResult) ? parseJson(fastResult) : undefined
@@ -405,9 +405,9 @@ export function matchedRecordName(fastResult: string): string | null {
 
 /**
  * The matched record's name(s) from what Prepare received (#109, #116), only ever a name the briefing names: the
- * record the server's own match names when it names one (see matchedRecordName), else the known organisation the
+ * record the server's own match names when it names one (see matchedRecordName), else the known organization the
  * briefing names most often (twice or more, or the only one it names). The meeting title and the focus only
- * corroborate: among the organisations the briefing names most, one the title or focus names wins.
+ * corroborate: among the organizations the briefing names most, one the title or focus names wins.
  */
 export function recordNames(o: { fastResult?: string | null; briefing: string; known: KnownOrg[]; meetingTitle?: string | null; focus?: string | null }): string[] {
   if (o.fastResult) {

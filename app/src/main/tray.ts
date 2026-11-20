@@ -30,7 +30,7 @@ export function createTray(d: { show: boolean; visible?: boolean; open(): void; 
   pause(id: string, paused: boolean): void; ask(): void; settings(): void; openNote(id: string): void
   events(): Promise<CalEvent[]>; event(event: CalEvent, join: boolean): Promise<void>
   recent(): { id: string; title: string; startedAt: number }[]; elapsed(): number; now?: () => number
-  /** the computer: a Mac's template icon and timer title, a colour icon elsewhere */
+  /** the computer: a Mac's template icon and timer title, a color icon elsewhere */
   os?: string
   /** Linux: whether a tray host is there to show the icon */
   host?: () => Promise<boolean>

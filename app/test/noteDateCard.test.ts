@@ -280,7 +280,7 @@ it.each([false, true])('only moves picker focus for keyboard activation, keyboar
   }
 })
 
-it('joins calendar color by id without a grey fallback and keeps the active call link', () => {
+it('joins calendar color by id without a gray fallback and keeps the active call link', () => {
   vi.setSystemTime(at)
   const event = { id: 'event', title: 'Planning', start: at, end: at + 1_800_000, attendees: [], url: 'https://call.example/meeting', calendar: { id: 'work', name: 'Work', source: 'Account' } }
   const html = render('granted', { linked: true, event, colors: { work: '#438879', other: '#112233' } })
@@ -300,7 +300,7 @@ it('joins calendar color by id without a grey fallback and keeps the active call
   expect(missing).not.toContain('background-color:var(--muted)')
 })
 
-it('reserves linked loading space immediately without a skeleton or a grey mark', () => {
+it('reserves linked loading space immediately without a skeleton or a gray mark', () => {
   vi.setSystemTime(at)
   const snapshot = { eventStartedAt: at, eventEndedAt: at + 1_800_000 }
   const waiting = render(undefined, { linked: true, snapshot })

@@ -11,7 +11,7 @@ import { createMeetingSource, cleanNote, failureKind as failureKindOf, noteLine,
 export { cleanNote, failureKind, meetingContextArgs, NOTE_PREFIX, noteLine, serverMatched } from './meetingSource'
 
 export const TOTAL_CAP = 24_000
-/** organisations kept from Prepare's results for anonymizing sources during the call (#109) */
+/** organizations kept from Prepare's results for anonymizing sources during the call (#109) */
 export const ORGS_KEPT = 200
 export const INSTRUCTIONS_CAP = 8000
 export const NO_TOOLS_TEXT = 'No MCP tools are available. Add an MCP server in Settings to prepare from its data.'
@@ -25,8 +25,8 @@ const SEARCH_TOOL = /^(search|find|lookup)_/i
 
 export const PREPARE_SYSTEM = [
   'Keep each source\'s web address (issue, docs page, tracker or record link) next to it when the tool result gives one, as a markdown link. Never make up a link.',
-  'You prepare the user for an upcoming call. Who the user is and what matters to them comes from the server guidance and their instructions; without those, brief on the meeting, the people and organisations in it, and what is open between them. (#71)',
-  'Use the tools to gather the most useful facts about the meeting and its people, organisations and topics: whatever the tools offer, such as records, open items, recent conversations and documents.',
+  'You prepare the user for an upcoming call. Who the user is and what matters to them comes from the server guidance and their instructions; without those, brief on the meeting, the people and organizations in it, and what is open between them. (#71)',
+  'Use the tools to gather the most useful facts about the meeting and its people, organizations and topics: whatever the tools offer, such as records, open items, recent conversations and documents.',
   'Find the meeting first when it helps, then look up what it is about. Call several tools at once when they do not depend on each other. Do not call the same tool with the same arguments twice.',
   'Write a briefing the person can read in 30 seconds before joining (#46). Format, which wins over any other guidance on layout or length:',
   '- Start with "## Before you join": the 3 things that matter most for this call (a risk, an open commitment, what the other side wants).',
@@ -35,8 +35,8 @@ export const PREPARE_SYSTEM = [
   '- About 150 words in total. Leave out detail: anything else can be looked up during the call.',
   '- After each fact, its source as a short markdown link or record name, e.g. ([record](https://...)) or (call, 19 Nov). Never tool names, never square-bracket citations.',
   'Leave out anything no tool returned. Never invent facts, names or numbers.',
-  'If what the meeting is about (an organisation, person or project) has no record in the tools, as with an internal call or a new contact, make the first line exactly "No matching record for this call." and brief only the meeting, its people and its topic: no details from other records. (#57, #71)',
-  'When a focus is given or the meeting title names an organisation, person or project, search for it with the tools before you may say there is no match; a meeting lookup alone is not enough. (#62)',
+  'If what the meeting is about (an organization, person or project) has no record in the tools, as with an internal call or a new contact, make the first line exactly "No matching record for this call." and brief only the meeting, its people and its topic: no details from other records. (#57, #71)',
+  'When a focus is given or the meeting title names an organization, person or project, search for it with the tools before you may say there is no match; a meeting lookup alone is not enough. (#62)',
   'If you cannot match the call to a meeting or an account, reply with exactly this one line and nothing else: "Couldn\'t match this call to a meeting or record. Type a name in Focus and press Refresh briefing." (#44)',
 ].join('\n')
 
@@ -98,7 +98,7 @@ export async function prepareContext(opts: {
   let fastPath = false
   let matchedOn: string | null = null
   const toolOf = (name: string) => opts.tools.find(t => t.name === name)?.tool ?? name
-  /** what the tools returned, for the organisations Ole can identify in it (#109); set once the loop has messages */
+  /** what the tools returned, for the organizations Ole can identify in it (#109); set once the loop has messages */
   let toolResults: () => string[] = () => []
   let fastResult: string | null = null
   const done = (text: string): PreparedContext => {
@@ -106,7 +106,7 @@ export async function prepareContext(opts: {
     const list = [...counts].map(([n, c]) => `${n} ${c}`).join(', ')
     log(`ole prepare: ${total} tool calls${list ? ` (${list})` : ''}${nudged ? ', searched again once' : ''}${fastPath ? ', fast path' : ''}${matchedOn ? `, matched on ${matchedOn}` : ''}`)
     const briefing = cap(text.trim())
-    // sources name only the matched record (#109): the organisations the tools named, and which of them it is
+    // sources name only the matched record (#109): the organizations the tools named, and which of them it is
     // more than are kept: the ones the briefing names first, and the call fails closed on the rest (#116)
     const found = knownOrganisations(toolResults())
     const orgsTruncated = found.length > ORGS_KEPT

@@ -57,7 +57,7 @@ describe('Windows and Linux tray', () => {
     expect(trayLook('darwin', { paused: false }, 723000)).toEqual({ icon: 'tray', template: true, title: '● 12:03', tooltip: 'Ole is recording' })
     expect(trayLook('darwin', { paused: true }, 723000)).toEqual({ icon: 'tray', template: true, title: '12:03', tooltip: 'Recording paused' })
   })
-  it('elsewhere a colour icon, a recording one while it records, and the time in the tooltip (no title there)', () => {
+  it('elsewhere a color icon, a recording one while it records, and the time in the tooltip (no title there)', () => {
     for (const os of ['win32', 'linux']) {
       expect(trayLook(os, null, 0)).toEqual({ icon: 'tray-color', template: false, title: null, tooltip: 'Ole' })
       expect(trayLook(os, { paused: false }, 723000)).toEqual({ icon: 'tray-recording', template: false, title: null, tooltip: 'Ole is recording · 12:03' })

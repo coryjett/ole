@@ -26,7 +26,7 @@ it('each server has move up and down, off at the ends of the list, and a hint on
   expect(renderToStaticMarkup(createElement(OleServers, { api, initialServers: [list[0]], initialStatus: {} }))).not.toContain('data-testid="ole-servers-order"')
 })
 
-it('moveServer swaps with the neighbour and leaves the ends alone', () => {
+it('moveServer swaps with the neighbor and leaves the ends alone', () => {
   expect(moveServer(list, 'docs', -1).map(s => s.id)).toEqual(['docs', 'crm', 'wiki'])
   expect(moveServer(list, 'docs', 1).map(s => s.id)).toEqual(['crm', 'wiki', 'docs'])
   expect(moveServer(list, 'crm', -1)).toBe(list)

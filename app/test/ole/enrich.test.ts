@@ -31,7 +31,7 @@ const lookupThen = (final: string) => vi.fn<ChatFn>()
   .mockImplementation(async () => ({ content: final }))
 
 describe('names in a line (#86)', () => {
-  it('finds organisation, person and project names, joining capitalised words, never product or version tokens', () => {
+  it('finds organization, person and project names, joining capitalized words, never product or version tokens', () => {
     expect(nameTerms('we work with Northwind Traders, and Dana Whitfield runs it.')).toEqual(['Northwind Traders', 'Dana Whitfield'])
     expect(nameTerms('we moved to OpenShift 4.12 with SSO on S3 and K8s')).toEqual([])
     expect(nameTerms('Thanks. Contoso asked about Project Falcon last week')).toEqual(['Project Falcon'])
@@ -41,7 +41,7 @@ describe('names in a line (#86)', () => {
 
   it('docs tools are never used for names: by name or by description', () => {
     expect(enrichTools(CRM).map(t => t.tool)).toEqual(['search_accounts', 'get_contact'])
-    expect(ENRICH_SYSTEM).toContain("Never put an organisation's or person's name in a search of public documentation.")
+    expect(ENRICH_SYSTEM).toContain("Never put an organization's or person's name in a search of public documentation.")
   })
 
   it('names go only to tools allowed by annotation or, without one, by a record-lookup name', () => {

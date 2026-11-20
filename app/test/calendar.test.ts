@@ -131,7 +131,7 @@ describe('upcoming', () => {
     expect(await upcoming(0, 1e12, keep)).toEqual([])
   })
 
-  it('keeps native calendar colours and ignores missing or invalid colour values', async () => {
+  it('keeps native calendar colors and ignores missing or invalid color values', async () => {
     setHelper(async (args) => args[0] === 'calendar-status' ? { status: 'granted' } : [
       { id: 'work', name: 'Work', color: '#3478F6' },
       { id: 'personal', name: 'Personal' },

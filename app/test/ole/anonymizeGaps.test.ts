@@ -1,5 +1,5 @@
 // #116: the gaps a review of #109 found. Synthetic data only: Example Corp is the meeting's record; Globex Bank,
-// Initech, Umbrella Group and the numbered "Vendor" names are other organisations.
+// Initech, Umbrella Group and the numbered "Vendor" names are other organizations.
 import { describe, expect, it, vi } from 'vitest'
 import { ANOTHER_ORG, anonymizeSource, anonymizeSourceLink, knownOrganisations, recordNames } from '../../src/main/ole/core/anonymize'
 import { anonymityFor, createBulletsEngine, type ChatFn } from '../../src/main/ole/core/bullets'
@@ -16,16 +16,16 @@ const matched = (over: Partial<PreparedContext> = {}): PreparedContext => ({
 })
 const tool = (name: string): OleTool => ({ name: `s__${name}`, serverId: 's', serverName: 'S', tool: name, description: '', parameters: { type: 'object' } })
 
-describe('1. a link whose address names another organisation is dropped, whatever the label says', () => {
+describe('1. a link whose address names another organization is dropped, whatever the label says', () => {
   const known = knownOrganisations(RESULT)
-  it('drops it when the label names no organisation', () => {
+  it('drops it when the label names no organization', () => {
     expect(anonymizeSourceLink('product notes', GLOBEX_URL, { allowed: ['Example Corp'], known })).toEqual({ source: 'product notes' })
   })
   it('decodes the address, matches any case and the name without its legal suffix', () => {
     expect(anonymizeSourceLink('notes', 'https://crm.example.com/q?a=GLOBEX%20BANK', { allowed: [], known })).toEqual({ source: 'notes' })
     expect(anonymizeSourceLink('notes', 'https://crm.example.com/a/globex_renewal', { allowed: [], known: ['Globex Corporation'] })).toEqual({ source: 'notes' })
   })
-  it("keeps a link that names only the record, or no organisation; a name inside a longer word doesn't count", () => {
+  it("keeps a link that names only the record, or no organization; a name inside a longer word doesn't count", () => {
     const rules = { allowed: ['Example Corp'], known: [...known, 'Example Corp'] }
     expect(anonymizeSourceLink('account', 'https://crm.example.com/accounts/example-corp', rules)).toEqual({ source: 'account', url: 'https://crm.example.com/accounts/example-corp' })
     expect(anonymizeSourceLink('ticket', 'https://crm.example.com/t/42', rules)).toEqual({ source: 'ticket', url: 'https://crm.example.com/t/42' })
@@ -69,10 +69,10 @@ describe('1. a link whose address names another organisation is dropped, whateve
   })
 })
 
-describe("2. the record's name comes from the server match's own organisation field", () => {
+describe("2. the record's name comes from the server match's own organization field", () => {
   const known = [{ name: 'Globex Bank' }, { name: 'Example Corp' }]
   const briefing = 'Renewal in March (account: Example Corp); Globex Bank attends'
-  it('takes the organisation object next to the match, not the first organisation in the result', () => {
+  it('takes the organization object next to the match, not the first organization in the result', () => {
     const fastResult = JSON.stringify({ attendees: [{ company: 'Globex Bank' }], match: { matchedBy: 'title', account: { id: 7, name: 'Example Corp' } } })
     expect(recordNames({ fastResult, briefing, known })).toEqual(['Example Corp'])
   })
@@ -84,7 +84,7 @@ describe("2. the record's name comes from the server match's own organisation fi
     const fastResult = JSON.stringify({ matchedBy: 'title', account: { name: 'Umbrella Group' } })
     expect(recordNames({ fastResult, briefing: 'Globex Bank renews (account: Globex Bank)', known })).toEqual([])
   })
-  it('falls back to the briefing when the match has no organisation field', () => {
+  it('falls back to the briefing when the match has no organization field', () => {
     const fastResult = JSON.stringify({ matchedBy: 'title', meeting: { title: 'weekly' }, attendees: [{ company: 'Globex Bank' }] })
     expect(recordNames({ fastResult, briefing: 'Example Corp renews (account: Example Corp); Globex Bank attends', known })).toEqual(['Example Corp'])
   })
@@ -105,7 +105,7 @@ describe('3. only the record is allowed; title and focus corroborate it, never a
     // a longer allowed text no longer allows the names inside it
     expect(anonymizeSource('account: Globex Bank', { allowed: ['Example Corp and Globex Bank sync'], known: ['Globex Bank'] })).toBe(`account: ${ANOTHER_ORG}`)
   })
-  it("another organisation's name inside the record's own name is left alone", () => {
+  it("another organization's name inside the record's own name is left alone", () => {
     expect(anonymizeSource('account: Globex Bank', { allowed: ['Globex Bank'], known: ['Globex', 'Globex Bank'] })).toBe('account: Globex Bank')
   })
   it('the title corroborates a record the briefing names as often as another', () => {
@@ -116,7 +116,7 @@ describe('3. only the record is allowed; title and focus corroborate it, never a
   })
 })
 
-describe('4. more organisations than kept fails closed', () => {
+describe('4. more organizations than kept fails closed', () => {
   const many = JSON.stringify({ accounts: Array.from({ length: ORGS_KEPT + 50 }, (_, i) => ({ name: `Vendor ${i}` })) })
   const fast = (meetingTool: OleTool) => ({ tool: meetingTool, serverName: 'S', argsJson: '{}', result: JSON.stringify({ matchedBy: 'title', account: { name: 'Example Corp' } }) })
   const prepared = async () => {
@@ -144,7 +144,7 @@ describe('4. more organisations than kept fails closed', () => {
   })
 })
 
-describe('5. organisation-name fields, cut-short results and bare names', () => {
+describe('5. organization-name fields, cut-short results and bare names', () => {
   it('a name from an explicit field skips the free-text filter: digits and short names count', () => {
     expect(knownOrganisations(JSON.stringify({ accounts: [{ name: '3M' }, { company_name: 'HP' }, { org: '7-Eleven' }] })).map(o => o.name)).toEqual(['3M', 'HP', '7-Eleven'])
     expect(knownOrganisations('{"customerName":"3M","x":"cut').map(o => o.name)).toEqual(['3M'])
@@ -157,7 +157,7 @@ describe('5. organisation-name fields, cut-short results and bare names', () => 
     const cut = '{"results":[{"account":{"name":"Globex Bank","industry":"Banking","segment":"Enterprise"}},{"account":{"name":"Init'
     expect(knownOrganisations(cut)).toEqual([{ name: 'Globex Bank', description: 'a large banking company' }])
   })
-  it('the regex fallback catches a bare "name" under an organisation key', () => {
+  it('the regex fallback catches a bare "name" under an organization key', () => {
     const notJson = `{'trace': 1, "account": {"id": 7, "name": "Globex Bank"}, "partners": [{"name": "Initech"}]}`
     expect(knownOrganisations(notJson).map(o => o.name)).toEqual(['Globex Bank', 'Initech'])
   })

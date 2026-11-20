@@ -197,7 +197,7 @@ export function App() {
   )
 }
 
-/** Keep the native traffic-light strip clear during setup; draggable, and the page's own colour so first run reads as one surface. */
+/** Keep the native traffic-light strip clear during setup; draggable, and the page's own color so first run reads as one surface. */
 function TitleBar() {
   return <div data-testid="titlebar" className="drag fixed inset-x-0 top-0 z-50 h-12" />
 }

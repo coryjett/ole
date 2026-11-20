@@ -33,9 +33,9 @@ it('uses the seven folder inks on the note and always-dark preview', async () =>
   for (const [i, palette] of palettes.entries()) {
     expect(palette).toHaveLength(7)
     // Names sit outside bubbles: note canvas and a lighter worst-case dark preview.
-    for (const bg of i === 0 ? ['#FFFFFF'] : ['#242426', '#333335', '#39393C']) for (const colour of palette) {
-      const a = luminance(colour), b = luminance(bg)
-      expect((Math.max(a, b) + .05) / (Math.min(a, b) + .05), `${colour} on ${bg}`).toBeGreaterThanOrEqual(4.5)
+    for (const bg of i === 0 ? ['#FFFFFF'] : ['#242426', '#333335', '#39393C']) for (const color of palette) {
+      const a = luminance(color), b = luminance(bg)
+      expect((Math.max(a, b) + .05) / (Math.min(a, b) + .05), `${color} on ${bg}`).toBeGreaterThanOrEqual(4.5)
     }
   }
 })

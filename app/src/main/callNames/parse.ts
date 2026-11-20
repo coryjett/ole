@@ -227,7 +227,7 @@ function readMeet(windows: AxWindow[], o: { talkingClasses?: string[] }): CallRe
 // "Name, Role, Muted|Unmuted" ("Dana Smith, Organizer, Unmuted"), and the row's section repeats it. Teams marks the
 // active speaker only with a ring: no word and no class in the tree. What is read is words only: those roster rows
 // (inside a tree or table named Participants/Attendees/People, so a chat or calendar line that happens to read like
-// one is never a person), an element labelled "Name, speaking" / "Name is speaking" / "Active speaker: Name" (other
+// one is never a person), an element labeled "Name, speaking" / "Name is speaking" / "Active speaker: Name" (other
 // builds), and "(You)" after the person's own name. When the roster is closed and nobody is marked, only a call of two
 // can be named (attribute.ts).
 

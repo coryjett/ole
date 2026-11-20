@@ -1,5 +1,5 @@
-// #109: sources name only the meeting's own organisation; any other one Ole can identify becomes a description.
-// Synthetic data only: Example Corp is the meeting's record, Globex Bank and Initech are other organisations.
+// #109: sources name only the meeting's own organization; any other one Ole can identify becomes a description.
+// Synthetic data only: Example Corp is the meeting's record, Globex Bank and Initech are other organizations.
 import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -20,7 +20,7 @@ const matched = (over: Partial<PreparedContext> = {}): PreparedContext => ({
 })
 const tool = (name: string): OleTool => ({ name: `s__${name}`, serverId: 's', serverName: 'S', tool: name, description: '', parameters: { type: 'object' } })
 
-describe('which organisations Ole can identify (#109)', () => {
+describe('which organizations Ole can identify (#109)', () => {
   it('reads name fields from JSON results, with a description from the same record', () => {
     expect(knownOrganisations(RESULT)).toEqual([
       { name: 'Globex Bank', description: 'a large financial services company' },
@@ -71,7 +71,7 @@ describe('anonymizeSource (#109)', () => {
     expect(anonymizeSourceLink('call records: Globex Bank', 'https://crm.example.com/a/42', { allowed: [], known }))
       .toEqual({ source: 'call records: a large financial services company', url: 'https://crm.example.com/a/42' })
   })
-  it('leaves a source with no organisation alone', () => {
+  it('leaves a source with no organization alone', () => {
     expect(anonymizeSource('ticket #4821', { allowed: [], known })).toBe('ticket #4821')
     expect(anonymizeSource('product docs', { allowed: [], known })).toBe('product docs')
   })
@@ -107,7 +107,7 @@ describe('bullets and Ask enforce it (#109)', () => {
     expect(engine.lookedUp()).toContain('Globex Bank')
     engine.stop()
   })
-  it('an organisation Prepare saw is anonymized even when this turn looked nothing up', async () => {
+  it('an organization Prepare saw is anonymized even when this turn looked nothing up', async () => {
     const chat = vi.fn<ChatFn>(async () => ({ content: JSON.stringify({ bullets: [{ text: 'Similar rollout went fine', source: 'Initech notes' }] }) }))
     let got: OleBullet[] = []
     const context = matched({ orgs: [{ name: 'Initech', description: 'a small company' }], text: '## Before you join\n- Rollout (account: Example Corp)\n- Similar rollout went fine (Initech notes)' })
@@ -129,7 +129,7 @@ describe('bullets and Ask enforce it (#109)', () => {
 describe('mid-call sections (#86, #109)', () => {
   const clock = () => { let t = 0; return { now: () => t, timers: { set: (fn: () => void) => { queueMicrotask(fn); return 0 }, clear: () => {} }, tick: (ms: number) => { t += ms } } }
 
-  it("section sources naming a third organisation are anonymized; the looked-up name and the record's own stay", async () => {
+  it("section sources naming a third organization are anonymized; the looked-up name and the record's own stay", async () => {
     const result = JSON.stringify({ accounts: [{ name: 'Northwind Traders', industry: 'Retail' }, { name: 'Globex Bank', industry: 'Financial Services', segment: 'Enterprise' }] })
     const chat = vi.fn<ChatFn>()
       .mockImplementationOnce(async () => ({ content: null, tool_calls: [{ id: '1', type: 'function', function: { name: 's__search_accounts', arguments: '{"query":"Northwind Traders"}' } }] }))
@@ -175,15 +175,15 @@ describe('productTerm (#109)', () => {
     expect(productTerm('Fabrikam', { material: 'fabrikam is set; set fabrikam; Fabrikam' })).toBe(true)
     expect(productTerm('Adatum', { material: 'enable AdaTum; adatum flags' })).toBe(true)
   })
-  it('an organisation or person said plainly is not a product', () => {
+  it('an organization or person said plainly is not a product', () => {
     expect(productTerm('Northwind Traders', { said: 'we also talk to Northwind Traders', material: 'Northwind Traders renewed; Northwind Traders' })).toBe(false)
     expect(productTerm('Dana Whitfield', { said: 'Dana Whitfield runs it' })).toBe(false)
     expect(productTerm('Fabrikam', { material: 'Fabrikam renewed; fabrikam' })).toBe(false)
   })
 })
 
-describe('Prepare records which organisation is the meeting\'s own (#109)', () => {
-  it('the server\'s match names the record; the other organisations it read are kept for later', async () => {
+describe('Prepare records which organization is the meeting\'s own (#109)', () => {
+  it('the server\'s match names the record; the other organizations it read are kept for later', async () => {
     const meetingTool: OleTool = { ...tool('get_meeting_context'), name: 's__get_meeting_context' }
     const searchTool = tool('search_accounts')
     const fast = { tool: meetingTool, serverName: 'S', argsJson: '{}', result: JSON.stringify({ matchedBy: 'title', account: { name: 'Example Corp', industry: 'Software' } }) }
@@ -196,7 +196,7 @@ describe('Prepare records which organisation is the meeting\'s own (#109)', () =
     expect(anonymizeSource('account: Example Corp', anonymityFor(ctx, ''))).toBe('account: Example Corp')
     expect(anonymizeSource('call records: Globex Bank', anonymityFor(ctx, ''))).toBe('call records: a large financial services company')
   })
-  it('without a server match, the organisation the briefing names most is the record', () => {
+  it('without a server match, the organization the briefing names most is the record', () => {
     const known = [{ name: 'Example Corp' }, { name: 'Globex Bank' }]
     expect(recordNames({ briefing: 'Example Corp renews (account: Example Corp); Globex Bank had it too', known })).toEqual(['Example Corp'])
     expect(recordNames({ briefing: 'Example Corp and Globex Bank', known })).toEqual([])

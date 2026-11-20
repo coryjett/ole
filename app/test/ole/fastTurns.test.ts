@@ -10,7 +10,7 @@ describe('the trigger is pure string work (#79)', () => {
     for (const q of ['We run six instances.', 'Thanks, that helps', 'Whatever works for you.', 'Domain names are fine', 'Isolation matters to us']) expect(isQuestion(q)).toBe(false)
   })
 
-  it('terms: CamelCase, letters with digits, versions, ALLCAPS, capitalised words that do not start a sentence', () => {
+  it('terms: CamelCase, letters with digits, versions, ALLCAPS, capitalized words that do not start a sentence', () => {
     expect(candidateTerms('We moved to OpenShift and eBPF last year')).toEqual(['OpenShift', 'eBPF'])
     expect(candidateTerms('It runs on K8s with S3 and version 2.3.1')).toEqual(['K8s', 'S3', '2.3.1'])
     expect(candidateTerms('The SSO and our APIs, plus SCIM.')).toEqual(['SSO', 'APIs', 'SCIM'])

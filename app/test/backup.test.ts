@@ -68,7 +68,7 @@ describe('backup merge', () => {
     const shared = fill(from, 'Weekly sync', 'budget')
     const fresh1 = fill(from, 'Pricing', 'pricing')
     from.updateMeeting(fresh1.id, { eventId: 'next-day-event', eventStartedAt: 86_401_000, eventEndedAt: 88_201_000, eventTitle: 'Pricing meeting', eventCalendarName: 'Work', eventCalendarSource: 'Calendar' })
-    const colours = from.speakerOrder(fresh1.id)
+    const colors = from.speakerOrder(fresh1.id)
     // the same meeting is already here, with notes the person changed since: never overwritten
     into.db.prepare('INSERT INTO meetings (id, title, started_at, attendees, state) VALUES (?, ?, ?, ?, ?)').run(shared.id, 'My own title', 1, '[]', 'done')
     into.setNotes(shared.id, { mine: 'kept as it is' })
@@ -82,7 +82,7 @@ describe('backup merge', () => {
     expect(into.segments(fresh1.id).map((s) => s.text)).toEqual(['We talked about the pricing plan'])
     expect(into.segments(fresh1.id, { hidden: true })).toHaveLength(2)
     expect(into.segments(fresh1.id).map((s) => s.speaker)).toEqual(['Bo Park'])
-    expect(into.speakerOrder(fresh1.id)).toEqual(colours)
+    expect(into.speakerOrder(fresh1.id)).toEqual(colors)
     expect(into.notes(fresh1.id)).toMatchObject({ mine: 'my pricing notes', enhanced: '## pricing\n- done' })
     expect(into.chatTurns(fresh1.id).map((c) => c.question)).toEqual(['what about the pricing?'])
     // the person's own meeting is untouched, its lines keep their ids
@@ -110,7 +110,7 @@ describe('backup merge', () => {
 
   it('ignores columns this version does not know, and gives ones the backup lacks their defaults', () => {
     const into = fresh()
-    // an older backup: no language, labelled_at, hidden, edited or stopped; and a column from some newer version
+    // an older backup: no language, labeled_at, hidden, edited or stopped; and a column from some newer version
     const d = tmp()
     const old = new DatabaseSync(join(d, 'old.db'))
     old.exec(`CREATE TABLE meetings (id TEXT PRIMARY KEY, title TEXT, started_at INTEGER, ended_at INTEGER, event_id TEXT, app TEXT, attendees TEXT, state TEXT, mood TEXT);

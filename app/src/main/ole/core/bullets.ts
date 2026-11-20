@@ -49,7 +49,7 @@ const clock = (ms: number) => {
 }
 
 /** sources follow the bullet text's anonymity rule (#109); Ole also enforces it after the fact (anonymize.ts) */
-export const SOURCE_ANONYMITY = 'Sources follow the same rule: a "source" names an organisation only if it is part of this meeting; any other organisation is described by kind and size there too, for example "call records: a large financial services company".'
+export const SOURCE_ANONYMITY = 'Sources follow the same rule: a "source" names an organization only if it is part of this meeting; any other organization is described by kind and size there too, for example "call records: a large financial services company".'
 
 export const BULLETS_SYSTEM = [
   'You help the user during a live call by surfacing short context bullets they can glance at.',
@@ -61,10 +61,10 @@ export const BULLETS_SYSTEM = [
   'Never restate, summarise or comment on what is being said in the call; the user just heard it. "Transcript" is never a source.',
   'Every bullet must cite the record its fact came from, the way the prepared context or the tool result names it, for example "ticket #4821", "call notes, 12 Nov", "issue #412" or "product docs". Copy the source the prepared context gives for that fact. A section heading of the prepared context (such as "Who" or "Open items"), "prepared context" and a bare tool name are never sources. With no real source, give no bullet. Never invent facts.',
   'Never repeat or rephrase an earlier bullet.',
-  'Other organisations and people the tools mention stay anonymous unless they are part of this meeting: describe them by kind and size, for example "a large financial services company".',
+  'Other organizations and people the tools mention stay anonymous unless they are part of this meeting: describe them by kind and size, for example "a large financial services company".',
   SOURCE_ANONYMITY,
   'Answer from the prepared context first. You may call the provided tools for facts the prepared context lacks, such as how a similar case went elsewhere, or a product or topic with no notes. Lookups are limited, so call a tool only for a real gap.',
-  "Never put an organisation's or person's name in a search of public documentation.",
+  "Never put an organization's or person's name in a search of public documentation.",
   'When nothing useful applies, reply {"bullets":[]}.',
 ].join('\n')
 
@@ -86,7 +86,7 @@ export function hasMatchedRecord(context: PreparedContext | null): boolean {
   return !!first && !NO_RECORD_LINES.some(r => r.test(first))
 }
 
-export const NO_RECORD_RULE = 'Nothing in the tools matches this call. Give general facts only: documentation, known issues, how something works, and patterns seen across many records, generalised and anonymized (for example "a common pattern among fintech startups"). Never details from one organisation\'s or person\'s records.'
+export const NO_RECORD_RULE = 'Nothing in the tools matches this call. Give general facts only: documentation, known issues, how something works, and patterns seen across many records, generalized and anonymized (for example "a common pattern among fintech startups"). Never details from one organization\'s or person\'s records.'
 /** on such a call, the sections looked up for names the other side said (#86) may still be used */
 export const MENTIONED_RULE = 'Exception: a briefing section headed "Mentioned during the call" was looked up for a name said on this call; its facts may be used, with their sources.'
 /**
@@ -104,7 +104,7 @@ export function stripMentioned(text: string): string {
 /**
  * What a source may name during this call (#109, #116): allowed are only the matched record's name(s), and only when
  * the call matched a record (plus `extra`, such as the name a mid-call section was looked up for); the meeting title
- * and focus never allow a name themselves, they only helped Prepare pick the record. known are the organisations
+ * and focus never allow a name themselves, they only helped Prepare pick the record. known are the organizations
  * Prepare's results named and those in `material` (this turn's results); truncated when Prepare found more than it
  * kept, so sources fail closed.
  */
@@ -114,9 +114,9 @@ export function anonymityFor(context: PreparedContext | null, material: string |
   return { allowed, known: [...(context?.orgs ?? []), ...knownOrganisations(material)], ...(context?.orgsTruncated ? { truncated: true } : {}) }
 }
 
-/** tools that fetch one organisation's or person's records (CRM-style names): left out of a call with no matching record (#57) */
+/** tools that fetch one organization's or person's records (CRM-style names): left out of a call with no matching record (#57) */
 const SINGLE_RECORD = /account|opportunit|deal|contact|action_item|interaction|customer|pipeline|poc|tracker|call_brief|transcript|note/i
-/** a tool named like a lookup of one organisation's or person's records (#57, #86) */
+/** a tool named like a lookup of one organization's or person's records (#57, #86) */
 export const isRecordTool = (t: Pick<OleTool, 'tool'>) => SINGLE_RECORD.test(t.tool)
 export function generalTools(tools: OleTool[]): OleTool[] {
   return tools.filter(t => !SINGLE_RECORD.test(t.tool))
@@ -320,7 +320,7 @@ export const FAST_MIN_MS = 10_000
 
 /** a line that opens like a question: an interrogative first word, after an optional filler ("so", "and", "okay") */
 const INTERROGATIVE = /^(?:(?:so|and|but|ok|okay|um|uh|well|right|also)[,\s]+)?(?:what|how|why|when|where|who|which|can|could|does|do|is|are|will|would|should)\b/i
-/** a capitalised word that names nothing: pronoun contractions, greetings, fillers, days and months */
+/** a capitalized word that names nothing: pronoun contractions, greetings, fillers, days and months */
 const PLAIN_CAPITALISED = new Set(('i i\'m i\'ll i\'ve i\'d ok okay yeah yes no hello hi hey thanks thank sorry please sure right well so '
   + 'monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december '
   + 'english mr mrs ms dr god').split(' '))
@@ -339,8 +339,8 @@ export function isQuestion(text: string): boolean {
 }
 
 /**
- * Terms in a line that look like a product, feature, version, person or organisation (#79): CamelCase (OpenShift,
- * eBPF), letters with digits or a version (S3, K8s, 2.3), ALLCAPS of 2+ letters (SSO, APIs), or a capitalised word
+ * Terms in a line that look like a product, feature, version, person or organization (#79): CamelCase (OpenShift,
+ * eBPF), letters with digits or a version (S3, K8s, 2.3), ALLCAPS of 2+ letters (SSO, APIs), or a capitalized word
  * that doesn't start a sentence. In the order they appear.
  */
 export function candidateTerms(text: string): string[] {
@@ -353,19 +353,19 @@ export function candidateTerms(text: string): string[] {
     const code = /\d/.test(tok) && !PLAIN_NUMBER.test(tok) && (/\d\.\d/.test(tok) || /[a-z]/i.test(tok))
     const caps = /^[A-Z]{2,}\d*s?$/.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
     const camel = /^[A-Za-z]*[a-z][A-Z][A-Za-z0-9]*$/.test(tok)
-    const capitalised = !startsSentence && /^[A-Z][a-z]{2,}$/.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
-    if (code || caps || camel || capitalised) out.push(tok)
+    const capitalized = !startsSentence && /^[A-Z][a-z]{2,}$/.test(tok) && !PLAIN_CAPITALISED.has(tok.toLowerCase())
+    if (code || caps || camel || capitalized) out.push(tok)
   })
   return out
 }
 
-/** a capitalised word that can be part of a name: Acme, O'Neil, Smith-Jones; not CamelCase, ALLCAPS or digits */
+/** a capitalized word that can be part of a name: Acme, O'Neil, Smith-Jones; not CamelCase, ALLCAPS or digits */
 const NAME_WORD = /^[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)*$/
 /** words in a name looked up during the call (#86) */
 const NAME_WORDS_MAX = 4
 
 /**
- * Names in a line (#86): a capitalised word that doesn't start a sentence, with the capitalised words straight after
+ * Names in a line (#86): a capitalized word that doesn't start a sentence, with the capitalized words straight after
  * it ("Northwind Traders", "Dana Whitfield"), as #79's trigger finds them. Product and version tokens (CamelCase,
  * ALLCAPS, anything with a digit) are never names. Punctuation after a word ends the name. In the order they appear.
  */
@@ -532,7 +532,7 @@ export function createBulletsEngine(opts: {
         // a link is kept only if Ole received that exact address: models invent plausible URLs (#42, #107); a source
         // that is a bare web address becomes a short label taken from the link actually used (#102, #107)
         const linked = linkAndLabel(b.url, b.source, receivedUrls(sources))
-        // the source names no organisation but the meeting's own (#109)
+        // the source names no organization but the meeting's own (#109)
         const looked = messages.filter(m => m.role === 'tool').map(m => m.content ?? '')
         const shown = anonymizeSourceLink(linked.source ?? b.source, linked.url, anonymityFor(opts.context(), [opts.context()?.text ?? '', ...looked]))
         const url = shown.url

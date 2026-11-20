@@ -69,7 +69,7 @@ export function urlSource(source: string, received: ReadonlySet<string>): { sour
 
 /**
  * The link and label a bullet or answer ends up with (#107): the model's own link if Ole received it, else the source
- * when that is a received address. A source that was an address is labelled from the link actually used; a text
+ * when that is a received address. A source that was an address is labeled from the link actually used; a text
  * source keeps the model's words, cleaned and capped like every label (#111).
  */
 export function linkAndLabel(given: string | undefined, source: string | undefined, received: ReadonlySet<string>): { source?: string; url?: string } {
