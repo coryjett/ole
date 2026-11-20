@@ -16,7 +16,7 @@ describe('logo', () => {
   it('matches build/logo.svg and build/wordmark.svg', () => {
     expect(paths(svg('logo.svg'))).toEqual([MARK])
     expect(paths(svg('wordmark.svg'))).toEqual([MARK])
-    expect(svg('wordmark.svg')).toContain('>Ole</text>')
+    expect(svg('wordmark.svg')).toContain('>¡ole!</text>')
   })
   it('no build art names Yogurt', () => {
     for (const name of ['icon.svg', 'logo.svg', 'wordmark.svg']) expect(svg(name).toLowerCase()).not.toContain('yogurt')

@@ -311,8 +311,8 @@ describe('finished meeting notifications', () => {
   it('uses the existing save warning and does not notify again when Retry succeeds', async () => {
     state.stopPending = true
     finish(); await Promise.resolve()
-    expect(widget.snapshot().notice?.title).toBe('Recording stopped. Open Ole to finish saving.')
-    expect(widget.snapshot().view?.note?.text).toBe('Recording stopped. Open Ole to finish saving.')
+    expect(widget.snapshot().notice?.title).toBe('Recording stopped. Open ¡ole! to finish saving.')
+    expect(widget.snapshot().view?.note?.text).toBe('Recording stopped. Open ¡ole! to finish saving.')
     state.stopPending = false; state.change!(stopped)
     await Promise.resolve()
     expect(state.notifications).toHaveLength(1)

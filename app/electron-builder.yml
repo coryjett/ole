@@ -81,15 +81,15 @@ mac:
   extendInfo:
     # a Dock app, with its menu bar icon too
     LSUIElement: false
-    NSMicrophoneUsageDescription: Ole records your voice in meetings so it can write the transcript and your notes. Nothing leaves your Mac.
-    NSAudioCaptureUsageDescription: Ole records the sound of your calls so it can write down what others say. Nothing leaves your Mac.
-    NSCalendarsFullAccessUsageDescription: Ole reads your calendar to name your notes after the meeting and to know who is in it. Nothing leaves your Mac.
-    NSCalendarsUsageDescription: Ole reads your calendar to name your notes after the meeting and to know who is in it. Nothing leaves your Mac.
-    NSAppleEventsUsageDescription: Ole checks the browser tab's name to tell when you're in a call, and pauses your music while it records.
+    NSMicrophoneUsageDescription: ¡ole! records your voice in meetings so it can write the transcript and your notes. Nothing leaves your Mac.
+    NSAudioCaptureUsageDescription: ¡ole! records the sound of your calls so it can write down what others say. Nothing leaves your Mac.
+    NSCalendarsFullAccessUsageDescription: ¡ole! reads your calendar to name your notes after the meeting and to know who is in it. Nothing leaves your Mac.
+    NSCalendarsUsageDescription: ¡ole! reads your calendar to name your notes after the meeting and to know who is in it. Nothing leaves your Mac.
+    NSAppleEventsUsageDescription: ¡ole! checks the browser tab's name to tell when you're in a call, and pauses your music while it records.
     # Electron's own defaults ("This app needs access to..."): Yogurt never asks for these, so plain words instead
-    NSCameraUsageDescription: Ole doesn't use the camera.
-    NSBluetoothAlwaysUsageDescription: Ole doesn't use Bluetooth.
-    NSBluetoothPeripheralUsageDescription: Ole doesn't use Bluetooth.
+    NSCameraUsageDescription: ¡ole! doesn't use the camera.
+    NSBluetoothAlwaysUsageDescription: ¡ole! doesn't use Bluetooth.
+    NSBluetoothPeripheralUsageDescription: ¡ole! doesn't use Bluetooth.
   # signs with the Developer ID certificate in the keychain (or CSC_LINK on CI); notarized by scripts/release-mac.sh or CI
 # Windows and Linux: unsigned, built by .github/workflows/preview.yml (by hand, or for a release from release.yml).
 win:

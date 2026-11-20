@@ -100,12 +100,12 @@ import { AUDIO_SCHEME, audioExts, createAudioHandler, trackFile, type AudioExt }
 import { helperDecode, wavDecode } from './asr/backfill'
 import { finishQuit, hookUpdates, isPreviewBuild, updatesOn } from './updates'
 import type { NoteSaveResult, StartResult } from '../shared/types'
-import { APP_ID, PRODUCT_NAME } from '../shared/brand'
+import { APP_ID, APP_NAME, PRODUCT_NAME } from '../shared/brand'
 
 // the transcript's player streams each meeting's audio from here; seeking needs stream support (before ready)
 protocol.registerSchemesAsPrivileged([{ scheme: AUDIO_SCHEME, privileges: { standard: true, secure: true, stream: true } }])
 
-app.setName(PRODUCT_NAME)
+app.setName(APP_NAME)
 // Windows shows notifications only for an app with this id (the installer's shortcut carries the same one, electron-builder appId)
 if (process.platform === 'win32') app.setAppUserModelId(APP_ID)
 app.setPath('userData', userDataDir())

@@ -43,7 +43,7 @@ it.each([
     const html = render(status, { picking })
     expect(html).toContain('Tuesday, November 10')
     expect(html).toContain('7 min')
-    expect(html).toContain(message.replace(/\bYogurt\b/, 'Ole').replaceAll("'", '&#x27;'))
+    expect(html).toContain(message.replace(/\bYogurt\b/, '¡ole!').replaceAll("'", '&#x27;'))
     expect(html).toContain(`class="workspace-button">${action}</button>`)
     expect(html).not.toContain('note-date-days')
     expect(html).not.toContain('note-date-previous')

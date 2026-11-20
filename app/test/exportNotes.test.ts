@@ -55,7 +55,7 @@ describe('toMarkdownFile', () => {
     expect(file).toContain('**Them** (1:10)\n\nHm.')
   })
   it('says on the date line that Ole recorded it, with a link', () => {
-    expect(file.split('\n')[2]).toMatch(/^.*2026.* · Recorded with Ole \(a fork of \[Yogurt\]\(https:\/\/yogurt\.so\)\)$/)
+    expect(file.split('\n')[2]).toMatch(/^.*2026.* · Recorded with ¡ole! \(a fork of \[Yogurt\]\(https:\/\/yogurt\.so\)\)$/)
   })
   it('leaves out the transcript section when nothing was heard', () => expect(toMarkdownFile(meeting, 'x', [])).not.toContain('Transcript'))
 })
